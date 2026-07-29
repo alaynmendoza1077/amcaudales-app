@@ -151,6 +151,25 @@ const projectToLatLng = (x, y) => {
         return null;
     };
 
+    const matchIDFStationKey = (estName) => {
+        if (!estName) return "BUC";
+        let s = String(estName).toUpperCase().trim();
+        if (IDF && IDF[s]) return s;
+        if (s.includes("PALO") || s.includes("NEGRO") || s.includes("AERO") || s.includes("PAL")) return "PAL";
+        if (s.includes("FLORI") || s.includes("FLORIDA") || s.includes("FLO")) return "FLO";
+        if (s.includes("GIR")) return "GIR";
+        if (s.includes("BUCARA") || s.includes("BUC")) return "BUC";
+        if (IDF) {
+            for (let k in IDF) {
+                let nameUpper = (IDF[k].name || "").toUpperCase();
+                if (s.includes(k) || s.includes(nameUpper) || nameUpper.includes(s)) {
+                    return k;
+                }
+            }
+        }
+        return "BUC";
+    };
+
     const findValueInWKT = (wktData, ptLngLat, propIndex) => {
         if (!wktData || typeof wktData !== 'string') return null;
         if (!window._wktCache) window._wktCache = {};
@@ -176,7 +195,9 @@ const projectToLatLng = (x, y) => {
                             points.push([...points[0]]);
                         }
                         try {
-                            polys.push({ poly: turf.polygon([points]), val: val });
+                            let polyGeom = turf.polygon([points]);
+                            let centroid = turf.centroid(polyGeom);
+                            polys.push({ poly: polyGeom, val: val, centroid: centroid });
                         } catch(e) {}
                     }
                 }
@@ -187,7 +208,18 @@ const projectToLatLng = (x, y) => {
         for (let item of window._wktCache[cacheKey]) {
             if (turf.booleanPointInPolygon(pt, item.poly)) return item.val;
         }
-        return null;
+        let minD = Infinity;
+        let nearestVal = null;
+        for (let item of window._wktCache[cacheKey]) {
+            if (item.centroid) {
+                let d = turf.distance(pt, item.centroid);
+                if (d < minD) {
+                    minD = d;
+                    nearestVal = item.val;
+                }
+            }
+        }
+        return nearestVal;
     };
 
 function frac_zona_plana(lon) {
@@ -1569,9 +1601,7 @@ function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, se
     if (setP && (foundGlobalEst || foundGlobalDen || foundGlobalCon)) {
         let newP = Object.assign({}, P);
         if (foundGlobalEst) {
-            let estName = String(foundGlobalEst).trim();
-            let matchedKey = Object.keys(IDF).find(k => IDF[k].name.toLowerCase() === estName.toLowerCase());
-            newP.estacion = matchedKey ? matchedKey : estName;
+            newP.estacion = matchIDFStationKey(foundGlobalEst);
         }
         if (foundGlobalDen) newP.densidad = Math.ceil(foundGlobalDen);
         if (foundGlobalCon) newP.consumo = foundGlobalCon;

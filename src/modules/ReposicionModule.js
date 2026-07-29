@@ -430,20 +430,28 @@ export default function ReposicionModule({ onBack, initialData }){
     });
   };
 
-  var handleSaveCloudOnly=function(){
-    var suggestedName = (P.proyecto || P.barrio || "CONSTRUCCION_SISTEMA_DE_ALCANTARILLADO");
-    var projTitle = window.prompt("Guardar en la Nube (Supabase) - Nombre del Proyecto:", suggestedName);
-    if(!projTitle) return;
+  var handleSaveCloudOnly = function(isSaveAs = false) {
+    var activeId = (!isSaveAs && P && P.cloudProjectId) ? P.cloudProjectId : null;
+    var suggestedName = (P && (P.proyecto || P.barrio)) ? (P.proyecto || P.barrio) : "CONSTRUCCION_SISTEMA_DE_ALCANTARILLADO";
+    var projTitle = suggestedName;
+
+    if (isSaveAs || !activeId) {
+      projTitle = window.prompt("Guardar en la Nube (Supabase) - Nombre del Proyecto:", suggestedName);
+      if (!projTitle) return;
+    }
 
     import('../tabs/ProjectConsolidatorTab').then(({ recalcPbItems }) => {
-      var data={v:"v36",P:P,T:T,sumLat:sumLat,sumTrans:sumTrans,pbItems:pbItems,alivData:alivData,sumData:sumData,estSepData:estSepData,urbanismoData:urbanismoData,inpData:inpData,flowStage:flowStage,tab:tab,autoAreasPoly:autoAreasPoly,selMap:selMap,outfalls:outfalls,filterSel:filterSel,R:R};
+      var data = { v: "v36", P: P, T: T, sumLat: sumLat, sumTrans: sumTrans, pbItems: pbItems, alivData: alivData, sumData: sumData, estSepData: estSepData, urbanismoData: urbanismoData, inpData: inpData, flowStage: flowStage, tab: tab, autoAreasPoly: autoAreasPoly, selMap: selMap, outfalls: outfalls, filterSel: filterSel, R: R };
       var freshPbItems = recalcPbItems(data);
       data.pbItems = freshPbItems;
 
       if (saveProjectToCloud) {
-        saveProjectToCloud(data, projTitle)
-          .then(() => {
-            alert(`¡Proyecto "${projTitle}" guardado exitosamente en tu cuenta de la Nube!`);
+        saveProjectToCloud(data, projTitle, activeId)
+          .then((savedRes) => {
+            if (savedRes && savedRes.id) {
+              setP(prevP => ({ ...prevP, cloudProjectId: savedRes.id, proyecto: projTitle }));
+            }
+            alert(`¡Proyecto "${projTitle}" ${activeId ? 'actualizado y sobrescrito' : 'guardado'} exitosamente en tu cuenta de la Nube! 💾`);
           })
           .catch((err) => {
             console.error('Error guardando en la Nube:', err);
@@ -746,35 +754,36 @@ const handleBack = () => {
         </div>
         <div className="hdr-actions" style={{display:'flex', alignItems:'center', gap:'15px'}}>
           
-          {/* GRUPO IZQUIERDO: ARCHIVO */}
-          <div style={{display:'flex', gap:'5px', paddingRight:'15px', borderRight: lightMode?'1px solid #e5e7eb':'1px solid #4b5563', alignItems: 'center'}}>
-            <button className="hdr-btn" onClick={handleVolverTab} title="Volver a la pestaña anterior" style={{ height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '110px' }}>
+          {/* GRUPO IZQUIERDO: ARCHIVO & NUBE */}
+          <div style={{display:'flex', gap:'6px', paddingRight:'12px', borderRight: lightMode?'1px solid #cbd5e1':'1px solid #334155', alignItems: 'center'}}>
+            <button className="hdr-btn" onClick={handleVolverTab} title="Volver a la pestaña anterior" style={{ height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 12px' }}>
               <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
-              <span style={{marginLeft: 6}}>Volver</span>
+              <span style={{marginLeft: 6, fontSize: '12px'}}>Volver</span>
             </button>
-            <button className="hdr-btn" onClick={onBack} title="Salir al Menú Principal" style={{ height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '110px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#fca5a5' }}>
+            <button className="hdr-btn" onClick={onBack} title="Salir al Menú Principal" style={{ height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 12px', background: 'rgba(239, 68, 68, 0.12)', border: '1px solid rgba(239, 68, 68, 0.4)', color: '#fca5a5' }}>
               <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>
-              <span style={{marginLeft: 6}}>Menú</span>
+              <span style={{marginLeft: 6, fontSize: '12px'}}>Menú</span>
             </button>
-            <button className="hdr-btn" onClick={handleNewProject} title="Crear Nuevo Proyecto en Blanco" style={{ height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '110px' }}>
+            <button className="hdr-btn" onClick={handleNewProject} title="Crear Nuevo Proyecto en Blanco" style={{ height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 12px' }}>
               <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4"/></svg>
-              <span style={{marginLeft: 6}}>Nuevo</span>
+              <span style={{marginLeft: 6, fontSize: '12px'}}>Nuevo</span>
             </button>
-            <button className="hdr-btn" onClick={() => { if(refAMC.current) refAMC.current.click(); }} title="Abrir Proyecto (.AMC) desde tu Computador" style={{ height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '125px' }}>
+            <button className="hdr-btn" onClick={() => { if(refAMC.current) refAMC.current.click(); }} title="Abrir Proyecto (.AMC) desde tu Computador" style={{ height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 12px' }}>
               <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
-              <span style={{marginLeft: 6}}>Abrir .AMC</span>
+              <span style={{marginLeft: 6, fontSize: '12px'}}>Abrir .AMC</span>
             </button>
-            <button className="hdr-btn" onClick={() => setShowCloudProjectsModal(true)} title="Abrir Proyecto alojado en la Nube de Supabase" style={{ height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '125px', background: 'rgba(59, 130, 246, 0.15)', border: '1px solid #3b82f6', color: '#60a5fa' }}>
+            <button className="hdr-btn" onClick={() => setShowCloudProjectsModal(true)} title="Abrir Proyecto alojado en la Nube de Supabase" style={{ height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 12px', background: 'rgba(59, 130, 246, 0.15)', border: '1px solid #3b82f6', color: '#60a5fa' }}>
               <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M3 15a4 4 0 004 4h9a5 5 0 001-9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
-              <span style={{marginLeft: 6}}>Abrir Nube</span>
+              <span style={{marginLeft: 6, fontSize: '12px'}}>Abrir Nube</span>
             </button>
-            <button className="hdr-btn" onClick={handleSaveAMC} title="Guardar archivo local (.AMC) en tu computador" style={{ height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '125px' }}>
+            {/* BOTÓN DISKET SOBREESCRIBIR PROYECTO NUBE */}
+            <button className="hdr-btn" onClick={() => handleSaveCloudOnly(false)} title="Sobrescribir y guardar los cambios del proyecto actual en la Nube" style={{ height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 14px', background: 'rgba(16, 185, 129, 0.2)', border: '1px solid #10b981', color: '#34d399', fontWeight: 'bold' }}>
+              <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+              <span style={{marginLeft: 6, fontSize: '12px'}}>Guardar 💾</span>
+            </button>
+            <button className="hdr-btn" onClick={handleSaveAMC} title="Guardar copia local (.AMC) en el computador" style={{ height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 12px' }}>
               <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg>
-              <span style={{marginLeft: 6}}>Guardar .AMC</span>
-            </button>
-            <button className="hdr-btn" onClick={handleSaveCloudOnly} title="Guardar proyecto directo en tu cuenta de la Nube (Supabase)" style={{ height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '125px', background: 'rgba(16, 185, 129, 0.15)', border: '1px solid #10b981', color: '#10b981' }}>
-              <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M3 15a4 4 0 004 4h9a5 5 0 001-9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
-              <span style={{marginLeft: 6}}>Guardar Nube</span>
+              <span style={{marginLeft: 6, fontSize: '12px'}}>.AMC Local</span>
             </button>
             <button className="hdr-btn" onClick={() => setTab('consolidador')} title="Consolidar varios diseños a un presupuesto" style={{ height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 10px', background: 'rgba(99, 102, 241, 0.12)', border: '1px solid #6366f1', color: '#818cf8' }}>
               <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16m-7 6h7"/></svg>

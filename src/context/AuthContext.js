@@ -183,16 +183,17 @@ export function AuthProvider({ children }) {
     setCloudProjects([]);
   };
 
-  const saveProjectToCloud = async (projectDataPayload, title = 'Proyecto AMC') => {
+  const saveProjectToCloud = async (projectDataPayload, title = 'Proyecto AMC', existingProjectId = null) => {
     const effectiveUser = user || { id: 'usr_guest', email: 'invitado@amcaudales.com' };
     const timestamp = new Date().toISOString();
+    const projId = existingProjectId || 'proj_' + Date.now();
 
     if (isCloudConfigured && supabase) {
       try {
         const { data, error } = await supabase
           .from('projects')
           .upsert({
-            id: 'proj_' + Date.now(),
+            id: projId,
             user_id: effectiveUser.id,
             title,
             updated_at: timestamp,
@@ -212,12 +213,16 @@ export function AuthProvider({ children }) {
     const key = `amcaudales_projects_${effectiveUser.id}`;
     const existingRaw = localStorage.getItem(key);
     let existingList = existingRaw ? JSON.parse(existingRaw) : [];
-    const projId = 'proj_' + Date.now();
-    const newProj = { id: projId, title, updated_at: timestamp, project_data: projectDataPayload };
-    existingList.unshift(newProj);
+    const idx = existingList.findIndex(p => p.id === projId);
+    const updatedObj = { id: projId, title, updated_at: timestamp, project_data: projectDataPayload };
+    if (idx !== -1) {
+      existingList[idx] = updatedObj;
+    } else {
+      existingList.unshift(updatedObj);
+    }
     localStorage.setItem(key, JSON.stringify(existingList));
     fetchLocalCloudProjects(effectiveUser.id);
-    return newProj;
+    return updatedObj;
   };
 
   const loadProjectFromCloud = async (projectId) => {
