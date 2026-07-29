@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import UpgradeProModal from './UpgradeProModal';
 
@@ -6,6 +6,9 @@ export default function HomeDashboard({ setModule }) {
   const { userPlan, cloudProjects } = useAuth();
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [blockedFeature, setBlockedFeature] = useState('');
+
+  const fileAMCRef = useRef(null);
+  const fileINPRef = useRef(null);
 
   const styles = {
     container: {
@@ -175,24 +178,32 @@ export default function HomeDashboard({ setModule }) {
     }
   ];
 
-  const fileAMCRef = React.useRef(null);
-
   const handleCardClick = (mod) => {
-    // Restricciones según el Plan por módulos
+    // 1. Calculadora Express (Gratis 100% siempre)
+    if (mod.id === 'express') {
+      setModule('express');
+      return;
+    }
+
+    // 2. Módulo de Presupuesto (Requiere Plan Pro)
     if (mod.id === 'presupuesto' && userPlan !== 'pro') {
       setBlockedFeature('Cantidades y Presupuestos de Obra');
       setShowUpgradeModal(true);
       return;
     }
 
+    // 3. Límite del Plan Gratis (1 Proyecto / 5 Proyectos Cloud max)
     if ((mod.id === 'nuevo_proyecto' || mod.id === 'reposicion' || mod.id === 'swmm') && userPlan === 'free' && cloudProjects.length >= 5) {
       setBlockedFeature('Límite del Plan Gratis (1 Diseño Completo / 5 Proyectos).');
       setShowUpgradeModal(true);
       return;
     }
 
+    // 4. Carga de Archivos
     if (mod.id === 'abrir_amc') {
       if (fileAMCRef.current) fileAMCRef.current.click();
+    } else if (mod.id === 'swmm') {
+      if (fileINPRef.current) fileINPRef.current.click();
     } else {
       setModule(mod.id);
     }
@@ -204,6 +215,17 @@ export default function HomeDashboard({ setModule }) {
     const reader = new FileReader();
     reader.onload = (ev) => {
       setModule('reposicion', { type: 'amc', content: ev.target.result });
+    };
+    reader.readAsText(file);
+    e.target.value = null;
+  };
+
+  const handleINPChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setModule('reposicion', { type: 'inp', content: ev.target.result });
     };
     reader.readAsText(file);
     e.target.value = null;
@@ -224,6 +246,14 @@ export default function HomeDashboard({ setModule }) {
         accept=".amc,.json"
         style={{ display: 'none' }}
         onChange={handleAMCChange}
+      />
+
+      <input
+        type="file"
+        ref={fileINPRef}
+        accept=".inp"
+        style={{ display: 'none' }}
+        onChange={handleINPChange}
       />
 
       <div style={styles.grid}>
