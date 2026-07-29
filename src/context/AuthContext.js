@@ -6,6 +6,9 @@ const AuthContext = createContext();
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [session, setSession] = useState(null);
+  const [userPlan, setUserPlan] = useState(() => {
+    return localStorage.getItem('amcaudales_user_plan') || 'free';
+  });
   const [loading, setLoading] = useState(true);
   const [cloudProjects, setCloudProjects] = useState([]);
 
@@ -49,6 +52,11 @@ export function AuthProvider({ children }) {
       setLoading(false);
     }
   }, []);
+
+  const upgradeToPro = () => {
+    setUserPlan('pro');
+    localStorage.setItem('amcaudales_user_plan', 'pro');
+  };
 
   // Fetch proyectos en Supabase
   const fetchUserProjects = async (userId) => {
@@ -147,12 +155,6 @@ export function AuthProvider({ children }) {
     if (!user) throw new Error('Debe iniciar sesión para guardar en la nube.');
 
     const timestamp = new Date().toISOString();
-    const payload = {
-      title,
-      updated_at: timestamp,
-      project_data: projectDataPayload
-    };
-
     if (isCloudConfigured && supabase) {
       const { data, error } = await supabase
         .from('projects')
@@ -168,7 +170,6 @@ export function AuthProvider({ children }) {
       await fetchUserProjects(user.id);
       return data[0];
     } else {
-      // Guardar en Storage Local por usuario
       const key = `amcaudales_projects_${user.id}`;
       const existingRaw = localStorage.getItem(key);
       let existingList = existingRaw ? JSON.parse(existingRaw) : [];
@@ -210,6 +211,8 @@ export function AuthProvider({ children }) {
       value={{
         user,
         session,
+        userPlan,
+        upgradeToPro,
         loading,
         cloudProjects,
         register,

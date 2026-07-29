@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import NavbarUserHeader from './components/NavbarUserHeader';
 import StartLoginPortal from './components/StartLoginPortal';
 import NewProjectModal from './components/NewProjectModal';
+import UpgradeProModal from './components/UpgradeProModal';
 
 // Lazy loading de módulos pesados
 const ReposicionModule = lazy(() => import('./modules/ReposicionModule'));
@@ -18,28 +19,37 @@ const Loader = () => (
 );
 
 function AppContent() {
-  const { user, saveProjectToCloud } = useAuth();
+  const { user, saveProjectToCloud, userPlan } = useAuth();
   const [isGuest, setIsGuest] = useState(false);
   const [activeModule, setActiveModule] = useState('home');
   const [initialData, setInitialData] = useState(null);
   const [showNewProjectModal, setShowNewProjectModal] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [blockedFeatureName, setBlockedFeatureName] = useState('');
 
-  // Si el usuario no ha iniciado sesión ni ha entrado como invitado, muestra la pantalla de inicio y Login obligatoria
+  // Si el usuario no ha iniciado sesión ni ha entrado como invitado, muestra el portal obligatoria
   if (!user && !isGuest) {
     return <StartLoginPortal onGuestAccess={() => setIsGuest(true)} />;
   }
 
   const handleSetModule = (mod, data = null) => {
+    // Si intenta entrar al módulo de presupuesto o funciones Pro y está en Plan Gratis
+    if ((mod === 'presupuesto') && userPlan === 'free') {
+      setBlockedFeatureName('Cantidades y Presupuestos de Obra');
+      setShowUpgradeModal(true);
+      return;
+    }
+
     if (mod === 'nuevo_proyecto') {
       setShowNewProjectModal(true);
       return;
     }
+
     setInitialData(data);
     setActiveModule(mod);
   };
 
   const handleStartProjectData = (projectSetup) => {
-    // Abrir módulo de reposición inyectando los datos del proyecto
     handleSetModule('reposicion', { type: 'setup', projectSetup });
   };
 
@@ -90,11 +100,17 @@ function AppContent() {
         </Suspense>
       </main>
 
-      {/* Modal de datos iniciales del proyecto */}
+      {/* Modales de Proyecto y Actualización de Plan Pro */}
       <NewProjectModal
         isOpen={showNewProjectModal}
         onClose={() => setShowNewProjectModal(false)}
         onStartProject={handleStartProjectData}
+      />
+
+      <UpgradeProModal
+        isOpen={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+        featureName={blockedFeatureName}
       />
     </div>
   );

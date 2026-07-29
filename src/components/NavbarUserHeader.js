@@ -2,11 +2,13 @@ import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import AuthModal from './AuthModal';
 import UserProjectsModal from './UserProjectsModal';
+import UpgradeProModal from './UpgradeProModal';
 
 export default function NavbarUserHeader({ onSaveCloud, onLoadCloud }) {
-  const { user, logout, isCloudConfigured } = useAuth();
+  const { user, logout, isCloudConfigured, userPlan } = useAuth();
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showProjectsModal, setShowProjectsModal] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   return (
     <>
@@ -20,6 +22,21 @@ export default function NavbarUserHeader({ onSaveCloud, onLoadCloud }) {
         </div>
 
         <div style={actionsSectionStyle}>
+          {/* Badge del Plan (Pro vs Free) */}
+          {userPlan === 'pro' ? (
+            <span style={proBadgeStyle} title="Tienes acceso ilimitado a todas las herramientas Pro">
+              👑 Plan Pro Activo
+            </span>
+          ) : (
+            <button
+              onClick={() => setShowUpgradeModal(true)}
+              style={freeBadgeStyle}
+              title="Haz clic para actualizar a Plan Pro y desbloquear Presupuestos, Excel y AutoCAD"
+            >
+              ⚡ Plan Gratis • Actualizar 👑
+            </button>
+          )}
+
           {!isCloudConfigured && (
             <span style={offlineBadgeStyle} title="Conecta Supabase para guardar en base de datos PostgreSQL real">
               Mode: Session Local
@@ -59,7 +76,7 @@ export default function NavbarUserHeader({ onSaveCloud, onLoadCloud }) {
         </div>
       </header>
 
-      {/* Modales de Autenticación y Proyectos */}
+      {/* Modales de Autenticación, Proyectos y Plan Pro */}
       <AuthModal
         isOpen={showAuthModal}
         onClose={() => setShowAuthModal(false)}
@@ -70,6 +87,11 @@ export default function NavbarUserHeader({ onSaveCloud, onLoadCloud }) {
         onClose={() => setShowProjectsModal(false)}
         onLoadProject={onLoadCloud}
         onSaveCurrentProject={onSaveCloud}
+      />
+
+      <UpgradeProModal
+        isOpen={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
       />
     </>
   );
@@ -125,6 +147,27 @@ const actionsSectionStyle = {
   display: 'flex',
   alignItems: 'center',
   gap: '14px'
+};
+
+const proBadgeStyle = {
+  fontSize: '0.75rem',
+  fontWeight: '700',
+  backgroundColor: 'rgba(245, 158, 11, 0.15)',
+  border: '1px solid rgba(245, 158, 11, 0.4)',
+  color: '#fbbf24',
+  padding: '5px 12px',
+  borderRadius: '20px'
+};
+
+const freeBadgeStyle = {
+  fontSize: '0.75rem',
+  fontWeight: '700',
+  backgroundColor: 'rgba(56, 189, 248, 0.12)',
+  border: '1px solid rgba(56, 189, 248, 0.3)',
+  color: '#38bdf8',
+  padding: '5px 12px',
+  borderRadius: '20px',
+  cursor: 'pointer'
 };
 
 const offlineBadgeStyle = {
