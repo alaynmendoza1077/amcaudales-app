@@ -336,16 +336,26 @@ export default function ImportGeoJsonTab({ setIsThinking, setAutoAreasPoly, DP, 
             </p>
 
             <div style={{ display: 'flex', gap: '1.5rem', marginBottom: '3rem', justifyContent: 'center', flexWrap: 'wrap' }}>
-                <div onClick={onLoadAMC} style={{ flex: '1 1 280px', background: lightMode ? 'white' : 'rgba(30,41,59,0.4)', padding: '1.5rem', borderRadius: '12px', boxShadow: lightMode ? '0 4px 6px -1px rgba(0,0,0,0.1)' : '0 10px 30px rgba(0,0,0,0.3)', cursor: 'pointer', textAlign: 'center', transition: 'transform 0.2s', border: lightMode ? '1px solid #e2e8f0' : '1px solid rgba(255,255,255,0.1)' }} onMouseEnter={e => e.currentTarget.style.transform='translateY(-4px)'} onMouseLeave={e => e.currentTarget.style.transform='translateY(0)'}>
+                <div onClick={onLoadAMC} style={{ flex: '1 1 240px', background: lightMode ? 'white' : 'rgba(30,41,59,0.4)', padding: '1.5rem', borderRadius: '12px', boxShadow: lightMode ? '0 4px 6px -1px rgba(0,0,0,0.1)' : '0 10px 30px rgba(0,0,0,0.3)', cursor: 'pointer', textAlign: 'center', transition: 'transform 0.2s', border: lightMode ? '1px solid #e2e8f0' : '1px solid rgba(255,255,255,0.1)' }} onMouseEnter={e => e.currentTarget.style.transform='translateY(-4px)'} onMouseLeave={e => e.currentTarget.style.transform='translateY(0)'}>
                     <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>💾</div>
-                    <h3 style={{ fontSize: '1.2rem', fontWeight: 'bold', color: lightMode ? '#ec4899' : '#f472b6', marginBottom: '0.5rem' }}>Abrir .AMC</h3>
-                    <p style={{ fontSize: '0.9rem', color: lightMode ? '#64748b' : '#94a3b8' }}>Restaura una sesión guardada previamente con toda su información, cálculos y visor intactos.</p>
+                    <h3 style={{ fontSize: '1.2rem', fontWeight: 'bold', color: lightMode ? '#ec4899' : '#f472b6', marginBottom: '0.5rem' }}>Abrir .AMC Local</h3>
+                    <p style={{ fontSize: '0.9rem', color: lightMode ? '#64748b' : '#94a3b8' }}>Restaura un archivo .AMC guardado en tu computador.</p>
+                </div>
+
+                <div onClick={() => {
+                  const cloudBtn = document.querySelector('button[title="☁️ Mis Proyectos"]') || document.querySelector('button');
+                  if (cloudBtn) cloudBtn.click();
+                  else alert("Haz clic en '☁️ Mis Proyectos' en la barra superior para ver tus diseños en la nube.");
+                }} style={{ flex: '1 1 240px', background: lightMode ? 'white' : 'rgba(30,41,59,0.4)', padding: '1.5rem', borderRadius: '12px', boxShadow: lightMode ? '0 4px 6px -1px rgba(0,0,0,0.1)' : '0 10px 30px rgba(0,0,0,0.3)', cursor: 'pointer', textAlign: 'center', transition: 'transform 0.2s', border: lightMode ? '1px solid #3b82f6' : '1px solid rgba(59,130,246,0.4)' }} onMouseEnter={e => e.currentTarget.style.transform='translateY(-4px)'} onMouseLeave={e => e.currentTarget.style.transform='translateY(0)'}>
+                    <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>☁️</div>
+                    <h3 style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#60a5fa', marginBottom: '0.5rem' }}>Abrir de la Nube</h3>
+                    <p style={{ fontSize: '0.9rem', color: lightMode ? '#64748b' : '#94a3b8' }}>Carga con 1 clic un proyecto guardado en tu cuenta de Supabase.</p>
                 </div>
                 
-                <div onClick={onLoadINP} style={{ flex: '1 1 280px', background: lightMode ? 'white' : 'rgba(30,41,59,0.4)', padding: '1.5rem', borderRadius: '12px', boxShadow: lightMode ? '0 4px 6px -1px rgba(0,0,0,0.1)' : '0 10px 30px rgba(0,0,0,0.3)', cursor: 'pointer', textAlign: 'center', transition: 'transform 0.2s', border: lightMode ? '1px solid #e2e8f0' : '1px solid rgba(255,255,255,0.1)' }} onMouseEnter={e => e.currentTarget.style.transform='translateY(-4px)'} onMouseLeave={e => e.currentTarget.style.transform='translateY(0)'}>
+                <div onClick={onLoadINP} style={{ flex: '1 1 240px', background: lightMode ? 'white' : 'rgba(30,41,59,0.4)', padding: '1.5rem', borderRadius: '12px', boxShadow: lightMode ? '0 4px 6px -1px rgba(0,0,0,0.1)' : '0 10px 30px rgba(0,0,0,0.3)', cursor: 'pointer', textAlign: 'center', transition: 'transform 0.2s', border: lightMode ? '1px solid #e2e8f0' : '1px solid rgba(255,255,255,0.1)' }} onMouseEnter={e => e.currentTarget.style.transform='translateY(-4px)'} onMouseLeave={e => e.currentTarget.style.transform='translateY(0)'}>
                     <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📄</div>
                     <h3 style={{ fontSize: '1.2rem', fontWeight: 'bold', color: lightMode ? '#8b5cf6' : '#a78bfa', marginBottom: '0.5rem' }}>Cargar INP</h3>
-                    <p style={{ fontSize: '0.9rem', color: lightMode ? '#64748b' : '#94a3b8' }}>Importa un archivo INP directamente desde EPA SWMM para generar topología, perfiles y datos.</p>
+                    <p style={{ fontSize: '0.9rem', color: lightMode ? '#64748b' : '#94a3b8' }}>Importa un archivo INP directamente desde EPA SWMM.</p>
                 </div>
             </div>
 
