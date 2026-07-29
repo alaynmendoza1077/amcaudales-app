@@ -43,7 +43,7 @@ export default function NavbarUserHeader({ onSaveCloud, onLoadCloud }) {
             </span>
           )}
 
-          {user ? (
+          {user && !user.isGuest && user.email !== 'Usuario Invitado' ? (
             <div style={userControlStyle}>
               <button
                 onClick={() => setShowProjectsModal(true)}
@@ -67,7 +67,7 @@ export default function NavbarUserHeader({ onSaveCloud, onLoadCloud }) {
               </button>
             </div>
           ) : (
-            <div style={{ display: 'flex', gap: '8px' }}>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
               <button
                 onClick={() => setShowProjectsModal(true)}
                 style={cloudProjectsBtnStyle}
@@ -75,11 +75,34 @@ export default function NavbarUserHeader({ onSaveCloud, onLoadCloud }) {
               >
                 ☁️ Mis Proyectos
               </button>
+              
+              <div 
+                onClick={() => setShowAuthModal(true)}
+                style={{ ...userAvatarStyle, cursor: 'pointer', background: 'rgba(255, 255, 255, 0.05)', border: '1px solid #334155' }}
+                title="Haz clic para iniciar sesión con tu cuenta"
+              >
+                <span style={userInitialStyle}>U</span>
+                <span style={userNameStyle}>Usuario Invitado</span>
+              </div>
+
               <button
                 onClick={() => setShowAuthModal(true)}
-                style={loginBtnStyle}
+                style={{
+                  backgroundColor: '#3b82f6',
+                  color: '#ffffff',
+                  fontWeight: 'bold',
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: '0.85rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: '0 4px 6px -1px rgba(59, 130, 246, 0.4)'
+                }}
               >
-                👤 Iniciar Sesión / Registro
+                🔑 Iniciar Sesión / Registrarse
               </button>
             </div>
           )}
