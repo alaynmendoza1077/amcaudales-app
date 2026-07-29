@@ -158,8 +158,9 @@ function calcPozosCompleto(R,T,P){
     var isRemodelar = !!(P && P.remodelPozos && P.remodelPozos[n]);
     var remodelCode = profN <= 2.0 ? "5.02.01.01" : profN <= 4.0 ? "5.02.01.02" : "5.02.01.03";
 
-    // Volumen de Demolición del Pozo (m3) = cilindro exterior DE_P * profN
-    var volDemolicion = Math.PI * Math.pow(DE_P / 2, 2) * profN;
+    // Volumen de Demolición del Pozo (m3) = estructura tubular (anillo de pared exterior DE_P - interior DI) * profN
+    var areaTubularPared = Math.PI * (Math.pow(DE_P / 2, 2) - Math.pow(DI / 2, 2));
+    var volDemolicion = areaTubularPared * profN;
 
     /* Fórmulas de volumen de concreto de pozo (calibradas Excel EMPAS) */
     var hConcTotal = Math.max(0, profN - 0.56);
