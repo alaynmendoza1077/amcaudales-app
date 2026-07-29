@@ -104,22 +104,23 @@ function PozTab(props){
       wsCant.addRow([`DI=${DI}m, ESP=${ESP}m, DE=${(DI+2*ESP).toFixed(2)}m, Concreto 4000PSI`]);
       wsCant.addRow([]);
 
-      const cantCols = ["#", "Pozo", "Prof(m)", "M/C", "hConc", "hMamp", "Cto(m3)", "Mamp(m2)", "Exc(m3)", "A-60(T)", "A-60(C)", "A-37(C)", "Peld", "C.Pob", "Red."];
+      const cantCols = ["#", "Pozo", "Remodelar", "Demol(m3)", "Prof(m)", "M/C", "hConc", "hMamp", "Cto(m3)", "Mamp(m2)", "Exc(m3)", "A-60(T)", "A-60(C)", "A-37(C)", "Peld", "C.Pob", "Red."];
       const cantHeaderRow = wsCant.addRow(cantCols);
       cantHeaderRow.eachCell(c => { Object.assign(c, headerStyle); });
 
       pz.forEach((p, i) => {
+        const isRemodel = !!p.isRemodelar;
         const row = wsCant.addRow([
-          i + 1, p.nodo, p.prof.toFixed(2), p.tipoPozo, p.hConc, p.hMamp > 0 ? p.hMamp : "-", p.volConc, p.areaMamp > 0 ? p.areaMamp : "-", p.volExc, p.a60Tapa > 0 ? p.a60Tapa.toFixed(1) : "-", p.a60Cuerpo > 0 ? p.a60Cuerpo.toFixed(1) : "-", p.a37Cuerpo > 0 ? p.a37Cuerpo.toFixed(1) : "-", p.peldanos, p.concPobre > 0 ? p.concPobre.toFixed(3) : "-", p.reduccion > 0 ? p.reduccion.toFixed(3) : "-"
+          i + 1, p.nodo, isRemodel ? "SI" : "NO", p.volDemolicion, p.prof.toFixed(2), p.tipoPozo, p.hConc, p.hMamp > 0 ? p.hMamp : "-", isRemodel ? "Remod." : p.volConc, isRemodel ? "-" : (p.areaMamp > 0 ? p.areaMamp : "-"), isRemodel ? "-" : p.volExc, isRemodel ? "-" : (p.a60Tapa > 0 ? p.a60Tapa.toFixed(1) : "-"), isRemodel ? "-" : (p.a60Cuerpo > 0 ? p.a60Cuerpo.toFixed(1) : "-"), isRemodel ? "-" : (p.a37Cuerpo > 0 ? p.a37Cuerpo.toFixed(1) : "-"), isRemodel ? "-" : p.peldanos, isRemodel ? "-" : (p.concPobre > 0 ? p.concPobre.toFixed(3) : "-"), isRemodel ? "-" : (p.reduccion > 0 ? p.reduccion.toFixed(3) : "-")
         ]);
-        if (p.reponer === "S") {
+        if (isRemodel || p.reponer === "S") {
           row.eachCell(c => {
             c.border = { top: {style:'medium', color:{argb:'FFF0932B'}}, bottom: {style:'medium', color:{argb:'FFF0932B'}}, left: {style:'medium', color:{argb:'FFF0932B'}}, right: {style:'medium', color:{argb:'FFF0932B'}} };
             c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF7E6' } };
           });
         }
       });
-      const cantTot = wsCant.addRow(["", "TOTAL", "", "", "", "", tVC.toFixed(2), tAM.toFixed(2), tVE.toFixed(2), pozData.tA60T ? pozData.tA60T.toFixed(1) : 0, pozData.tA60C ? pozData.tA60C.toFixed(1) : 0, pozData.tA37C ? pozData.tA37C.toFixed(1) : 0, tPe, tCP.toFixed(3), pozData.tRed.toFixed(3)]);
+      const cantTot = wsCant.addRow(["", "TOTAL", "", pozData.tVolDemolicion.toFixed(2), "", "", "", "", tVC.toFixed(2), tAM.toFixed(2), tVE.toFixed(2), pozData.tA60T ? pozData.tA60T.toFixed(1) : 0, pozData.tA60C ? pozData.tA60C.toFixed(1) : 0, pozData.tA37C ? pozData.tA37C.toFixed(1) : 0, tPe, tCP.toFixed(3), pozData.tRed.toFixed(3)]);
       cantTot.eachCell(c => { c.font = { bold: true }; c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF0F0F0' } }; });
       addAbrevs(wsCant, pz.length + 9);
 
@@ -244,11 +245,47 @@ function PozTab(props){
       var isRep = p.reponer === "S";
       return <tr key={i} onClick={() => setSelPz(p)} style={{cursor:'pointer', borderLeft: isSelected ? '4px solid #38bdf8' : isRep ? '4px solid #F0932B' : '4px solid transparent', outline: isRep ? '1px solid rgba(240,147,43,0.5)' : 'none', outlineOffset: '-1px', background:isSelected ? "rgba(56,189,248,0.15)" : p.caidas&&p.caidas.length>0?"rgba(220,53,69,0.1)":"transparent"}}><td>{i+1}</td><td style={{textAlign:"left",fontSize:12}}>{p.nodo}</td><td style={{fontWeight:700,color:p.prof<=1.5?"#28A745":p.prof<=3?"#F0932B":"#DC3545"}}>{p.prof.toFixed(2)}</td><td>{p.tipo}</td><td style={{color:p.tipoPozo==="C"?"#00A6D6":"#F0932B",fontWeight:700}}>{p.tipoPozo}</td><td style={{color:p.pozoNuevo==="S"?"#28A745":"#555"}}>{p.pozoNuevo}</td><td>{p.De}</td><td>{p.Ds}</td><td>{p.nAflu}</td><td>{p.cr}</td><td>{p.cf}</td><td style={{color:p.reponer==="S"?"#28A745":"#F0932B"}}>{p.reponer}</td><td style={{color:p.caidas&&p.caidas.length>0?"#DC3545":"#555",fontWeight:p.caidas&&p.caidas.length>0?700:400}}>{p.caidas&&p.caidas.length>0?"SI":"no"}</td></tr>;
     })}</tbody></table></div></div>:null}
-    {(sub==="cant" || props.isExport)?<div className="c print-page-break" style={props.isExport ? {marginBottom: 20} : {}}><div className="ct">Cantidades (DI={DI}m, ESP={ESP}m, DE={(DI+2*ESP).toFixed(2)}m, Cto 4000PSI)</div><div style={{overflowX:"auto",maxHeight:props.isExport?"none":"50vh",overflowY:props.isExport?"visible":"auto"}}><table><thead><tr><TH>#</TH><TH>Pozo</TH><TH>Prof</TH><TH>M/C</TH><TH>hConc</TH><TH>hMamp</TH><TH>Cto(m3)</TH><TH>Mamp(m2)</TH><TH>Exc(m3)</TH><TH>A-60(T)</TH><TH>A-60(C)</TH><TH>A-37(C)</TH><TH>Peld</TH><TH>C.Pob</TH><TH>Red.</TH></tr></thead><tbody>
+    {(sub==="cant" || props.isExport)?<div className="c print-page-break" style={props.isExport ? {marginBottom: 20} : {}}><div className="ct">Cantidades (DI={DI}m, ESP={ESP}m, DE={(DI+2*ESP).toFixed(2)}m, Cto 4000PSI)</div><div style={{overflowX:"auto",maxHeight:props.isExport?"none":"50vh",overflowY:props.isExport?"visible":"auto"}}><table><thead><tr><TH>#</TH><TH>Pozo</TH><TH style={{color:"#F0932B"}}>Remodelar</TH><TH style={{color:"#E11D48"}}>Demolición (m³)</TH><TH>Prof</TH><TH>M/C</TH><TH>hConc</TH><TH>hMamp</TH><TH>Cto(m3)</TH><TH>Mamp(m2)</TH><TH>Exc(m3)</TH><TH>A-60(T)</TH><TH>A-60(C)</TH><TH>A-37(C)</TH><TH>Peld</TH><TH>C.Pob</TH><TH>Red.</TH></tr></thead><tbody>
     {pz.map(function(p,i){
       var isRep = p.reponer === "S";
-      return <tr key={i} style={{borderLeft: isRep ? '4px solid #F0932B' : '4px solid transparent', outline: isRep ? '1px solid rgba(240,147,43,0.5)' : 'none', outlineOffset: '-1px'}}><td>{i+1}</td><td style={{textAlign:"left",fontSize:12}}>{p.nodo}</td><td>{p.prof.toFixed(2)}</td><td style={{color:p.tipoPozo==="C"?"#00A6D6":"#F0932B",fontWeight:700}}>{p.tipoPozo}</td><td>{p.hConc}</td><td>{p.hMamp>0?p.hMamp:"-"}</td><td>{p.volConc}</td><td>{p.areaMamp>0?p.areaMamp:"-"}</td><td>{p.volExc}</td><td style={{color:"#D4A843"}}>{p.a60Tapa>0?p.a60Tapa.toFixed(1):"-"}</td><td style={{color:"#D4A843"}}>{p.a60Cuerpo>0?p.a60Cuerpo.toFixed(1):"-"}</td><td style={{color:"#D4A843"}}>{p.a37Cuerpo>0?p.a37Cuerpo.toFixed(1):"-"}</td><td>{p.peldanos}</td><td>{p.concPobre>0?p.concPobre.toFixed(3):"-"}</td><td>{p.reduccion>0?p.reduccion.toFixed(3):"-"}</td></tr>;
-    })}<tr style={{background:"#003B73",fontWeight:700,color:"#fff"}}><td colSpan={4}>TOTAL ({pz.length})</td><td></td><td></td><td>{tVC.toFixed(2)}</td><td>{tAM.toFixed(2)}</td><td>{tVE.toFixed(2)}</td><td style={{color:"#D4A843"}}>{pozData.tA60T?pozData.tA60T.toFixed(1):0}</td><td style={{color:"#D4A843"}}>{pozData.tA60C?pozData.tA60C.toFixed(1):0}</td><td style={{color:"#D4A843"}}>{pozData.tA37C?pozData.tA37C.toFixed(1):0}</td><td>{tPe}</td><td>{tCP.toFixed(3)}</td><td>{pozData.tRed.toFixed(3)}</td></tr></tbody></table></div></div>:null}
+      var isRemodel = !!p.isRemodelar;
+      return <tr key={i} style={{borderLeft: isRemodel ? '4px solid #F0932B' : isRep ? '4px solid #3b82f6' : '4px solid transparent', background: isRemodel ? 'rgba(240,147,43,0.1)' : 'transparent'}}>
+        <td>{i+1}</td>
+        <td style={{textAlign:"left",fontSize:12,fontWeight:700}}>{p.nodo}</td>
+        <td style={{textAlign:"center"}}>
+          <input
+            type="checkbox"
+            checked={isRemodel}
+            onChange={function(){
+              var setP = props.sP || props.setP;
+              if (setP) {
+                setP(function(prevP){
+                  var curRemodel = Object.assign({}, (prevP && prevP.remodelPozos) || {});
+                  curRemodel[p.nodo] = !curRemodel[p.nodo];
+                  return Object.assign({}, prevP, { remodelPozos: curRemodel });
+                });
+              }
+            }}
+            title="Marcar como Pozo a Remodelar (elimina cantidades de obra nueva y lo transfiere a Remodelación en Presupuesto item 5.02)"
+            style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: '#F0932B' }}
+          />
+        </td>
+        <td style={{color:"#E11D48",fontWeight:700}}>{p.volDemolicion}</td>
+        <td>{p.prof.toFixed(2)}</td>
+        <td style={{color:p.tipoPozo==="C"?"#00A6D6":"#F0932B",fontWeight:700}}>{p.tipoPozo}</td>
+        <td>{p.hConc}</td>
+        <td>{p.hMamp>0?p.hMamp:"-"}</td>
+        <td>{isRemodel ? <span style={{color:'#F0932B',fontSize:10}}>Remod.</span> : p.volConc}</td>
+        <td>{isRemodel ? "-" : (p.areaMamp>0?p.areaMamp:"-")}</td>
+        <td>{isRemodel ? "-" : p.volExc}</td>
+        <td style={{color:"#D4A843"}}>{isRemodel ? "-" : (p.a60Tapa>0?p.a60Tapa.toFixed(1):"-")}</td>
+        <td style={{color:"#D4A843"}}>{isRemodel ? "-" : (p.a60Cuerpo>0?p.a60Cuerpo.toFixed(1):"-")}</td>
+        <td style={{color:"#D4A843"}}>{isRemodel ? "-" : (p.a37Cuerpo>0?p.a37Cuerpo.toFixed(1):"-")}</td>
+        <td>{isRemodel ? "-" : p.peldanos}</td>
+        <td>{isRemodel ? "-" : (p.concPobre>0?p.concPobre.toFixed(3):"-")}</td>
+        <td>{isRemodel ? "-" : (p.reduccion>0?p.reduccion.toFixed(3):"-")}</td>
+      </tr>;
+    })}<tr style={{background:"#003B73",fontWeight:700,color:"#fff"}}><td colSpan={3}>TOTAL ({pz.length})</td><td style={{color:"#FFD1D1"}}>{pozData.tVolDemolicion.toFixed(2)}</td><td></td><td></td><td>{tVC.toFixed(2)}</td><td>{tAM.toFixed(2)}</td><td>{tVE.toFixed(2)}</td><td style={{color:"#D4A843"}}>{pozData.tA60T?pozData.tA60T.toFixed(1):0}</td><td style={{color:"#D4A843"}}>{pozData.tA60C?pozData.tA60C.toFixed(1):0}</td><td style={{color:"#D4A843"}}>{pozData.tA37C?pozData.tA37C.toFixed(1):0}</td><td>{tPe}</td><td>{tCP.toFixed(3)}</td><td>{pozData.tRed.toFixed(3)}</td></tr></tbody></table></div></div>:null}
     {/* >>> ADICIÓN v36.3: subtab Excavación por rango <<< */}
     {(sub==="exc" || props.isExport)?<div className="c print-page-break" style={props.isExport ? {marginBottom: 20} : {}}><div className="ct">Excavacion Pozos por Rango de Profundidad</div>
       <div className="kpig" style={{marginBottom:8}}>

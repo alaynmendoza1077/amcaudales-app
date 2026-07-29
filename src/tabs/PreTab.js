@@ -63,7 +63,7 @@ function PreTab(props){
   var profProm=P.profProm!==undefined?P.profProm:calcProfProm;
   var repP=dN.reduce(function(s,r){return s+(r.repP||0);},0);
   var tLe=dN.reduce(function(s,r){return s+(r.Le||0);},0);
-  var ep2=calcPozosCompleto(R,T);var nPN=ep2.pz.length;
+  var ep2=calcPozosCompleto(R,T,P);var nPN=ep2.pz.length;
   
   var caidasCount = {
     "4.05.01.01": 0, "4.05.01.02": 0, "4.05.01.03": 0, "4.05.01.04": 0,
@@ -223,6 +223,10 @@ function PreTab(props){
     "4.09.01.01":function(){var r=0;dN.forEach(function(t){if(t.tipoVia==="AN")r+=(t.L||0)*(t.anchoVia||P.anchoVia||6);});return r;}(),
     /* 5. Varios */
     "5.01.02.01":lt,
+    "5.01.03.02":(ep2.tVolDemolicion || 0),
+    "5.02.01.01":(ep2.remodelCounts ? ep2.remodelCounts["5.02.01.01"] : 0),
+    "5.02.01.02":(ep2.remodelCounts ? ep2.remodelCounts["5.02.01.02"] : 0),
+    "5.02.01.03":(ep2.remodelCounts ? ep2.remodelCounts["5.02.01.03"] : 0),
     "5.03.01.01":function(){var n=0;if(sumLat)sumLat.forEach(function(f){n+=f.cant||0;});return n;}(),
     "5.03.01.02":function(){var n=0;if(sumTrans)sumTrans.forEach(function(f){var st=SUM_TYPES_TRANS[f.tipo];n+=(f.cant||0)*(st?st.rejas||5:5);});return n;}(),
     "5.03.02.01":function(){var n=0;if(sumLat)sumLat.forEach(function(f){n+=f.cant||0;});return n;}(),

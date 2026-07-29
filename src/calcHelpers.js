@@ -118,9 +118,9 @@ function calcVallasAuto(R,pbItems){
  *
  * Ver DOC_MOTOR_HIDRAULICO.md §12.2 para detalle completo.
  */
-function calcPozosCompleto(R,T){
+function calcPozosCompleto(R,T,P){
   var dR=R.filter(function(r){return !r.sep;});
-  if(!dR.length)return{pz:[],tVC:0,tAM:0,tVE:0,tAK:0,tPe:0,tJu:0,tCP:0,nCaida:0,nNuevos:0};
+  if(!dR.length)return{pz:[],tVC:0,tAM:0,tVE:0,tAK:0,tPe:0,tJu:0,tCP:0,nCaida:0,nNuevos:0,tVolDemolicion:0,remodelCounts:{"5.02.01.01":0,"5.02.01.02":0,"5.02.01.03":0}};
   var ESP=0.25;
   var ESP_BASE=0.20;var ESP_TAPA=0.15;
   var PDR60_FIJO=26.5;
@@ -153,60 +153,53 @@ function calcPozosCompleto(R,T){
     var reponer=tMatch?tMatch.reponer:"S";
     var pozoNuevo=tMatch?tMatch.pozoNuevo:"N";
     if(!tipoPozo)tipoPozo="M";if(!reponer)reponer="S";if(!pozoNuevo)pozoNuevo="N";
-    /* Fórmulas de volumen de concreto de pozo (calibradas Excel EMPAS)
-     * hConcTotal = prof - 0.56m (descontado tapa+fondo+base)
-     * volParedConc = π(Rext² - Rint²) × hConc  (anillo de pared)
-     * volCorona = π(1.30/2)² × 0.20  (tapa)
-     * volFondo = π(1.40/2)² × 0.30  (base)
-     */
+
+    // Chequeo de Remodelar según checkbox en P.remodelPozos
+    var isRemodelar = !!(P && P.remodelPozos && P.remodelPozos[n]);
+    var remodelCode = profN <= 2.0 ? "5.02.01.01" : profN <= 4.0 ? "5.02.01.02" : "5.02.01.03";
+
+    // Volumen de Demolición del Pozo (m3) = cilindro exterior DE_P * profN
+    var volDemolicion = Math.PI * Math.pow(DE_P / 2, 2) * profN;
+
+    /* Fórmulas de volumen de concreto de pozo (calibradas Excel EMPAS) */
     var hConcTotal = Math.max(0, profN - 0.56);
     var hMamp = 0;
     var hConc = hConcTotal;
-    if(pozoNuevo!=="S"){hConc=0;hConcTotal=0;}
+    if(pozoNuevo!=="S" || isRemodelar){hConc=0;hConcTotal=0;}
     var Rint = DI/2;
     var ESP_PARED = 0.20;
     var Rext_pared = Rint + ESP_PARED;
     var areaAnillo = Math.PI*(Rext_pared*Rext_pared - Rint*Rint);
-    var volParedConc = pozoNuevo==="S" ? areaAnillo * hConcTotal : 0;
-    var volCorona = pozoNuevo==="S" ? Math.PI * Math.pow(1.30/2, 2) * 0.20 : 0;
-    var volFondo = pozoNuevo==="S" ? Math.PI * Math.pow(1.40/2, 2) * 0.30 : 0;
+    var volParedConc = (pozoNuevo==="S" && !isRemodelar) ? areaAnillo * hConcTotal : 0;
+    var volCorona = (pozoNuevo==="S" && !isRemodelar) ? Math.PI * Math.pow(1.30/2, 2) * 0.20 : 0;
+    var volFondo = (pozoNuevo==="S" && !isRemodelar) ? Math.PI * Math.pow(1.40/2, 2) * 0.30 : 0;
     var volConcTotal = volParedConc + volCorona + volFondo;
     var volBase = volFondo;
     var volTapa = volCorona;
-    var areaMamp = pozoNuevo==="S" ? 1.008 : 0;
+    var areaMamp = (pozoNuevo==="S" && !isRemodelar) ? 1.008 : 0;
     // Excavación: cilindro DE_EXC × (prof + 0.20m sobre-excavación)
-    var volExc=pozoNuevo==="S"?Math.PI*Math.pow(DE_EXC/2,2)*(profN+0.20):0;
+    var volExc=(pozoNuevo==="S" && !isRemodelar)?Math.PI*Math.pow(DE_EXC/2,2)*(profN+0.20):0;
     var v025p=0;var v2550p=0;var v50pp=0;
-    if(pozoNuevo==="S"){
+    if(pozoNuevo==="S" && !isRemodelar){
       var Aex=Math.PI*Math.pow(DE_EXC/2,2);var hp=profN+0.20;
       v025p=hp<=2.5?Aex*hp:Aex*2.5;
       v2550p=hp>2.5?Aex*Math.min(hp-2.5,2.5):0;
       v50pp=hp>5?Aex*(hp-5):0;
     }
-    /* Acero y recubrimientos (EMPAS)
-     * PDR-60: 26.5 kg fijo por tapa + 15 kg/m³ de concreto de cuerpo
-     * A-37: 15 kg/m³ de concreto de cuerpo
-     * Peldaños: floor((prof-0.5)/0.35) → espaciados cada 0.35m desde 0.5m
-     * Junta PVC: π×DI (m de cinta de junta por pozo)
-     */
-    var a60Tapa = (pozoNuevo==="S"?PDR60_FIJO:0);
+    var a60Tapa = (pozoNuevo==="S" && !isRemodelar ? PDR60_FIJO : 0);
     var a60Cuerpo = (volConcTotal*15);
-    var pdr60 = a60Tapa + a60Cuerpo; // keep for total sum
-    var a37Cuerpo = (pozoNuevo==="S"?volConcTotal*5:0);
-    var a37 = a37Cuerpo; // keep for total sum
-    var peldanos=Math.max(0,Math.floor((profN-0.5)/0.35));
-    var juntaPVC=pozoNuevo==="S"?Math.PI*DI:0;
-    var concPobre=pozoNuevo==="S"?Math.PI*Math.pow(1.30/2,2)*0.05:0;  // 0.05m relleno pobre para D=1.3m
+    var pdr60 = a60Tapa + a60Cuerpo;
+    var a37Cuerpo = (pozoNuevo==="S" && !isRemodelar ? volConcTotal*5 : 0);
+    var a37 = a37Cuerpo;
+    var peldanos = (!isRemodelar) ? Math.max(0,Math.floor((profN-0.5)/0.35)) : 0;
+    var juntaPVC = (pozoNuevo==="S" && !isRemodelar) ? Math.PI*DI : 0;
+    var concPobre = (pozoNuevo==="S" && !isRemodelar) ? Math.PI*Math.pow(1.30/2,2)*0.05 : 0;
     var reduccion=0;
-    if(pozoNuevo==="S"&&ent.length>0&&sal.length>0){
+    if(pozoNuevo==="S" && !isRemodelar && ent.length>0 && sal.length>0){
       var dEntMM=parseFloat(ent[0].nom)||0;
       var dSalMM=parseFloat(sal[0].nom)||0;
       if(dEntMM>dSalMM)reduccion=Math.PI*DI*0.30;
     }
-    /* Cotas entrada/salida y cámaras de caída
-     * deltaH>0.75m → requiere cámara de caída dedicada (RAS)
-     * diamEstr: diámetro estructura según Tabla 11 RAS (d≤300→170, d≤450→280, >450→360)
-     */
     var cfSalida=s?s.cfDE:cf;
     var caidas=[];
     var llegadas=[];
@@ -217,7 +210,6 @@ function calcPozosCompleto(R,T){
       var dLlegPul=+(dLlegMM/25.4).toFixed(2);
       llegadas.push({idx:idx,diam:dLlegMM,diamPul:dLlegPul,nom:r.nom,cf:cfLlegada,deltaH:+deltaH.toFixed(3),S:r.S||0,de:r.de});
       if(deltaH>0.75){
-        // Diámetro estructura cámara según Tabla 11 RAS
         var diamEstrCaida=dLlegMM<=300?170:dLlegMM<=450?280:360;
         caidas.push({diam:dLlegMM,deltaH:+deltaH.toFixed(3),diamPul:dLlegPul,diamEstr:diamEstrCaida});
       }
@@ -228,15 +220,16 @@ function calcPozosCompleto(R,T){
     var csSal=s?s.cfDE||0:0;
     var volCaida=0;
     caidas.forEach(function(cc){var dCm=cc.diam/1000;volCaida+=Math.PI*Math.pow(dCm/2,2)*cc.deltaH*1.2;});
-    var tubVent=pozoNuevo==="S"?3:0;
+    var tubVent=(pozoNuevo==="S" && !isRemodelar)?3:0;
     pz.push({nodo:n,prof:profN,tipoPozo:tipoPozo,pozoNuevo:pozoNuevo,reponer:reponer,
+      isRemodelar:isRemodelar, remodelCode: isRemodelar ? remodelCode : null,
+      volDemolicion:+volDemolicion.toFixed(3),
       volConc:+volConcTotal.toFixed(3),areaMamp:+areaMamp.toFixed(2),volExc:+volExc.toFixed(3),
       peldanos:peldanos,juntaPVC:+juntaPVC.toFixed(2),
       concPobre:+concPobre.toFixed(3),caidas:caidas,nAflu:ent.length,
       hConc:+hConcTotal.toFixed(2),hMamp:+hMamp.toFixed(2),volCaida:+volCaida.toFixed(3),tubVent:tubVent,
       De:e?e.nom:"-",Ds:s?s.nom:"-",cr:+(cr).toFixed(3),cf:+(cf).toFixed(3),
       tipo:profN<=1.5?"Peq":profN<=3?"Med":"Gra",
-      /* Volúmenes por rangos de profundidad (tarifas diferenciadas) y recubrimientos */
       v025:+v025p.toFixed(3),v2550:+v2550p.toFixed(3),v50p:+v50pp.toFixed(3),
       pdr60:+pdr60.toFixed(1),a37:+a37.toFixed(1),
       a60Tapa:+a60Tapa.toFixed(1), a60Cuerpo:+a60Cuerpo.toFixed(1), a37Cuerpo:+a37Cuerpo.toFixed(1),
@@ -251,13 +244,21 @@ function calcPozosCompleto(R,T){
   });
   pz.sort(function(a,b){return b.prof-a.prof;});
   var tVC=0,tAM=0,tVE=0,tPe=0,tJu=0,tCP=0,nCaida=0,nNuevos=0;
-  var tVolCaida=0,tTubVent=0;
-  /* Totales de acero, recubrimientos y volúmenes por rangos */
+  var tVolCaida=0,tTubVent=0,tVolDemolicion=0;
+  var remodelCounts={"5.02.01.01":0, "5.02.01.02":0, "5.02.01.03":0};
+
   var tPDR=0,tA37=0,tRed=0,tV025=0,tV2550=0,tV50p=0;
   var tA60T=0;var tA60C=0;var tA37C=0;
-  pz.forEach(function(p){tVC+=p.volConc;tAM+=p.areaMamp;tVE+=p.volExc;
+  pz.forEach(function(p){
+    tVC+=p.volConc;tAM+=p.areaMamp;tVE+=p.volExc;
     tPe+=p.peldanos;tJu+=p.juntaPVC;tCP+=p.concPobre;
-    if(p.pozoNuevo==="S"){
+    if (p.reponer === "S" || p.isRemodelar) {
+      tVolDemolicion += (p.volDemolicion || 0);
+    }
+    if (p.isRemodelar && p.remodelCode) {
+      remodelCounts[p.remodelCode] = (remodelCounts[p.remodelCode] || 0) + 1;
+    }
+    if(p.pozoNuevo==="S" && !p.isRemodelar){
       tVolCaida+=p.volCaida||0;
       tTubVent+=p.tubVent||0;
       if(p.caidas.length>0)nCaida++;
@@ -268,6 +269,8 @@ function calcPozosCompleto(R,T){
     tV025+=p.v025||0;tV2550+=p.v2550||0;tV50p+=p.v50p||0;
   });
   return{pz:pz,tVC:tVC,tAM:tAM,tVE:tVE,tPe:tPe,tJu:tJu,tCP:tCP,nCaida:nCaida,nNuevos:nNuevos,tVolCaida:tVolCaida,tTubVent:tTubVent,
+    tVolDemolicion:+tVolDemolicion.toFixed(3),
+    remodelCounts:remodelCounts,
     tPDR:tPDR,tA37:tA37,tRed:tRed,
     tA60T:tA60T, tA60C:tA60C, tA37C:tA37C,
     v025:tV025,

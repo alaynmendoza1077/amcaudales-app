@@ -59,7 +59,7 @@ export function recalcPbItems(data) {
   var calcProfProm = dN.length > 0 ? dN.reduce((s, r) => s + ((+r.profE || 0) + (+r.profS || 0)) / 2, 0) / dN.length : 1.5;
   var profProm = P.profProm !== undefined ? P.profProm : calcProfProm;
   var repP = dN.reduce((s, r) => s + (r.repP || 0), 0);
-  var ep2 = calcPozosCompleto(R, T);
+  var ep2 = calcPozosCompleto(R, T, P);
   var caidasCount = { "4.05.01.01": 0, "4.05.01.02": 0, "4.05.01.03": 0, "4.05.01.04": 0, "4.05.02.01": 0, "4.05.02.02": 0, "4.05.02.03": 0, "4.05.02.04": 0, "4.05.03.01": 0, "4.05.03.02": 0, "4.05.03.03": 0, "4.05.03.04": 0, "4.05.04.01": 0, "4.05.04.02": 0, "4.05.04.03": 0, "4.05.04.04": 0 };
   if (ep2 && ep2.pz) {
     ep2.pz.forEach(p => {
@@ -137,6 +137,10 @@ export function recalcPbItems(data) {
     "4.08.03.02": (() => { var r = 0; dN.forEach(t => { if (t.tipoVia === "PP" || t.tipoVia === "AD") r += (t.L || 0) * (t.anchoVia || P.anchoVia || 6); }); return r; })(),
     "4.09.01.02": uSardinel, "4.09.01.01": (() => { var r = 0; dN.forEach(t => { if (t.tipoVia === "AN") r += (t.L || 0) * (t.anchoVia || P.anchoVia || 6); }); return r; })(),
     "5.01.02.01": lt,
+    "5.01.03.02": (ep2.tVolDemolicion || 0),
+    "5.02.01.01": (ep2.remodelCounts ? ep2.remodelCounts["5.02.01.01"] : 0),
+    "5.02.01.02": (ep2.remodelCounts ? ep2.remodelCounts["5.02.01.02"] : 0),
+    "5.02.01.03": (ep2.remodelCounts ? ep2.remodelCounts["5.02.01.03"] : 0),
     "5.03.01.01": (() => { var n = 0; if (sumLat) sumLat.forEach(f => { n += f.cant || 0; }); return n; })(),
     "5.03.01.02": (() => { var n = 0; if (sumTrans) sumTrans.forEach(f => { var st = SUM_TYPES_TRANS[f.tipo]; n += (f.cant || 0) * (st ? st.rejas || 5 : 5); }); return n; })(),
     "5.03.02.01": (() => { var n = 0; if (sumLat) sumLat.forEach(f => { n += f.cant || 0; }); return n; })(),

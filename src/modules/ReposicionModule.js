@@ -416,29 +416,42 @@ export default function ReposicionModule({ onBack, initialData }){
 
   var handleSaveAMC=function(){
     var suggestedName = (P.proyecto || P.barrio || "CONSTRUCCION_SISTEMA_DE_ALCANTARILLADO").replace(/\s+/g,"_");
-    var fileName = window.prompt("Introduce el nombre con el que deseas guardar el archivo:", suggestedName);
+    var fileName = window.prompt("Guardar en el Computador (.AMC) - Introduce el nombre del archivo:", suggestedName);
     if(!fileName) return;
     if(!fileName.toLowerCase().endsWith(".amc")) fileName += ".amc";
     
-    // Forzar recalculo de presupuesto con base en P (Acometidas, Urbanismo, etc)
     import('../tabs/ProjectConsolidatorTab').then(({ recalcPbItems }) => {
       var data={v:"v36",P:P,T:T,sumLat:sumLat,sumTrans:sumTrans,pbItems:pbItems,alivData:alivData,sumData:sumData,estSepData:estSepData,urbanismoData:urbanismoData,inpData:inpData,flowStage:flowStage,tab:tab,autoAreasPoly:autoAreasPoly,selMap:selMap,outfalls:outfalls,filterSel:filterSel,R:R};
       var freshPbItems = recalcPbItems(data);
-      data.pbItems = freshPbItems; // Reemplazar con el recalculado
+      data.pbItems = freshPbItems;
       
-      const projTitle = fileName.replace(/\.amc$/i, '');
+      var blob=new Blob([JSON.stringify(data)],{type:"application/json"});
+      import('../utils/fileSaver').then(m => m.saveFileWithDialog(blob, fileName));
+    });
+  };
+
+  var handleSaveCloudOnly=function(){
+    var suggestedName = (P.proyecto || P.barrio || "CONSTRUCCION_SISTEMA_DE_ALCANTARILLADO");
+    var projTitle = window.prompt("Guardar en la Nube (Supabase) - Nombre del Proyecto:", suggestedName);
+    if(!projTitle) return;
+
+    import('../tabs/ProjectConsolidatorTab').then(({ recalcPbItems }) => {
+      var data={v:"v36",P:P,T:T,sumLat:sumLat,sumTrans:sumTrans,pbItems:pbItems,alivData:alivData,sumData:sumData,estSepData:estSepData,urbanismoData:urbanismoData,inpData:inpData,flowStage:flowStage,tab:tab,autoAreasPoly:autoAreasPoly,selMap:selMap,outfalls:outfalls,filterSel:filterSel,R:R};
+      var freshPbItems = recalcPbItems(data);
+      data.pbItems = freshPbItems;
+
       if (saveProjectToCloud) {
         saveProjectToCloud(data, projTitle)
           .then(() => {
-            console.log('Proyecto guardado en la nube exitosamente');
+            alert(`¡Proyecto "${projTitle}" guardado exitosamente en tu cuenta de la Nube!`);
           })
           .catch((err) => {
-            console.warn('Alerta guardado nube:', err);
+            console.error('Error guardando en la Nube:', err);
+            alert("Error al guardar en la nube. Verifica tu conexión.");
           });
+      } else {
+        alert("Modo Invitado: Inicia sesión para guardar proyectos en tu cuenta de la Nube.");
       }
-
-      var blob=new Blob([JSON.stringify(data)],{type:"application/json"});
-      import('../utils/fileSaver').then(m => m.saveFileWithDialog(blob, fileName));
     });
   };
 
@@ -755,17 +768,20 @@ const handleBack = () => {
               <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M3 15a4 4 0 004 4h9a5 5 0 001-9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
               <span style={{marginLeft: 6}}>Abrir Nube</span>
             </button>
-            <button className="hdr-btn" onClick={handleSaveAMC} title="Guardar Proyecto (.AMC) y en la Nube" style={{ height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '125px' }}>
+            <button className="hdr-btn" onClick={handleSaveAMC} title="Guardar archivo local (.AMC) en tu computador" style={{ height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '125px' }}>
               <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg>
               <span style={{marginLeft: 6}}>Guardar .AMC</span>
             </button>
-            <button className="hdr-btn" onClick={handleSaveAMC} title="Guardar directamente en tu cuenta de la Nube" style={{ height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '125px', background: 'rgba(16, 185, 129, 0.15)', border: '1px solid #10b981', color: '#10b981' }}>
+            <button className="hdr-btn" onClick={handleSaveCloudOnly} title="Guardar proyecto directo en tu cuenta de la Nube (Supabase)" style={{ height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '125px', background: 'rgba(16, 185, 129, 0.15)', border: '1px solid #10b981', color: '#10b981' }}>
               <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M3 15a4 4 0 004 4h9a5 5 0 001-9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
               <span style={{marginLeft: 6}}>Guardar Nube</span>
             </button>
-            <button className="hdr-btn" onClick={() => setTab('consolidador')} title="Consolidar Proyectos" style={{ height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '125px', background: 'rgba(99, 102, 241, 0.1)', border: '1px solid #6366f1', color: '#818cf8' }}>
+            <button className="hdr-btn" onClick={() => setTab('consolidador')} title="Consolidar varios diseños a un presupuesto" style={{ height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 10px', background: 'rgba(99, 102, 241, 0.12)', border: '1px solid #6366f1', color: '#818cf8' }}>
               <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16m-7 6h7"/></svg>
-              <span style={{marginLeft: 6}}>Consolidar</span>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', marginLeft: 6, textAlign: 'left' }}>
+                <span style={{ fontSize: '11px', fontWeight: 'bold', lineHeight: '1.1' }}>Consolidar</span>
+                <span style={{ fontSize: '8.5px', opacity: 0.85, color: '#a5b4fc', lineHeight: '1' }}>(varios diseños a 1 presupuesto)</span>
+              </div>
             </button>
           </div>
 
@@ -952,7 +968,7 @@ const handleBack = () => {
 
       {tab==="tra"? <TramosTab R={R} />:null}
       {tab==="exc"? <ExcTab R={R} P={P} T={T} sumLat={sumLat} sumTrans={sumTrans} urbanismoData={urbanismoData}/>:null}
-      {tab==="poz"? <PozTab R={R} T={T}/>:null}
+      {tab==="poz"? <PozTab R={R} T={T} P={P} sP={setP}/>:null}
       {tab==="tub"? <TubTab R={R} sumLat={sumLat} sumTrans={sumTrans} P={P}/>:null}
       {tab==="aco"? <AcoTab P={P} sP={setP} R={R}/>:null}
       {tab==="sum"? <SumTab P={P} sP={setP} sumLat={sumLat} setSumLat={setSumLat} sumTrans={sumTrans} setSumTrans={setSumTrans} subS={subS} setSubS={setSubS} anchoVia={P.anchoVia||6}/>:null}
