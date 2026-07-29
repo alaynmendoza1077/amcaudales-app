@@ -3,6 +3,7 @@ import HomeDashboard from './components/HomeDashboard';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import NavbarUserHeader from './components/NavbarUserHeader';
 import StartLoginPortal from './components/StartLoginPortal';
+import LandingPage from './components/LandingPage';
 import NewProjectModal from './components/NewProjectModal';
 import UpgradeProModal from './components/UpgradeProModal';
 
@@ -95,22 +96,13 @@ class GlobalErrorBoundary extends React.Component {
 }
 
 function AppContent() {
-  const { user, saveProjectToCloud, userPlan, loginAsGuest } = useAuth();
+  const { user, saveProjectToCloud, userPlan, loginAsGuest, loading } = useAuth();
   const [activeModule, setActiveModule] = useState('home');
   const [initialData, setInitialData] = useState(null);
   const [showNewProjectModal, setShowNewProjectModal] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [blockedFeatureName, setBlockedFeatureName] = useState('');
-
-  React.useEffect(() => {
-    if (!user) {
-      try {
-        loginAsGuest();
-      } catch (e) {
-        console.warn("Auto guest login warning:", e);
-      }
-    }
-  }, [user, loginAsGuest]);
+  const [showLoginPortal, setShowLoginPortal] = useState(false);
 
   const handleSetModule = (mod, data = null) => {
     if ((mod === 'presupuesto') && userPlan === 'free') {
@@ -166,6 +158,46 @@ function AppContent() {
     }
   };
 
+  // Mientras se verifica la sesión guardada, mostrar loader
+  if (loading) {
+    return <Loader />;
+  }
+
+  // ── Si NO hay usuario autenticado: Mostrar Landing Page ──
+  if (!user) {
+    return (
+      <>
+        {showLoginPortal ? (
+          <StartLoginPortal
+            onGuestAccess={() => {
+              loginAsGuest();
+              setShowLoginPortal(false);
+            }}
+          />
+        ) : (
+          <LandingPage
+            onStartTrial={() => {
+              loginAsGuest();
+            }}
+            onOpenExpress={() => {
+              loginAsGuest();
+              setActiveModule('express');
+            }}
+            onOpenLogin={() => setShowLoginPortal(true)}
+            onOpenProModal={() => setShowUpgradeModal(true)}
+          />
+        )}
+
+        <UpgradeProModal
+          isOpen={showUpgradeModal}
+          onClose={() => setShowUpgradeModal(false)}
+          featureName={blockedFeatureName}
+        />
+      </>
+    );
+  }
+
+  // ── Si HAY usuario autenticado: Mostrar App completa ──
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: '#050a15' }}>
       <NavbarUserHeader
