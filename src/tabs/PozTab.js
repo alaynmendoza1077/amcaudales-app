@@ -9,7 +9,7 @@ function PozTab(props){
   var dR=props.R.filter(function(r){return !r.sep;});var T=props.T||[];
   if(!dR.length)return <div className="c"><p>Sin datos</p></div>;
   var DI=1.2;var ESP=0.25;
-  var pozData=calcPozosCompleto(props.R,T);
+  var pozData=calcPozosCompleto(props.R,T,P);
   var pz=pozData.pz;
   /* >>> ADICIÓN v36.6: conteo pozos con DI ampliado <<< */
   var nDIamp=pz.filter(function(p){return p.alertaDI;}).length;

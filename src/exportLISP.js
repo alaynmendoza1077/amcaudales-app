@@ -1115,9 +1115,24 @@ export function exportPlantaLISP(R, P, T, inpData) {
           if (v.CoordX && v.CoordY) groupedVerts[nid].push(v);
       });
       
+      const pzMinX = Math.min(...validPozos.map(p => p.x));
+      const pzMaxX = Math.max(...validPozos.map(p => p.x));
+      const pzMinY = Math.min(...validPozos.map(p => p.y));
+      const pzMaxY = Math.max(...validPozos.map(p => p.y));
+
       for (let nid in groupedVerts) {
           let pts = groupedVerts[nid];
           if (pts.length < 3) continue;
+          
+          let sumX = 0, sumY = 0;
+          pts.forEach(v => { sumX += v.CoordX; sumY += v.CoordY; });
+          let cxTest = sumX / pts.length;
+          let cyTest = sumY / pts.length;
+
+          // Si el centroide del polígono está a más de 2000m del proyecto de pozos, omitir para evitar desfasamiento espacial
+          if (cxTest < pzMinX - 2000 || cxTest > pzMaxX + 2000 || cyTest < pzMinY - 2000 || cyTest > pzMaxY + 2000) {
+              continue;
+          }
           lines.push(`  (COMMAND "_LAYER" "_Make" "AREAS-AFERENTES" "")`);
           lines.push(`  (SETVAR "CELTSCALE" 0.05)`);
           let sumX = 0, sumY = 0;
