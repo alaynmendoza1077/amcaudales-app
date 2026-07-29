@@ -84,6 +84,34 @@ export function AuthProvider({ children }) {
     return adminUser;
   };
 
+  // Inicio de Sesión con Google / Gmail (OAuth)
+  const loginWithGoogle = async () => {
+    if (isCloudConfigured && supabase) {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.origin
+        }
+      });
+      if (error) throw error;
+      return data;
+    } else {
+      const mockGoogleUser = {
+        id: 'usr_google_demo',
+        email: 'juan.perez@gmail.com',
+        user_metadata: {
+          full_name: 'Ing. Juan Pérez',
+          company: 'Ingeniería AMC (Google Account)'
+        }
+      };
+      localStorage.setItem('amcaudales_user_session', JSON.stringify(mockGoogleUser));
+      setUser(mockGoogleUser);
+      setUserPlan('pro');
+      fetchLocalCloudProjects(mockGoogleUser.id);
+      return { user: mockGoogleUser };
+    }
+  };
+
   // Fetch proyectos en Supabase
   const fetchUserProjects = async (userId) => {
     try {
@@ -131,7 +159,7 @@ export function AuthProvider({ children }) {
       const mockUser = {
         id: 'usr_' + Date.now(),
         email,
-        user_metadata: { full_name: fullName || email.split('@')[0], company: company || 'Ingeniería AMC' }
+        user_metadata: { full_name: fullName || 'Ing. Juan Pérez', company: company || 'Ingeniería AMC' }
       };
       localStorage.setItem('amcaudales_user_session', JSON.stringify(mockUser));
       setUser(mockUser);
@@ -153,7 +181,7 @@ export function AuthProvider({ children }) {
       const mockUser = {
         id: 'usr_local',
         email,
-        user_metadata: { full_name: email.split('@')[0], company: 'AMC Ingenieros' }
+        user_metadata: { full_name: 'Ing. Juan Pérez', company: 'AMC Ingenieros' }
       };
       localStorage.setItem('amcaudales_user_session', JSON.stringify(mockUser));
       setUser(mockUser);
@@ -238,6 +266,7 @@ export function AuthProvider({ children }) {
         userPlan,
         upgradeToPro,
         loginAsAdmin,
+        loginWithGoogle,
         loading,
         cloudProjects,
         register,

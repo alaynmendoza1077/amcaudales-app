@@ -7,6 +7,10 @@ export default function AuthModal({ isOpen, onClose }) {
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
   const [fullName, setFullName] = useState('');
   const [company, setCompany] = useState('');
 
@@ -24,8 +28,11 @@ export default function AuthModal({ isOpen, onClose }) {
 
     try {
       if (isRegistering) {
-        if (!email || !password || !fullName) {
-          throw new Error('Por favor complete los campos obligatorios.');
+        if (!email || !password || !fullName || !confirmPassword) {
+          throw new Error('Por favor complete los campos obligatorios (*).');
+        }
+        if (password !== confirmPassword) {
+          throw new Error('Las contraseñas no coinciden. Por favor verifique.');
         }
         await register(email, password, fullName, company);
         setSuccessMsg('¡Cuenta registrada exitosamente!');
@@ -84,7 +91,7 @@ export default function AuthModal({ isOpen, onClose }) {
                 <label style={labelStyle}>Nombre Completo *</label>
                 <input
                   type="text"
-                  placeholder="Ing. Alayn Mendoza"
+                  placeholder="Ing. Juan Pérez"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   style={inputStyle}
@@ -108,7 +115,7 @@ export default function AuthModal({ isOpen, onClose }) {
             <label style={labelStyle}>Correo Electrónico *</label>
             <input
               type="email"
-              placeholder="ingeniero@amcaudales.com"
+              placeholder="juan.perez@amcaudales.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               style={inputStyle}
@@ -118,15 +125,49 @@ export default function AuthModal({ isOpen, onClose }) {
 
           <div>
             <label style={labelStyle}>Contraseña *</label>
-            <input
-              type="password"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              style={inputStyle}
-              required
-            />
+            <div style={passwordWrapperStyle}>
+              <input
+                type={showPassword ? "text" : "password"}
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                style={passwordInputStyle}
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                style={toggleEyeBtnStyle}
+                title={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+              >
+                {showPassword ? "🙈" : "👁️"}
+              </button>
+            </div>
           </div>
+
+          {isRegistering && (
+            <div>
+              <label style={labelStyle}>Confirmar Contraseña *</label>
+              <div style={passwordWrapperStyle}>
+                <input
+                  type={showConfirmPassword ? "text" : "password"}
+                  placeholder="••••••••"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  style={passwordInputStyle}
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  style={toggleEyeBtnStyle}
+                  title={showConfirmPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                >
+                  {showConfirmPassword ? "🙈" : "👁️"}
+                </button>
+              </div>
+            </div>
+          )}
 
           <button
             type="submit"
@@ -175,7 +216,7 @@ export default function AuthModal({ isOpen, onClose }) {
   );
 }
 
-// Estilos Modal (Glassmorphism Dark Premium)
+// Estilos Modal
 const modalOverlayStyle = {
   position: 'fixed',
   top: 0,
@@ -232,10 +273,7 @@ const closeBtnStyle = {
   border: 'none',
   color: '#94a3b8',
   fontSize: '1.3rem',
-  cursor: 'pointer',
-  padding: '4px 8px',
-  borderRadius: '6px',
-  transition: 'all 0.2s ease'
+  cursor: 'pointer'
 };
 
 const demoBannerStyle = {
@@ -288,6 +326,34 @@ const inputStyle = {
   boxSizing: 'border-box'
 };
 
+const passwordWrapperStyle = {
+  position: 'relative',
+  display: 'flex',
+  alignItems: 'center'
+};
+
+const passwordInputStyle = {
+  width: '100%',
+  padding: '10px 38px 10px 12px',
+  backgroundColor: '#0f172a',
+  border: '1px solid #334155',
+  borderRadius: '8px',
+  color: '#ffffff',
+  fontSize: '0.9rem',
+  outline: 'none',
+  boxSizing: 'border-box'
+};
+
+const toggleEyeBtnStyle = {
+  position: 'absolute',
+  right: '8px',
+  background: 'none',
+  border: 'none',
+  cursor: 'pointer',
+  fontSize: '1rem',
+  padding: '4px'
+};
+
 const primaryBtnStyle = {
   width: '100%',
   padding: '12px',
@@ -299,8 +365,7 @@ const primaryBtnStyle = {
   color: '#ffffff',
   fontSize: '0.95rem',
   fontWeight: '600',
-  boxShadow: '0 4px 14px rgba(0, 114, 255, 0.4)',
-  transition: 'transform 0.15s ease'
+  boxShadow: '0 4px 14px rgba(0, 114, 255, 0.4)'
 };
 
 const footerToggleStyle = {
