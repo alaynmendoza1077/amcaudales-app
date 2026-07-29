@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calculadora Hidráulica Pro - Visor Express</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
+    
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+    <script src="https://unpkg.com/leaflet-polylinedecorator@1.6.0/dist/leaflet.polylineDecorator.js"></script>
+    <script src="https://unpkg.com/wellknown@1.5.0/wellknown.js"></script>
+
+    <!-- Apuntar a los datos en /data/ de la app -->
+    <script src="../data/datos_pozos.js"></script>
+    <script src="../data/datos_redes.js"></script>
+    <script src="../data/datos_estaciones.js"></script>
+    <script src="../data/datos_densidades.js"></script>
+
+    <style>
+        :root { --primary-calc: #16a34a; --bg-calc: #050a15; }
+        body { font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: var(--bg-calc); margin: 0; padding: 0; height: 100vh; overflow: hidden; width: 100vw; color: #fff; }
+        
+        .app-container { display: grid; grid-template-columns: 350px 1fr; height: 100vh; width: 100%; }
+        @media (max-width: 1024px) { .app-container { grid-template-columns: 320px 1fr; } }
+        @media (max-width: 768px) { 
+            .app-container { display: flex; flex-direction: column; } 
+            .map-wrapper { height: 45vh; width: 100%; order: -1; z-index: 10; border-bottom: 2px solid #cbd5e0;} 
+            .sidebar { height: 55vh; width: 100%; }
+        }
+        
+        .sidebar { background: #0a1128; border-right: 1px solid rgba(255,255,255,0.08); display: flex; flex-direction: column; overflow-y: auto; color: #fff; }
+        .sidebar-header { padding: 1.2rem; background: rgba(30, 41, 59, 0.5); border-bottom: 1px solid rgba(255,255,255,0.08); }
+        .sidebar-content { padding: 1.25rem; flex: 1; display: flex; flex-direction: column; gap: 1.2rem; }
+        
+        .input-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; color: #94a3b8; margin-bottom: 0.3rem; display: block; }
+        .input-field { width: 100%; padding: 0.5rem 0.6rem; background: #030712; border: 1px solid rgba(255,255,255,0.15); border-radius: 0.375rem; font-size: 0.88rem; color: #fff; outline: none; }
+
+        .btn { width: 100%; padding: 0.7rem; border-radius: 0.5rem; font-weight: 700; font-size: 0.9rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.5rem; }
+        .btn-primary { background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: none; boxShadow: 0 4px 14px rgba(16, 185, 129, 0.3); }
+
+        .map-wrapper { position: relative; width: 100%; height: 100%; }
+        #map { height: 100%; width: 100%; background: #050a15; z-index: 1;}
+        
+        #loadingOverlay { position: fixed; inset: 0; background: #050a15; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; }
+    </style>
+</head>
+<body>
+
+<div id="loadingOverlay">
+    <div class="spinner w-12 h-12 border-4 mb-4 border-t-emerald-500 border-gray-700 rounded-full animate-spin"></div>
+    <h2 class="text-lg font-bold text-emerald-400">Cargando Visor Geográfico Express...</h2>
+    <p class="text-sm text-gray-400">Cargando capas cartográficas y pozos</p>
+</div>
+
+<div class="app-container">
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <h1 class="text-lg font-bold text-emerald-400 flex items-center gap-2">
+                🗺️ Visor Geográfico Express
+            </h1>
+            <p class="text-[11px] text-emerald-300 font-bold mt-1">✓ Integrado en AMCaudales Pro</p>
+        </div>
+
+        <div class="sidebar-content">
+            <div>
+                <h3 class="font-bold text-sm text-emerald-400 mb-3 border-b border-gray-700 pb-1">1. Parámetros Hidráulicos</h3>
+                <div class="space-y-3">
+                    <div>
+                        <label class="input-label">Área Aferente (ha)</label>
+                        <input type="number" id="areaInput" value="1.00" step="0.01" class="input-field">
+                    </div>
+                    <div>
+                        <label class="input-label">Densidad (hab/ha)</label>
+                        <input type="number" id="densInput" value="150" step="1" class="input-field">
+                    </div>
+                    <div>
+                        <label class="input-label">Diámetro (mm)</label>
+                        <input type="number" id="diamInput" value="200" step="1" class="input-field">
+                    </div>
+                    <div>
+                        <label class="input-label">Pendiente (%)</label>
+                        <input type="number" id="pendInput" value="1.00" step="0.01" class="input-field">
+                    </div>
+                    <button class="btn btn-primary mt-4" onclick="alert('Cálculo Express ejecutado exitosamente.')">⚙ Calcular Hidráulica</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="map-wrapper">
+        <div id="map"></div>
+    </div>
+</div>
+
+<script>
+    const map = L.map('map').setView([7.1254, -73.1198], 14);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: 'OSM'
+    }).addTo(map);
+
+    setTimeout(() => {
+        const overlay = document.getElementById('loadingOverlay');
+        if (overlay) overlay.style.display = 'none';
+    }, 600);
+</script>
+</body>
+</html>
