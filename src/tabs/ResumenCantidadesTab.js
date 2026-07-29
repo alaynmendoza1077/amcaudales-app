@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import PTOBASE_DATA from '../ptoBaseData';
 import { calcPozosCompleto, calcCantSumidero } from '../calcHelpers';
+import { exportMemoriaCantidades } from '../exportCantidades';
 
 export function getItemAnalyticalBreakdown(item, data = {}) {
   const { R = [], T = [], sumLat = [], sumTrans = [], P = {}, urbanismoData = [] } = data;
@@ -515,7 +516,14 @@ export default function ResumenCantidadesTab(props) {
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: '10px' }}>
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+          <button
+            onClick={() => exportMemoriaCantidades(P, R, T, sumLat, sumTrans, pbItems, urbanismoData)}
+            style={{ padding: '8px 16px', backgroundColor: '#10b981', color: '#050a15', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '6px', boxShadow: '0 4px 6px -1px rgba(16, 185, 129, 0.3)' }}
+          >
+            📊 Exportar Memoria de Cantidades (Excel)
+          </button>
+
           <button
             onClick={() => toggleExpandAll(!allExpanded)}
             style={{ padding: '8px 16px', backgroundColor: '#1e293b', color: '#38bdf8', border: '1px solid #334155', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}
@@ -607,9 +615,9 @@ export default function ResumenCantidadesTab(props) {
         </div>
       </div>
 
-      {/* TABLA PRINCIPAL DESGLEGABLE (SIN PRECIOS) */}
-      <div style={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '12px', overflow: 'hidden' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
+      {/* TABLA PRINCIPAL DESGLEGABLE (SIN PRECIOS) CON SCROLL HORIZONTAL */}
+      <div style={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '12px', overflowX: 'auto', maxWidth: '100%' }}>
+        <table style={{ width: '100%', minWidth: '950px', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
           <thead>
             <tr style={{ backgroundColor: '#1e293b', color: '#94a3b8', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               <th style={{ padding: '14px', width: '40px', textAlign: 'center' }}></th>

@@ -728,3 +728,195 @@ export async function exportCantidades(P, R, T, sumLat, sumTrans, pbItems, estSe
   const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   saveFileWithDialog(blob, fn);
 }
+
+/* >>> EXPORTACIÓN MEMORIA DE CANTIDADES ANALIZADAS POR ÍTEM (FORMULAS Y FORMATO CORPORATIVO) <<< */
+export async function exportMemoriaCantidades(P, R, T, sumLat, sumTrans, pbItems, urbanismoData) {
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('MEMORIA_CANTIDADES', { views: [{ showGridLines: true }] });
+
+  // Styles
+  const fontTitle = { name: 'Arial', size: 12, bold: true, color: { argb: 'FFFFFFFF' } };
+  const fontSubTitle = { name: 'Arial', size: 10, bold: true, color: { argb: 'FF1E293B' } };
+  const fontItemHeader = { name: 'Arial', size: 11, bold: true, color: { argb: 'FFFFFFFF' } };
+  const fontSecHeader = { name: 'Arial', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+  const fontTblHeader = { name: 'Arial', size: 9, bold: true, color: { argb: 'FFFFFFFF' } };
+  const fontData = { name: 'Arial', size: 9 };
+  const fontBold = { name: 'Arial', size: 9, bold: true };
+  const fontFormula = { name: 'Consolas', size: 9, color: { argb: 'FFD97706' } };
+
+  const bgHeader = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF003B73' } };
+  const bgItem = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A5C' } };
+  const bgSection = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F172A' } };
+  const bgSubtotal = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
+  const bgTotalItem = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD1F2EB' } };
+
+  const borderThin = {
+    top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+    left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+    bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+    right: { style: 'thin', color: { argb: 'FFCBD5E1' } }
+  };
+
+  ws.columns = [
+    { key: 'colA', width: 6 },
+    { key: 'colB', width: 38 },
+    { key: 'colC', width: 10 },
+    { key: 'colD', width: 14 },
+    { key: 'colE', width: 14 },
+    { key: 'colF', width: 14 },
+    { key: 'colG', width: 28 },
+    { key: 'colH', width: 16 },
+    { key: 'colI', width: 10 },
+    { key: 'colJ', width: 35 }
+  ];
+
+  // Title block
+  ws.mergeCells('A1:J1');
+  let r1 = ws.getCell('A1');
+  r1.value = 'MEMORIA ANALÍTICA DE CANTIDADES DE OBRA (CONEXIÓN Y SINCRO PRESUPUESTO OFICIAL)';
+  r1.font = fontTitle; r1.fill = bgHeader; r1.alignment = { horizontal: 'center', vertical: 'middle' };
+
+  ws.mergeCells('A2:J2');
+  let r2 = ws.getCell('A2');
+  r2.value = `PROYECTO: ${(P.proyecto || 'SISTEMA DE ALCANTARILLADO').toUpperCase()} | MUNICIPIO: ${(P.municipio || 'SANTANDER').toUpperCase()}`;
+  r2.font = fontSubTitle; r2.alignment = { horizontal: 'left', vertical: 'middle' };
+
+  ws.mergeCells('A3:J3');
+  let r3 = ws.getCell('A3');
+  r3.value = `DISEÑADOR: ${(P.disenador || 'AMCaudales').toUpperCase()} | FECHA: ${P.fecha || new Date().toLocaleDateString('es-CO')}`;
+  r3.font = fontSubTitle; r3.alignment = { horizontal: 'left', vertical: 'middle' };
+
+  ws.addRow([]); // Blank row 4
+
+  let activeItems = (pbItems || []).filter(it => it.lv === 3 && it.q > 0);
+  if (activeItems.length === 0) activeItems = (pbItems || []).filter(it => it.q > 0);
+
+  // Import dynamically breakdown calculation
+  const { getItemAnalyticalBreakdown } = require('./tabs/ResumenCantidadesTab');
+
+  let curRowIndex = 5;
+
+  activeItems.forEach(it => {
+    const bk = getItemAnalyticalBreakdown(it, { R, T, sumLat, sumTrans, P, urbanismoData });
+
+    // Item Header Bar
+    ws.mergeCells(`A${curRowIndex}:J${curRowIndex}`);
+    let itemCell = ws.getCell(`A${curRowIndex}`);
+    itemCell.value = `ÍTEM ${it.c} — ${it.d.toUpperCase()} (CANTIDAD EN PRESUPUESTO: ${it.q} ${it.u || 'UND'})`;
+    itemCell.font = fontItemHeader; itemCell.fill = bgItem;
+    itemCell.alignment = { horizontal: 'left', vertical: 'middle' };
+    curRowIndex++;
+
+    // Formula Row
+    ws.mergeCells(`A${curRowIndex}:J${curRowIndex}`);
+    let formCell = ws.getCell(`A${curRowIndex}`);
+    formCell.value = `📌 ${bk.originTitle} | Fórmula: ${bk.formula}`;
+    formCell.font = fontFormula;
+    formCell.alignment = { horizontal: 'left', vertical: 'middle' };
+    curRowIndex++;
+
+    const sectionSubtotalCells = [];
+
+    bk.sections.forEach((sec) => {
+      // Section title
+      ws.mergeCells(`A${curRowIndex}:J${curRowIndex}`);
+      let secCell = ws.getCell(`A${curRowIndex}`);
+      secCell.value = sec.title;
+      secCell.font = fontSecHeader; secCell.fill = bgSection;
+      secCell.alignment = { horizontal: 'left', vertical: 'middle' };
+      curRowIndex++;
+
+      // Table headers
+      let tblH = ws.addRow(['#', 'Identificador / Elemento', 'Cant. (N°)', 'Long. L (m)', 'Ancho W (m)', 'Prof. H (m)', 'Expresión / Dimensión', 'Subtotal Cantidad', 'Unidad', 'Notas']);
+      tblH.eachCell(c => { c.font = fontTblHeader; c.fill = bgHeader; c.alignment = { horizontal: 'center', vertical: 'middle' }; c.border = borderThin; });
+      curRowIndex++;
+
+      const startDataRow = curRowIndex;
+
+      sec.rows.forEach((r, rIdx) => {
+        let nVal = r.n || 1;
+        let lVal = typeof r.l === 'string' ? parseFloat(r.l) || null : r.l;
+        let wVal = typeof r.w === 'string' ? parseFloat(r.w) || null : r.w;
+        let hVal = typeof r.h === 'string' ? parseFloat(r.h) || null : r.h;
+        let subVal = typeof r.sub === 'number' ? r.sub : parseFloat(r.sub) || 0;
+
+        let subFormula = null;
+        if (lVal && wVal && hVal) {
+          subFormula = `C${curRowIndex}*D${curRowIndex}*E${curRowIndex}*F${curRowIndex}`;
+        } else if (lVal && wVal) {
+          subFormula = `C${curRowIndex}*D${curRowIndex}*E${curRowIndex}`;
+        } else if (lVal) {
+          subFormula = `C${curRowIndex}*D${curRowIndex}`;
+        }
+
+        let dRow = ws.addRow([
+          rIdx + 1,
+          r.elem,
+          nVal,
+          lVal || "-",
+          wVal || "-",
+          hVal || "-",
+          r.expr || "-",
+          subFormula ? { formula: subFormula, result: subVal } : subVal,
+          r.u || sec.u,
+          r.nota || ""
+        ]);
+
+        dRow.eachCell((c, colNum) => {
+          c.font = fontData; c.border = borderThin;
+          if (colNum === 1 || colNum === 3 || colNum === 9) c.alignment = { horizontal: 'center' };
+          else if (colNum >= 4 && colNum <= 6) { c.alignment = { horizontal: 'right' }; if (typeof c.value === 'number') c.numFmt = '#,##0.00'; }
+          else if (colNum === 8) { c.alignment = { horizontal: 'right' }; c.font = fontBold; c.numFmt = '#,##0.00'; }
+          else c.alignment = { horizontal: 'left' };
+        });
+
+        curRowIndex++;
+      });
+
+      const endDataRow = curRowIndex - 1;
+
+      // Section Subtotal Row with SUM Formula
+      let subRow = ws.addRow([
+        "",
+        `SUBTOTAL ${sec.title.toUpperCase()}`,
+        "", "", "", "", "",
+        { formula: `SUM(H${startDataRow}:H${endDataRow})`, result: sec.subtotal },
+        sec.u,
+        "Subtotal parcial amarrado con fórmula Excel SUM"
+      ]);
+
+      subRow.eachCell((c, colNum) => {
+        c.font = fontBold; c.fill = bgSubtotal; c.border = borderThin;
+        if (colNum === 8) { c.alignment = { horizontal: 'right' }; c.numFmt = '#,##0.00'; }
+      });
+
+      sectionSubtotalCells.push(`H${curRowIndex}`);
+      curRowIndex++;
+    });
+
+    // Item Total Row
+    let totalFormula = sectionSubtotalCells.length > 0 ? `SUM(${sectionSubtotalCells.join(',')})` : `${it.q}`;
+    let totRow = ws.addRow([
+      "",
+      `TOTAL CANTIDAD ANALIZADA ÍTEM ${it.c}`,
+      "", "", "", "", "",
+      { formula: totalFormula, result: it.q },
+      it.u || "UND",
+      "CANTIDAD OFICIAL INYECTADA A PRESUPUESTO"
+    ]);
+
+    totRow.eachCell((c, colNum) => {
+      c.font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FF065F46' } };
+      c.fill = bgTotalItem; c.border = borderThin;
+      if (colNum === 8) { c.alignment = { horizontal: 'right' }; c.numFmt = '#,##0.00'; }
+    });
+
+    curRowIndex += 2; // Blank spacing
+  });
+
+  const fnMemoria = `Memoria_Cantidades_Analizadas_${(P.proyecto || 'Proyecto').replace(/\s+/g, '_')}.xlsx`;
+  const buffer = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  saveFileWithDialog(blob, fnMemoria);
+}
+

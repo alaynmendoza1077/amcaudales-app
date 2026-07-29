@@ -1,5 +1,5 @@
 export const saveFileWithDialog = async (blob, defaultFileName) => {
-  if (window.showSaveFilePicker) {
+  if (typeof window !== 'undefined' && window.showSaveFilePicker) {
     try {
       const extension = defaultFileName.split('.').pop().toLowerCase();
       let mimeType = 'text/plain';
@@ -42,18 +42,26 @@ export const saveFileWithDialog = async (blob, defaultFileName) => {
       await writable.close();
       return true;
     } catch (err) {
-      if (err.name !== 'AbortError') {
-        console.error("Error al guardar archivo con showSaveFilePicker:", err);
-      }
-      return false;
+      if (err.name === 'AbortError') return false;
+      console.warn("showSaveFilePicker falló o fue bloqueado, usando descarga directa URL Blob:", err);
     }
-  } else {
+  }
+
+  // Descarga directa por enlace Blob para evitar bloqueos del navegador
+  try {
     const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
+    const url = URL.createObjectURL(blob);
+    link.href = url;
     link.download = defaultFileName;
     document.body.appendChild(link);
     link.click();
-    document.body.removeChild(link);
+    setTimeout(() => {
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }, 500);
     return true;
+  } catch (e) {
+    console.error("Error en descarga directa Blob:", e);
+    return false;
   }
 };

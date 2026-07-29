@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { exportPerfilesLISP, exportPerfilesLISPSeleccion, exportPlantaLISP, exportPlantaLISPSeleccion } from '../exportLISP';
 
 export default function ReportesTab({ onPrintCustom, R, P, T, selMap, inpData }) {
   const [fase1, setFase1] = useState({
@@ -65,24 +66,16 @@ export default function ReportesTab({ onPrintCustom, R, P, T, selMap, inpData })
           <p style={{ color: '#9ca3af', marginBottom: 30 }}>Selecciona absolutamente todas las pestañas y componentes que deseas incluir en tu reporte impreso o exportación a PDF.</p>
         </div>
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-          <button onClick={() => {
-            import('../exportLISP').then(m => m.exportPerfilesLISP(R, P, T || []));
-          }} style={{padding:"8px 16px",fontSize:13, backgroundColor:"#4b5563", color:"#fff", border:"none", borderRadius:4, fontWeight: "bold", cursor: "pointer"}} title="Exportar perfiles de TODOS los tramos calculados">
+          <button onClick={() => exportPerfilesLISP(R, P, T || [])} style={{padding:"8px 16px",fontSize:13, backgroundColor:"#4b5563", color:"#fff", border:"none", borderRadius:4, fontWeight: "bold", cursor: "pointer"}} title="Exportar perfiles de TODOS los tramos calculados">
             ⚡ Perfiles LISP (Todos)
           </button>
-          <button onClick={() => {
-            import('../exportLISP').then(m => m.exportPerfilesLISPSeleccion(R, P, T || [], selMap));
-          }} style={{padding:"8px 16px",fontSize:13, backgroundColor:"#d97706", color:"#fff", border:"none", borderRadius:4, fontWeight: "bold", cursor: "pointer"}} title="Exportar perfiles solo de los tramos seleccionados en el visor">
+          <button onClick={() => exportPerfilesLISPSeleccion(R, P, T || [], selMap)} style={{padding:"8px 16px",fontSize:13, backgroundColor:"#d97706", color:"#fff", border:"none", borderRadius:4, fontWeight: "bold", cursor: "pointer"}} title="Exportar perfiles solo de los tramos seleccionados en el visor">
             🎯 Perfiles LISP (Seleccionados)
           </button>
-          <button onClick={() => {
-            import('../exportLISP').then(m => m.exportPlantaLISP(R, P, T || [], inpData));
-          }} style={{padding:"8px 16px",fontSize:13, backgroundColor:"#0d9488", color:"#fff", border:"none", borderRadius:4, fontWeight: "bold", cursor: "pointer"}} title="Exportar vista en planta de TODOS los tramos en coordenadas reales">
+          <button onClick={() => exportPlantaLISP(R, P, T || [], inpData)} style={{padding:"8px 16px",fontSize:13, backgroundColor:"#0d9488", color:"#fff", border:"none", borderRadius:4, fontWeight: "bold", cursor: "pointer"}} title="Exportar vista en planta de TODOS los tramos en coordenadas reales">
             🗺️ Planta LISP (Todos)
           </button>
-          <button onClick={() => {
-            import('../exportLISP').then(m => m.exportPlantaLISPSeleccion(R, P, T || [], selMap, inpData));
-          }} style={{padding:"8px 16px",fontSize:13, backgroundColor:"#0891b2", color:"#fff", border:"none", borderRadius:4, fontWeight: "bold", cursor: "pointer"}} title="Exportar vista en planta solo de los tramos seleccionados en el visor">
+          <button onClick={() => exportPlantaLISPSeleccion(R, P, T || [], selMap, inpData)} style={{padding:"8px 16px",fontSize:13, backgroundColor:"#0891b2", color:"#fff", border:"none", borderRadius:4, fontWeight: "bold", cursor: "pointer"}} title="Exportar vista en planta solo de los tramos seleccionados en el visor">
             📍 Planta LISP (Selección)
           </button>
         </div>

@@ -1,5 +1,6 @@
 import { generarMarcoLisp } from './exportMarcoLISP';
 import { exportMarcoPlantaLISP } from './exportMarcoPlantaLISP';
+import { saveFileWithDialog } from './utils/fileSaver';
 
 export function exportPerfilesLISP(R, P, T) {
   const ESCX = 1000.0 / parseFloat(P.escalaX || 250);
@@ -470,7 +471,7 @@ export function exportPerfilesLISP(R, P, T) {
 
   const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
   const fileName = `Perfiles_${(P.proyecto || 'proyecto').replace(/[^a-zA-Z0-9_\-]/g, '_')}.lsp`;
-  import('./utils/fileSaver').then(m => m.saveFileWithDialog(blob, fileName));
+  saveFileWithDialog(blob, fileName);
 }
 
 export function exportPerfilesLISPSeleccion(R, P, T, selMap) {
@@ -1657,7 +1658,7 @@ export function exportPlantaLISP(R, P, T, inpData) {
 
   const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
   const fileName = `Planta_${(P.proyecto || 'proyecto').replace(/[^a-zA-Z0-9_\-]/g, '_')}.lsp`;
-  import('./utils/fileSaver').then(m => m.saveFileWithDialog(blob, fileName));
+  saveFileWithDialog(blob, fileName);
 }
 
 export function exportPlantaLISPSeleccion(R, P, T, selMap, inpData) {
