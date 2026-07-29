@@ -27,7 +27,13 @@ function AppContent() {
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [blockedFeatureName, setBlockedFeatureName] = useState('');
 
-  // Si el usuario no ha iniciado sesión ni ha entrado como invitado, muestra el portal obligatoriamente
+  React.useEffect(() => {
+    if (!user && !isGuest) {
+      loginAsGuest();
+      setIsGuest(true);
+    }
+  }, [user, isGuest, loginAsGuest]);
+
   if (!user && !isGuest) {
     return (
       <StartLoginPortal

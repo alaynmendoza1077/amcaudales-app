@@ -983,7 +983,7 @@ const handleBack = () => {
       {tab==="sum"? <SumTab P={P} sP={setP} sumLat={sumLat} setSumLat={setSumLat} sumTrans={sumTrans} setSumTrans={setSumTrans} subS={subS} setSubS={setSubS} anchoVia={P.anchoVia||6}/>:null}
       {tab==="idf"? <IDFTab P={P} sP={setP} idfEst={idfEst} setIdfEst={setIdfEst}/>:null}
       {tab==="pre"? <PreTab R={R} P={P} T={T} sumLat={sumLat} sumTrans={sumTrans} pbItems={pbItems} setPbItems={setPbItems} urbanismoData={urbanismoData}/>:null}
-      {tab==="resumen"? <ResumenCantidadesTab pbItems={pbItems} R={R} P={P} sumLat={sumLat} sumTrans={sumTrans} />:null}
+      {tab==="resumen"? <ResumenCantidadesTab pbItems={pbItems} R={R} P={P} T={T} sumLat={sumLat} sumTrans={sumTrans} urbanismoData={urbanismoData} />:null}
       {tab==="preGen"? <PreGenTab R={R} P={P} T={T} sumLat={sumLat} sumTrans={sumTrans} pbItems={pbItems} setPbItems={setPbItems} urbanismoData={urbanismoData}/>:null}
       {tab==="preBanco"? <PreBancoTab R={R} P={P} T={T} sumLat={sumLat} sumTrans={sumTrans} pbItems={pbItems} pbBancoItems={pbBancoItems} setPbBancoItems={setPbBancoItems}/>:null}
       {tab==="cro"? <CronoTab P={P} sP={setP} R={R} pbItems={pbItems}/>:null}
