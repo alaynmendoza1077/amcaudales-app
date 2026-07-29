@@ -1,4 +1,5 @@
 import React, {useState, useEffect, useCallback, useRef} from 'react';
+import { useAuth } from '../context/AuthContext';
 import * as XLSX from 'xlsx';
 import {DP} from '../constants';
 import runCalc from '../engine';
@@ -46,6 +47,7 @@ var TABS=[
 ];
 
 export default function ReposicionModule({ onBack, initialData }){
+  const { user, saveProjectToCloud } = useAuth();
   const [isThinking, setIsThinking] = useState(false);
   var sTab=useState("map");var tab=sTab[0],setTab=sTab[1];
   var sP=useState(DP);var P=sP[0],setP=sP[1];
@@ -399,7 +401,7 @@ export default function ReposicionModule({ onBack, initialData }){
   },[T, P, alivData, estSepData]);
 
   var handleSaveAMC=function(){
-    var suggestedName = (P.proyecto || P.barrio || "proyecto").replace(/\s+/g,"_");
+    var suggestedName = (P.proyecto || P.barrio || "CONSTRUCCION_SISTEMA_DE_ALCANTARILLADO").replace(/\s+/g,"_");
     var fileName = window.prompt("Introduce el nombre con el que deseas guardar el archivo:", suggestedName);
     if(!fileName) return;
     if(!fileName.toLowerCase().endsWith(".amc")) fileName += ".amc";
@@ -410,6 +412,17 @@ export default function ReposicionModule({ onBack, initialData }){
       var freshPbItems = recalcPbItems(data);
       data.pbItems = freshPbItems; // Reemplazar con el recalculado
       
+      const projTitle = fileName.replace(/\.amc$/i, '');
+      if (saveProjectToCloud) {
+        saveProjectToCloud(data, projTitle)
+          .then(() => {
+            console.log('Proyecto guardado en la nube exitosamente');
+          })
+          .catch((err) => {
+            console.warn('Alerta guardado nube:', err);
+          });
+      }
+
       var blob=new Blob([JSON.stringify(data)],{type:"application/json"});
       import('../utils/fileSaver').then(m => m.saveFileWithDialog(blob, fileName));
     });
@@ -720,9 +733,13 @@ const handleBack = () => {
               <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
               <span style={{marginLeft: 6}}>Abrir .AMC</span>
             </button>
-            <button className="hdr-btn" onClick={handleSaveAMC} title="Guardar Proyecto (.AMC)" style={{ height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '135px' }}>
+            <button className="hdr-btn" onClick={handleSaveAMC} title="Guardar Proyecto (.AMC) y en la Nube" style={{ height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '135px' }}>
               <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg>
               <span style={{marginLeft: 6}}>Guardar .AMC</span>
+            </button>
+            <button className="hdr-btn" onClick={handleSaveAMC} title="Guardar directamente en tu cuenta de la Nube" style={{ height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '135px', background: 'rgba(16, 185, 129, 0.15)', border: '1px solid #10b981', color: '#10b981' }}>
+              <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M3 15a4 4 0 004 4h9a5 5 0 001-9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+              <span style={{marginLeft: 6}}>Guardar Nube</span>
             </button>
             <button className="hdr-btn" onClick={() => setTab('consolidador')} title="Consolidar Proyectos" style={{ height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '135px', background: 'rgba(59, 130, 246, 0.1)', border: '1px solid #3b82f6', color: '#3b82f6' }}>
               <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16m-7 6h7"/></svg>
