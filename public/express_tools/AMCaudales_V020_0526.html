@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Calculadora Hidráulica Pro - Visor Express</title>
+    <title>Calculadora Hidráulica Pro - Visor Geográfico</title>
 
     <script src="https://cdn.tailwindcss.com"></script>
 
@@ -17,15 +17,15 @@
     <script src="https://unpkg.com/leaflet-polylinedecorator@1.6.0/dist/leaflet.polylineDecorator.js"></script>
     <script src="https://unpkg.com/wellknown@1.5.0/wellknown.js"></script>
 
-    <!-- Apuntar a los datos en /data/ de la app -->
+    <!-- Apuntar a los archivos de datos en /data/ -->
     <script src="../data/datos_pozos.js"></script>
     <script src="../data/datos_redes.js"></script>
     <script src="../data/datos_estaciones.js"></script>
     <script src="../data/datos_densidades.js"></script>
 
     <style>
-        :root { --primary-calc: #16a34a; --bg-calc: #050a15; }
-        body { font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: var(--bg-calc); margin: 0; padding: 0; height: 100vh; overflow: hidden; width: 100vw; color: #fff; }
+        :root { --primary-calc: #16a34a; --bg-calc: #f8fafc; }
+        body { font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: var(--bg-calc); margin: 0; padding: 0; height: 100vh; overflow: hidden; width: 100vw; }
         
         .app-container { display: grid; grid-template-columns: 350px 1fr; height: 100vh; width: 100%; }
         @media (max-width: 1024px) { .app-container { grid-template-columns: 320px 1fr; } }
@@ -33,82 +33,1128 @@
             .app-container { display: flex; flex-direction: column; } 
             .map-wrapper { height: 45vh; width: 100%; order: -1; z-index: 10; border-bottom: 2px solid #cbd5e0;} 
             .sidebar { height: 55vh; width: 100%; }
+            .trace-panel { bottom: 10px; right: 10px; width: 200px; padding: 10px; }
         }
         
-        .sidebar { background: #0a1128; border-right: 1px solid rgba(255,255,255,0.08); display: flex; flex-direction: column; overflow-y: auto; color: #fff; }
-        .sidebar-header { padding: 1.2rem; background: rgba(30, 41, 59, 0.5); border-bottom: 1px solid rgba(255,255,255,0.08); }
-        .sidebar-content { padding: 1.25rem; flex: 1; display: flex; flex-direction: column; gap: 1.2rem; }
+        .sidebar { background: white; border-right: 1px solid #e2e8f0; display: flex; flex-direction: column; overflow-y: auto; box-shadow: 4px 0 15px rgba(0,0,0,0.05); z-index: 20; }
+        .sidebar-header { padding: 1rem 1.25rem; background: linear-gradient(to right, #f0fdf4, #ffffff); border-bottom: 1px solid #e2e8f0; }
+        .sidebar-content { padding: 1.25rem; flex: 1; display: flex; flex-direction: column; gap: 1rem; }
         
-        .input-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; color: #94a3b8; margin-bottom: 0.3rem; display: block; }
-        .input-field { width: 100%; padding: 0.5rem 0.6rem; background: #030712; border: 1px solid rgba(255,255,255,0.15); border-radius: 0.375rem; font-size: 0.88rem; color: #fff; outline: none; }
+        .input-label { font-size: 0.70rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; color: #64748b; margin-bottom: 0.25rem; display: block; }
+        .input-field { width: 100%; padding: 0.4rem 0.5rem; border: 1px solid #cbd5e0; border-radius: 0.375rem; font-size: 0.85rem; transition: border-color 0.2s; }
+        .input-field:focus { border-color: var(--primary-calc); outline: none; box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.1); }
+        .input-disabled { background-color: #f1f5f9; color: #94a3b8; cursor: not-allowed; border-color: #e2e8f0; }
 
-        .btn { width: 100%; padding: 0.7rem; border-radius: 0.5rem; font-weight: 700; font-size: 0.9rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.5rem; }
-        .btn-primary { background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: none; boxShadow: 0 4px 14px rgba(16, 185, 129, 0.3); }
+        .btn { width: 100%; padding: 0.6rem; border-radius: 0.375rem; font-weight: 600; font-size: 0.9rem; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 0.5rem; }
+        .btn-primary { background-color: var(--primary-calc); color: white; }
+        .btn-primary:hover { background-color: #15803d; }
+        .btn-outline { background-color: white; border: 1px solid #cbd5e0; color: #475569; }
 
         .map-wrapper { position: relative; width: 100%; height: 100%; }
-        #map { height: 100%; width: 100%; background: #050a15; z-index: 1;}
+        #map { height: 100%; width: 100%; background: #ddd; z-index: 1;}
         
-        #loadingOverlay { position: fixed; inset: 0; background: #050a15; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; }
+        .trace-panel { position: absolute; bottom: 20px; right: 20px; z-index: 1000; background: white; padding: 16px; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); width: 240px; border-left: 4px solid #3b82f6; }
+        
+        .attr-table { width: 100%; font-size: 11px; border-collapse: collapse; }
+        .attr-table tr:nth-child(even) { background-color: #f8fafc; }
+        .attr-table td { padding: 4px 8px; border-bottom: 1px solid #e2e8f0; word-break: break-word; }
+        .attr-table td:first-child { font-weight: 600; color: #475569; width: 35%; }
+
+        .data-table { width: 100%; font-size: 0.8rem; border-collapse: collapse; }
+        .data-table td { padding: 4px 0; border-bottom: 1px solid #f1f5f9; }
+        .data-table td:first-child { color: #64748b; font-weight: 500; }
+        .data-table td:last-child { font-weight: 700; text-align: right; color: #334155; }
+        
+        .section-header { font-size: 0.85rem; font-weight: 700; color: #1e293b; border-bottom: 2px solid #e2e8f0; padding-bottom: 0.25rem; margin-bottom: 0.75rem; margin-top: 0.5rem; }
+        .spinner { border: 3px solid #f3f3f3; border-top: 3px solid #3b82f6; border-radius: 50%; width: 16px; height: 16px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        .area-label {
+            background: rgba(255, 255, 255, 0.95);
+            border: 2px solid #2563eb;
+            color: #1d4ed8;
+            font-weight: bold;
+            font-size: 11px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            white-space: nowrap;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+        }
+        
+        .tc-radio { margin-right: 4px; accent-color: #f97316; }
+        
+        /* Tema Oscuro Premium AMCaudales Pro */
+        body { background: linear-gradient(135deg, #050a15 0%, #0a1128 100%) !important; color: #ffffff !important; }
+        .sidebar, .trace-panel, #loadingOverlay { background-color: #0a1128 !important; color: #f8fafc !important; }
+        .sidebar-header { background: rgba(30, 41, 59, 0.4) !important; border-bottom: 1px solid rgba(255,255,255,0.05) !important; }
+        .bg-white, .bg-yellow-50, .bg-gray-50, .bg-orange-50, .bg-indigo-50, .bg-blue-50, .bg-green-50, .bg-blue-100 { background-color: rgba(30, 41, 59, 0.4) !important; border-color: rgba(255,255,255,0.1) !important; }
+        .text-gray-800, .text-gray-700, .text-gray-600, .text-yellow-800, .text-indigo-800, .text-blue-800, .text-green-800, .text-purple-800 { color: #f8fafc !important; }
+        .text-gray-500, .text-gray-400, .text-blue-600 { color: #94a3b8 !important; }
+        .input-field { background-color: #050a15 !important; border-color: rgba(255,255,255,0.1) !important; color: #fff !important; }
+        .data-table td { border-bottom: 1px solid rgba(255,255,255,0.05) !important; }
+        .data-table td:first-child { color: #94a3b8 !important; }
+        .data-table td:last-child { color: #f8fafc !important; }
+        .attr-table tr:nth-child(even) { background-color: rgba(255,255,255,0.02) !important; }
+        .attr-table td { border-bottom: 1px solid rgba(255,255,255,0.05) !important; }
+        .attr-table td:first-child { color: #94a3b8 !important; }
+        .section-header { color: #60a5fa !important; border-bottom: 2px solid rgba(255,255,255,0.1) !important; }
+        .btn-outline { background: transparent !important; border-color: rgba(255,255,255,0.2) !important; color: #fff !important; }
+
+        #loadingOverlay { position: fixed; top:0; left:0; width:100%; height:100%; background:#0a1128; z-index: 9999; display:flex; flex-direction:column; justify-content:center; align-items:center; }
     </style>
 </head>
 <body>
 
 <div id="loadingOverlay">
-    <div class="spinner w-12 h-12 border-4 mb-4 border-t-emerald-500 border-gray-700 rounded-full animate-spin"></div>
-    <h2 class="text-lg font-bold text-emerald-400">Cargando Visor Geográfico Express...</h2>
-    <p class="text-sm text-gray-400">Cargando capas cartográficas y pozos</p>
+    <div class="spinner w-12 h-12 border-4 mb-4 border-t-blue-500 border-gray-700 rounded-full animate-spin"></div>
+    <h2 class="text-lg font-bold text-blue-400">Cargando Red Hidráulica...</h2>
+    <p class="text-sm text-gray-400">Preparando mapas y datos de pozos</p>
 </div>
 
 <div class="app-container">
+
     <div class="sidebar">
         <div class="sidebar-header">
-            <h1 class="text-lg font-bold text-emerald-400 flex items-center gap-2">
-                🗺️ Visor Geográfico Express
+            <h1 class="text-lg font-bold text-blue-400 flex items-center gap-2">
+                <svg class="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
+                Hidráulica Pro Visor
             </h1>
-            <p class="text-[11px] text-emerald-300 font-bold mt-1">✓ Integrado en AMCaudales Pro</p>
+            <p class="text-[10px] text-green-400 font-bold mt-1">✓ Motor Hidráulico VHome_002 Activo</p>
         </div>
 
         <div class="sidebar-content">
-            <div>
-                <h3 class="font-bold text-sm text-emerald-400 mb-3 border-b border-gray-700 pb-1">1. Parámetros Hidráulicos</h3>
-                <div class="space-y-3">
-                    <div>
-                        <label class="input-label">Área Aferente (ha)</label>
-                        <input type="number" id="areaInput" value="1.00" step="0.01" class="input-field">
-                    </div>
-                    <div>
-                        <label class="input-label">Densidad (hab/ha)</label>
-                        <input type="number" id="densInput" value="150" step="1" class="input-field">
-                    </div>
-                    <div>
-                        <label class="input-label">Diámetro (mm)</label>
-                        <input type="number" id="diamInput" value="200" step="1" class="input-field">
-                    </div>
-                    <div>
-                        <label class="input-label">Pendiente (%)</label>
-                        <input type="number" id="pendInput" value="1.00" step="0.01" class="input-field">
-                    </div>
-                    <button class="btn btn-primary mt-4" onclick="alert('Cálculo Express ejecutado exitosamente.')">⚙ Calcular Hidráulica</button>
+            
+            <div id="selectionPanel" class="hidden bg-yellow-50 p-4 rounded-lg border border-yellow-200 flex flex-col max-h-[250px]">
+                <h3 class="text-xs font-bold text-yellow-800 uppercase mb-2 flex justify-between items-center">
+                    <span>Atributos</span>
+                    <span id="elemTypeBadge" class="bg-yellow-200 text-yellow-800 px-2 py-0.5 rounded text-[10px]"></span>
+                </h3>
+                <div class="overflow-y-auto flex-1 border border-yellow-200 rounded bg-white">
+                    <table class="attr-table">
+                        <tbody id="attrTableBody"></tbody>
+                    </table>
                 </div>
             </div>
+
+            <div>
+                <h3 class="section-header">1. Hidrología & Caudales</h3>
+                
+                <div class="grid grid-cols-3 gap-2 mb-2">
+                    <div>
+                        <label class="input-label" title="Dibuja un polígono o ingresa manual">Área (Ha)</label>
+                        <input type="number" id="areaInput" step="0.01" class="input-field border-green-400 bg-green-50 font-bold px-1" placeholder="0.00" oninput="actualizarIntensidad()">
+                    </div>
+                    <div>
+                         <label class="input-label text-blue-400" title="Radio de Captura Aferente">Radio (m)</label>
+                         <input type="number" id="radioArea" step="1" value="40" class="input-field border-blue-400 font-bold px-1" onchange="if(tramoSeleccionadoArray) generarAreaUnida(tramoSeleccionadoArray);">
+                    </div>
+                    <div>
+                        <label class="input-label">Retorno</label>
+                        <select id="periodoRetorno" class="input-field px-1" onchange="actualizarIntensidad()">
+                            <option value="3" selected>3 Años</option>
+                            <option value="5">5 Años</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-2 mb-2 bg-gray-50 p-2 rounded border border-gray-200">
+                     <div>
+                        <label class="input-label text-gray-400">Long. Flujo (Lc)</label>
+                        <span id="traceLength" class="text-xs font-mono font-bold">-</span>
+                     </div>
+                     <div>
+                         <label class="input-label text-gray-400">Pend. Media (%)</label>
+                        <span id="traceSlope" class="text-xs font-mono font-bold">-</span>
+                     </div>
+                </div>
+
+                <div class="mt-2 border-t border-gray-700 pt-2">
+                    <h4 class="text-[11px] font-bold text-gray-200 mb-1">Tiempo de Concentración (Tc)</h4>
+                    <div class="grid grid-cols-2 gap-2 mb-1">
+                        <div>
+                            <label class="input-label">Superficie</label>
+                            <select id="surfaceType" class="input-field text-[11px] px-1" onchange="updateC(); calcularTc()">
+                                <option value="0.9">Pavimento (C=0.9)</option>
+                                <option value="0.5">Tierra (C=0.5)</option>
+                                <option value="0.2">Pasto (C=0.2)</option>
+                            </select>
+                        </div>
+                        <div>
+                             <label class="input-label">Coef. (C)</label>
+                             <input type="number" id="manualC" step="0.01" value="0.9" class="input-field text-[11px] px-1" onchange="calcularTc()">
+                        </div>
+                    </div>
+                    <div class="bg-orange-50 border border-orange-200 rounded p-2 text-xs space-y-1">
+                         <div class="flex items-center">
+                             <input type="radio" name="tcMethod" id="useFAA" class="tc-radio" onchange="calcularTc()">
+                             <span class="flex-1">FAA:</span> 
+                             <span id="tc_faa_calc" class="font-bold text-orange-400">-</span>
+                         </div>
+                         <div class="flex items-center border-t border-orange-200 pt-1">
+                             <input type="radio" name="tcMethod" id="useKirpich" class="tc-radio" checked onchange="calcularTc()">
+                             <span class="flex-1">Kirpich:</span> 
+                             <span id="tc_calc" class="font-bold text-orange-400">-</span>
+                         </div>
+                    </div>
+                </div>
+
+                <div class="bg-indigo-50 border border-indigo-200 rounded p-2 mb-2 space-y-1 mt-2">
+                    <div class="flex justify-between items-center">
+                        <span class="text-[10px] font-bold text-indigo-400">Zona IDEAM:</span>
+                        <span id="estacionDetectada" class="text-[10px] font-mono text-indigo-300 text-right truncate w-24">-</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-[10px] font-bold text-indigo-400">Intensidad Calculada:</span>
+                        <input type="number" id="i" step="0.01" value="0.00" class="input-field text-right w-16 h-6 text-[11px] bg-white font-bold px-1" onchange="calcularTodo()">
+                    </div>
+                    
+                    <div class="flex justify-between items-center border-t border-indigo-100 pt-1">
+                        <span class="text-[10px] font-bold text-purple-400">Barrio/Dens:</span>
+                        <span id="barrioDetectado" class="text-[10px] font-mono text-purple-300 text-right truncate w-24">-</span>
+                    </div>
+
+                    <div id="msgNormaArea" class="hidden text-[9px] text-red-400 font-bold text-center mt-1 border-t border-red-200 pt-1">
+                        Norma: > 2 Ha requiere Tr = 5 años
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-3 gap-2 mb-2 mt-2">
+                    <div>
+                        <label class="input-label">Densidad</label>
+                        <input type="number" id="d" step="1" value="400" class="input-field px-1" placeholder="400" onchange="calcularTodo()">
+                    </div>
+                    <div>
+                        <label class="input-label">Dotación</label>
+                        <input type="number" id="dot" step="1" value="140" class="input-field px-1" placeholder="140" onchange="calcularTodo()">
+                    </div>
+                    <div>
+                        <label class="input-label">Retorno</label>
+                        <input type="number" id="cr" step="0.01" value="0.85" class="input-field px-1" placeholder="0.85" onchange="calcularTodo()">
+                    </div>
+                </div>
+
+                 <div class="grid grid-cols-2 gap-3 mb-3">
+                    <div>
+                        <label class="input-label">Coef. Infiltración (Ci)</label>
+                        <input type="number" id="ci" step="0.01" value="0.75" class="input-field px-1" placeholder="0.75" onchange="calcularTodo()">
+                    </div>
+                </div>
+
+                <div id="resultadosGeneracion" class="bg-blue-50 rounded border border-blue-200 p-2 text-xs mb-4">
+                    <table class="data-table">
+                        <tr><td>Qs (A*2.5)</td><td id="qs">-</td></tr>
+                        <tr><td>Qs2 (Sanit+Inf)</td><td id="qs2">-</td></tr>
+                        <tr><td>Qp (A*300)</td><td id="qp">-</td></tr>
+                        <tr><td>Qp2 (I*A*Ci)</td><td id="qp2">-</td></tr>
+                        <tr><td>Qsc (Qs+A*15)</td><td id="qsc">-</td></tr>
+                        <tr><td>Qps (A*10)</td><td id="qps">-</td></tr>
+                        <tr class="border-t border-blue-200 font-bold text-blue-300 bg-blue-900">
+                             <td>Qp (Tc Seleccionado)</td><td id="qp_tc">-</td>
+                        </tr>
+                        <tr><td>5QMD</td><td id="q5md" class="font-bold text-blue-300">-</td></tr>
+                    </table>
+                </div>
+            </div>
+
+            <div>
+                <h3 class="section-header">2. Hidráulica Tubería</h3>
+                <div class="space-y-3">
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label class="input-label">Material</label>
+                            <select id="tipoTuberia" onchange="actualizarDiametros(); calcularTodo();" class="input-field px-1">
+                                <option value="CONCRETO">Concreto (n=0.013)</option>
+                                <option value="PVC">PVC (n=0.009)</option>
+                                <option value="PEAD">PEAD (n=0.009)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="input-label">Diámetro</label>
+                            <select id="diametro" onchange="calcularTodo()" class="input-field px-1"></select>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label class="input-label">Pendiente (%)</label>
+                            <input type="number" id="pendiente" step="0.01" class="input-field px-1" placeholder="0.00" onchange="calcularTodo()">
+                        </div>
+                        <div>
+                            <label class="input-label">Q. Entrada (Opcional)</label>
+                            <input type="number" id="caudal_entrada" step="0.01" class="input-field px-1" placeholder="0.00" onchange="calcularTodo()">
+                        </div>
+                    </div>
+                    <button onclick="calcularTodo()" class="btn btn-primary mt-2">Calcular Hidráulica</button>
+                </div>
+            </div>
+
+            <div id="resultadosTuberia" class="hidden bg-green-50 rounded-lg border border-green-200 p-4 mt-4 mb-8">
+                <h4 class="text-xs font-bold text-green-400 uppercase border-b border-green-200 pb-1 mb-2">Resultados</h4>
+                <table class="data-table mb-3">
+                    <tr><td>Caudal Lleno (Qo)</td><td id="qo" class="text-lg">-</td></tr>
+                </table>
+                <h4 class="text-xs font-bold text-green-400 uppercase border-b border-green-200 pb-1 mb-2">Relaciones de Llenado</h4>
+                <table class="data-table">
+                    <tr><td>Qs / Qo</td><td id="qsQo">-</td></tr>
+                    <tr><td>Qs2 / Qo</td><td id="qs2Qo">-</td></tr>
+                    <tr><td>Qp / Qo</td><td id="qpQo">-</td></tr>
+                    <tr><td>Qp2 / Qo</td><td id="qp2Qo">-</td></tr>
+                    <tr><td>Qsc / Qo</td><td id="qscQo">-</td></tr>
+                    <tr><td>Qps / Qo</td><td id="qpsQo">-</td></tr>
+                    <tr><td>5QMD / Qo</td><td id="q5mdQo" class="font-bold text-blue-300">-</td></tr>
+                </table>
+            </div>
+
         </div>
     </div>
 
     <div class="map-wrapper">
         <div id="map"></div>
+        <div class="trace-panel">
+            <h4 class="text-xs font-bold text-gray-200 mb-2 flex justify-between">
+                <span>Rastreo Aguas Arriba</span>
+                <span id="traceIndicator" class="text-gray-400">●</span>
+            </h4>
+            <div class="flex gap-2">
+                <button id="btnTrace" onclick="toggleTraceMode()" class="btn btn-outline py-1 text-xs h-8 transition-colors duration-200">Activar</button>
+                <button onclick="clearTraceButton()" class="btn btn-outline py-1 text-xs h-8 w-10 text-red-500 hover:bg-red-50 transition-colors" title="Limpiar Rastreo">X</button>
+            </div>
+            <div class="text-[9px] text-gray-400 mt-2 text-center leading-tight">
+                Activa el rastreo. Mantén <span class="font-bold text-blue-400">Shift + Click</span> en otro tramo para sumar ramales.
+            </div>
+        </div>
     </div>
+
 </div>
 
 <script>
-    const map = L.map('map').setView([7.1254, -73.1198], 14);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: 'OSM'
-    }).addTo(map);
+    proj4.defs("EPSG:3116","+proj=tmerc +lat_0=4.596200416666666 +lon_0=-74.07750791666666 +k=1 +x_0=1000000 +y_0=1000000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs");
+    
+    const map = L.map('map', { zoomControl: false, maxZoom: 24 }).setView([7.1254, -73.1198], 15);
+    L.control.zoom({ position: 'topleft' }).addTo(map);
+    
+    const esriSat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { 
+        attribution: 'Esri Satélite', maxZoom: 24, maxNativeZoom: 19
+    });
+    const osmCalles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { 
+        attribution: 'OSM Calles', maxZoom: 24, maxNativeZoom: 19
+    });
+    esriSat.addTo(map); 
 
-    setTimeout(() => {
-        const overlay = document.getElementById('loadingOverlay');
-        if (overlay) overlay.style.display = 'none';
-    }, 600);
+    const layerPozos = new L.FeatureGroup().addTo(map);
+    const layerTramos = new L.FeatureGroup(); 
+    const layerEstaciones = new L.FeatureGroup(); 
+    const layerDensidades = new L.FeatureGroup(); 
+    const drawnItems = new L.FeatureGroup().addTo(map);
+
+    L.control.layers(
+        { "Satélite": esriSat, "Calles": osmCalles }, 
+        { "Pozos": layerPozos, "Redes": layerTramos, "Áreas Drenaje": drawnItems, "Zonas IDEAM": layerEstaciones, "Densidades": layerDensidades }, 
+        { position: 'topright' }
+    ).addTo(map);
+
+    let pozoMap = {}; 
+    let datosPozos = [], datosTramos = [], estacionesIdeam = [], zonasDensidad = [], estacionActual = null, densidadActual = null;
+    let calculatedTcFAA = 5, calculatedTcKir = 5;
+    let tramoSeleccionadoArray = null;
+    let capaAreaGenerada = null; 
+    let activeTraceStarts = []; 
+
+    const idfData = {
+        "bucaramanga": { 3: { a: 384.02, b: 0.58 }, 5: { a: 419.81, b: 0.58 } },
+        "palonegro": { 3: { a: 267.54, b: 0.47 }, 5: { a: 288.19, b: 0.47 } },
+        "lalaguna": { 3: { a: 366.38, b: 0.53 }, 5: { a: 395.60, b: 0.53 } },
+        "llanogrande": { 3: { a: 281.13, b: 0.43 }, 5: { a: 307.41, b: 0.43 } },
+        "lagranja": { 3: { a: 540.03, b: 0.48 }, 5: { a: 574.73, b: 0.48 } },
+        "lafloresta": { 3: { a: 412.34, b: 0.51 }, 5: { a: 439.64, b: 0.51 } }
+    };
+
+    function cleanNumber(val) {
+        if (!val) return 0;
+        let str = String(val).trim().replace(/['"]+/g, '').replace(',', '.');
+        if ((str.match(/\./g) || []).length > 1) {
+            let raw = str.replace(/\./g, "");
+            if (raw.length > 7) str = raw.slice(0, 7) + "." + raw.slice(7);
+            else str = raw;
+        }
+        return parseFloat(str) || 0;
+    }
+    
+    function cleanCoordinate(val) { return cleanNumber(val); }
+    function cleanDecimal(val) { return parseFloat(String(val).replace(',', '.')) || 0; }
+    function projectToLatLng(x, y) {
+        if (!x || !y) return null;
+        try { return proj4("EPSG:3116", "EPSG:4326", [x, y]).reverse(); } catch { return null; }
+    }
+    function projectToMeters(lng, lat) {
+        if (!lng || !lat) return null;
+        try { return proj4("EPSG:4326", "EPSG:3116", [lng, lat]); } catch { return null; }
+    }
+
+    function extractPolygonFromWKT(wktStr) {
+        try {
+            let cleanWkt = wktStr.replace(/"/g, '');
+            let contentMatch = cleanWkt.match(/\(\((.*)\)\)/);
+            if (!contentMatch) return null;
+            let rawData = contentMatch[1];
+            let flatCoords = rawData.replace(/\(|\)/g, '').split(',');
+            let latlngs = [];
+            flatCoords.forEach(pair => {
+                let nums = pair.trim().split(/\s+/);
+                if (nums.length >= 2) {
+                    let x = cleanCoordinate(nums[0]);
+                    let y = cleanCoordinate(nums[1]);
+                    let ll = projectToLatLng(x, y);
+                    if (ll) latlngs.push([ll[1], ll[0]]); 
+                }
+            });
+            if (latlngs.length > 2) {
+                if (latlngs[0][0] !== latlngs[latlngs.length-1][0]) latlngs.push(latlngs[0]);
+                return { type: "Polygon", coordinates: [latlngs] };
+            }
+        } catch (e) { return null; }
+        return null;
+    }
+
+    function parseUniversalCSV(text) {
+        if (!text) return [];
+        const lines = text.split(/\r?\n/);
+        let delimiter = lines[0].includes(';') ? ';' : ',';
+        const headers = lines[0].split(delimiter).map(h => h.trim().replace(/^"|"$/g, '').toLowerCase());
+        const result = [];
+        for (let i = 1; i < lines.length; i++) {
+            if (!lines[i].trim()) continue;
+            const row = [];
+            let current = '', inQuotes = false;
+            for (let char of lines[i]) {
+                if (char === '"') inQuotes = !inQuotes;
+                else if (char === delimiter && !inQuotes) { row.push(current); current = ''; }
+                else current += char;
+            }
+            row.push(current);
+            let obj = { properties: {} };
+            headers.forEach((h, idx) => {
+                let val = row[idx] ? row[idx].replace(/^"|"$/g, '').trim() : '';
+                obj.properties[h] = val; 
+                let hLow = h;
+                if (hLow.includes("wkt") || hLow.includes("geom")) obj.wkt = val;
+                else if (hLow.includes("coord") && hLow.includes("x")) obj.x = cleanCoordinate(val);
+                else if (hLow.includes("coord") && hLow.includes("y")) obj.y = cleanCoordinate(val);
+                else if (hLow.includes("nomencl")) obj.id = val;
+                else if (hLow.includes("diam")) obj.diametro = val;
+                else if (hLow.includes("material")) obj.material = val;
+                else if (hLow.includes("pend")) obj.pendiente = cleanDecimal(val);
+                else if (hLow.includes("long")) obj.longitud = cleanDecimal(val);
+                else if (hLow.includes("estacion")) obj.nombre = val;
+                else if (hLow.includes("3 años")) obj.i3 = cleanDecimal(val);
+                else if (hLow.includes("5 años")) obj.i5 = cleanDecimal(val);
+                else if (hLow.includes("barrios")) obj.barrio = val;
+                else if (hLow === "ddef2" || hLow === "dens2008" || hLow === "dens2023") obj.densidad = cleanDecimal(val);
+                
+                if (hLow.includes("cota") && (hLow.includes("ini") || hLow.includes("clave"))) obj.cota = cleanNumber(val);
+                if (hLow.includes("fondo inicial") || hLow === "cini" || hLow.includes("rasante_ini") || hLow.includes("clave_ini") || hLow.includes("cota_ini")) obj.fondo_inicial = cleanDecimal(val);
+                if (hLow.includes("fondo final") || hLow === "cfin" || hLow.includes("rasante_fin") || hLow.includes("clave_fin") || hLow.includes("cota_fin")) obj.fondo_final = cleanDecimal(val);
+            });
+            if (obj.wkt) obj.geojson = extractPolygonFromWKT(obj.wkt);
+            result.push(obj);
+        }
+        return result;
+    }
+
+    function frac_zona_plana(lon) {
+        const LON_CORTA_M = 30.0, LON_LARGA_M = 80.0, FRAC_MAX = 0.25, MIN_ZONA_PLANA_M = 5.0;
+        let frac = 0.0;
+        if (lon <= LON_CORTA_M) frac = 0.0;
+        else if (lon >= LON_LARGA_M) frac = FRAC_MAX;
+        else frac = FRAC_MAX * (lon - LON_CORTA_M) / (LON_LARGA_M - LON_CORTA_M);
+        let zona_plana_m = lon * (1 - 2 * frac);
+        if (zona_plana_m < MIN_ZONA_PLANA_M && lon > MIN_ZONA_PLANA_M * 2) {
+            frac = Math.max(0, (lon - MIN_ZONA_PLANA_M) / (2 * lon));
+        }
+        return frac;
+    }
+
+    function calcularGeometriaDrenaje(layerTramo, radioMeters) {
+        let custom = layerTramo.customData;
+        let pStart, pEnd;
+        
+        if (custom && custom.node0 && custom.node1 && pozoMap[custom.node0] && pozoMap[custom.node1]) {
+            let upPozo = pozoMap[custom.node0];
+            let downPozo = pozoMap[custom.node1];
+            pStart = {lat: upPozo.lat, lng: upPozo.lng};
+            pEnd = {lat: downPozo.lat, lng: downPozo.lng};
+        } else {
+            let latlngs = layerTramo.getLatLngs();
+            let arr = Array.isArray(latlngs[0]) ? latlngs[0] : latlngs;
+            pStart = arr[0];
+            pEnd = arr[arr.length - 1];
+        }
+
+        let c0 = projectToMeters(pStart.lng, pStart.lat);
+        let c1 = projectToMeters(pEnd.lng, pEnd.lat);
+        if(!c0 || !c1) return null;
+
+        let x0 = c0[0], y0 = c0[1], x1 = c1[0], y1 = c1[1];
+        let ddx = x1 - x0, ddy = y1 - y0;
+        let lon = Math.hypot(ddx, ddy);
+        if (lon === 0) return null;
+
+        let dx = ddx / lon, dy = ddy / lon;
+        let px = -dy, py = dx;
+
+        let frac = frac_zona_plana(lon);
+        let t1 = lon * frac, t2 = lon * (1.0 - frac);
+
+        let verts = [];
+        if (frac === 0.0) {
+            let midX = x0 + dx * lon * 0.5, midY = y0 + dy * lon * 0.5;
+            verts.push([x0, y0]);
+            verts.push([midX + px * radioMeters, midY + py * radioMeters]);
+            verts.push([x1, y1]);
+            verts.push([midX - px * radioMeters, midY - py * radioMeters]);
+        } else {
+            let m1x = x0 + dx * t1, m1y = y0 + dy * t1;
+            let m2x = x0 + dx * t2, m2y = y0 + dy * t2;
+            verts.push([x0, y0]);
+            verts.push([m1x + px * radioMeters, m1y + py * radioMeters]);
+            verts.push([m2x + px * radioMeters, m2y + py * radioMeters]);
+            verts.push([x1, y1]);
+            verts.push([m2x - px * radioMeters, m2y - py * radioMeters]);
+            verts.push([m1x - px * radioMeters, m1y - py * radioMeters]);
+        }
+
+        let latlngsPoly = [];
+        verts.forEach(v => {
+            let ll = projectToLatLng(v[0], v[1]); 
+            if (ll) latlngsPoly.push([ll[0], ll[1]]); 
+        });
+        return latlngsPoly;
+    }
+
+    function generarAreaUnida(layersArray) {
+        if(!layersArray || layersArray.length === 0) return;
+        tramoSeleccionadoArray = layersArray;
+
+        let radioMeters = parseFloat(document.getElementById('radioArea').value) || 40;
+        let polysToUnion = [];
+
+        layersArray.forEach(layer => {
+            let latlngsPoly = calcularGeometriaDrenaje(layer, radioMeters);
+            if (latlngsPoly && latlngsPoly.length >= 3) {
+                let turfCoords = latlngsPoly.map(ll => [ll[1], ll[0]]); 
+                turfCoords.push(turfCoords[0]); 
+                try {
+                    let poly = turf.polygon([turfCoords]);
+                    polysToUnion.push(poly);
+                } catch(e) {}
+            }
+        });
+
+        if (polysToUnion.length === 0) return;
+
+        let finalGeoJSON = polysToUnion[0];
+        for (let i = 1; i < polysToUnion.length; i++) {
+            try {
+                let unionRes = turf.union(finalGeoJSON, polysToUnion[i]);
+                if(unionRes) finalGeoJSON = unionRes;
+            } catch(e) {}
+        }
+
+        if (capaAreaGenerada) drawnItems.removeLayer(capaAreaGenerada);
+        drawnItems.eachLayer(layer => {
+            if (layer.isAutoArea) {
+                drawnItems.removeLayer(layer);
+            }
+        });
+
+        capaAreaGenerada = L.geoJSON(finalGeoJSON, {
+            style: {
+                color: '#2563eb',     
+                fillColor: '#60a5fa',
+                fillOpacity: 0.35,
+                weight: 3,
+                dashArray: '4, 4'
+            }
+        });
+        
+        capaAreaGenerada.isAutoArea = true;
+
+        let areaHa = turf.area(finalGeoJSON) / 10000;
+        document.getElementById('areaInput').value = areaHa.toFixed(4);
+
+        drawnItems.addLayer(capaAreaGenerada);
+        capaAreaGenerada.bindTooltip(`Área Drenaje: ${areaHa.toFixed(4)} Ha`, { permanent: true, direction: "center", className: "area-label" }).openTooltip();
+
+        let center = turf.center(finalGeoJSON);
+        estacionActual = determinarZonaPonderada(center.geometry, estacionesIdeam);
+        densidadActual = determinarZonaPonderada(center.geometry, zonasDensidad);
+        
+        actualizarIntensidad();
+    }
+
+    window.onload = () => {
+        if (typeof txtPozos !== 'undefined' && typeof txtRedes !== 'undefined') {
+            let pData = parseUniversalCSV(txtPozos);
+            pData.forEach(p => {
+                if (p.x && p.y) {
+                    const ll = projectToLatLng(p.x, p.y);
+                    if (ll) {
+                        p.lat = ll[0]; p.lng = ll[1];
+                        if(p.id) pozoMap[p.id.trim()] = p;
+                        datosPozos.push(p);
+                        L.circleMarker(ll, { radius:4, color: '#f97316', fillOpacity:0.8 }).on('click', ()=>showInfo('Pozo', p)).addTo(layerPozos);
+                    }
+                }
+            });
+
+            let bounds = L.latLngBounds();
+            let rData = parseUniversalCSV(txtRedes);
+            rData.forEach(r => {
+                if (r.id) {
+                    let parts = r.id.split(/\s*\/\s*|\s+-\s+/);
+                    if (parts.length >= 2) {
+                        let sId = parts[0].trim();
+                        let eId = parts[1].trim();
+                        let s = pozoMap[sId] || pozoMap[sId.replace(/\s/g,'')];
+                        let e = pozoMap[eId] || pozoMap[eId.replace(/\s/g,'')];
+                        
+                        if (s && e) {
+                            r.coords = [[s.lat, s.lng], [e.lat, e.lng]];
+                            r.node0 = s.id;
+                            r.node1 = e.id;
+
+                            datosTramos.push(r);
+                            
+                            let l = L.polyline(r.coords, { color: '#3b82f6', weight:3 }).on('click', function(evt) {
+                                let shiftPressed = evt.originalEvent && evt.originalEvent.shiftKey;
+                                
+                                if(isTraceMode) { 
+                                    performTrace(this, shiftPressed); 
+                                    showInfo('Tramo', r); 
+                                    importToCalc(r, true); 
+                                } else { 
+                                    showInfo('Tramo', r); 
+                                    importToCalc(r, false); 
+                                    generarAreaUnida([this]); 
+                                }
+                            });
+                            l.customData = r; 
+                            l.addTo(layerTramos);
+                            bounds.extend([s.lat, s.lng]);
+                            bounds.extend([e.lat, e.lng]);
+                        }
+                    }
+                }
+            });
+
+            if (typeof txtEstaciones !== 'undefined') {
+                let eData = parseUniversalCSV(txtEstaciones);
+                estacionesIdeam = eData.filter(e => e.geojson);
+                estacionesIdeam.forEach(est => {
+                    const layer = L.geoJSON(est.geojson, { style: { color: 'blue', weight: 2, fillOpacity: 0.1 } })
+                        .bindPopup(`<b>Estación:</b> ${est.nombre}`);
+                    layer.addTo(layerEstaciones);
+                });
+            }
+
+            if (typeof jsonDensidades !== 'undefined') {
+                zonasDensidad = [];
+                let features = jsonDensidades.features || [jsonDensidades];
+                features.forEach(f => {
+                    let obj = { properties: f.properties || {} };
+                    obj.densidad = f.properties.DDEF2 || f.properties.DENS2023 || f.properties.DENS2008 || 0;
+                    obj.barrio = f.properties.Barrios || f.properties.BARRIO || "Desconocido";
+                    let geom = JSON.parse(JSON.stringify(f.geometry));
+                    
+                    const traverse = (coords) => {
+                        if (typeof coords[0] === 'number') {
+                             if (coords[0] > 180) {
+                                 const ll = projectToLatLng(coords[0], coords[1]);
+                                 return ll ? [ll[1], ll[0]] : null;
+                             }
+                             return coords;
+                        }
+                        return coords.map(traverse);
+                    };
+                    geom.coordinates = traverse(geom.coordinates);
+                    obj.geojson = { type: "Feature", properties: obj.properties, geometry: geom };
+                    zonasDensidad.push(obj);
+
+                    const layer = L.geoJSON(obj.geojson, { style: { color: '#8b5cf6', weight: 1, fillOpacity: 0.05 } })
+                        .bindPopup(`<b>Barrio:</b> ${obj.barrio}<br>Densidad: ${obj.densidad}`);
+                    layer.addTo(layerDensidades);
+                });
+            }
+
+            document.getElementById('loadingOverlay').style.display = 'none';
+            if (bounds.isValid()) map.fitBounds(bounds, { padding: [20,20] });
+            updateGraph();
+        } else {
+            document.getElementById('loadingOverlay').innerHTML = `
+                <h2 class="text-lg font-bold text-blue-400">Cargando Mapa Visor...</h2>
+                <p class="text-sm text-gray-400">Preparando motor hidráulico</p>
+            `;
+            setTimeout(() => {
+                document.getElementById('loadingOverlay').style.display = 'none';
+            }, 600);
+        }
+    };
+
+    function determinarZonaPonderada(ptGeoJSON, list) {
+        if(!list.length) return null;
+        for (let z of list) { if(z.geojson && turf.booleanPointInPolygon(ptGeoJSON, z.geojson)) return z; }
+        return null;
+    }
+    
+    function actualizarIntensidad() {
+        const areaVal = parseFloat(document.getElementById('areaInput').value) || 0;
+        const selectTr = document.getElementById('periodoRetorno');
+        const msgNorma = document.getElementById('msgNormaArea');
+        
+        if (areaVal > 2.00) {
+            selectTr.value = "5"; 
+            selectTr.disabled = true; 
+            selectTr.classList.add('input-disabled');
+            msgNorma.classList.remove('hidden');
+        } else {
+            selectTr.disabled = false;
+            selectTr.classList.remove('input-disabled');
+            msgNorma.classList.add('hidden');
+            if (selectTr.value === "5" && areaVal > 0) {
+                 selectTr.value = "3";
+            }
+        }
+        
+        let tr = selectTr.value;
+        let valI = 0;
+        
+        let useMethod = document.querySelector('input[name="tcMethod"]:checked').id;
+        let calcTc = (useMethod === 'useFAA') ? calculatedTcFAA : calculatedTcKir;
+        if(calcTc < 5) calcTc = 5;
+
+        if (estacionActual) {
+            let key = estacionActual.nombre.toLowerCase().replace(/\s/g, '').replace('aeropuertopalonegroaut','palonegro').replace('lagunala','lalaguna').replace('llanogrande-aut','llanogrande').replace('piedecuestagranja','lagranja').replace('florestala','lafloresta').replace('bucaramangaideam','bucaramanga');
+            
+            if(key.includes('palonegro')) key = 'palonegro';
+            else if(key.includes('granja')) key = 'lagranja';
+            else if(key.includes('floresta')) key = 'lafloresta';
+            else if(key.includes('bucaramanga')) key = 'bucaramanga';
+            
+            if (idfData[key] && idfData[key][tr]) {
+                const params = idfData[key][tr];
+                valI = params.a / Math.pow(calcTc, params.b);
+                document.getElementById('estacionDetectada').innerText = estacionActual.nombre;
+            } else {
+                valI = (tr == "3") ? 328.8 : 354.13; 
+                document.getElementById('estacionDetectada').innerText = estacionActual.nombre + " (IDF prom)";
+            }
+        } else {
+            valI = (tr == "3") ? 328.8 : 354.13;
+            document.getElementById('estacionDetectada').innerText = "Promedio";
+        }
+        document.getElementById('i').value = valI.toFixed(2);
+        
+        if (densidadActual) {
+             document.getElementById('d').value = densidadActual.densidad;
+             document.getElementById('barrioDetectado').innerText = densidadActual.barrio;
+        }
+        
+        calcularTodo();
+    }
+
+    function updateC() {
+        document.getElementById('manualC').value = document.getElementById('surfaceType').value;
+    }
+    
+    function calcularTc(manualLength = 0, manualSlope = 0) {
+        const L_text = document.getElementById('traceLength').innerText;
+        const S_text = document.getElementById('traceSlope').innerText;
+        
+        let L = manualLength || parseFloat(L_text); 
+        let S = manualSlope || (parseFloat(S_text.replace('%','')) / 100); 
+        const C = parseFloat(document.getElementById('manualC').value); 
+        
+        if (L > 0 && S > 0) {
+            let tc_faa = (1.8 * (1.1 - C) * Math.sqrt(L)) / Math.pow(S, 0.333);
+            let tc_kir = 0.01947 * Math.pow(L, 0.77) * Math.pow(S, -0.385);
+            
+            calculatedTcFAA = tc_faa;
+            calculatedTcKir = tc_kir;
+
+            document.getElementById('tc_calc').innerText = tc_kir.toFixed(2) + " min";
+            document.getElementById('tc_faa_calc').innerText = tc_faa.toFixed(2) + " min";
+            
+            actualizarIntensidad();
+        } else {
+             document.getElementById('tc_calc').innerText = "-";
+             document.getElementById('tc_faa_calc').innerText = "-";
+        }
+    }
+
+    function showInfo(type, data) {
+        const panel = document.getElementById('selectionPanel');
+        const tableBody = document.getElementById('attrTableBody');
+        const badge = document.getElementById('elemTypeBadge');
+        panel.classList.remove('hidden');
+        badge.innerText = type;
+        let html = "";
+        for (let [key, val] of Object.entries(data.properties)) {
+            if (val && key !== 'wkt' && key !== 'geom') { 
+                html += `<tr><td>${key}</td><td>${val}</td></tr>`;
+            }
+        }
+        tableBody.innerHTML = html;
+    }
+
+    function importToCalc(data, interactive=false) {
+        if(data.pendiente) document.getElementById('pendiente').value = data.pendiente;
+        let mat = (data.material || "").toUpperCase();
+        let selMat = document.getElementById('tipoTuberia');
+        if (mat.includes("PVC")) selMat.value = "PVC"; else if (mat.includes("PEAD")) selMat.value = "PEAD"; else selMat.value = "CONCRETO";
+        actualizarDiametros();
+        let rawD = String(data.diametro || "").replace(/['"]+/g, '').replace(',', '.');
+        let selD = document.getElementById('diametro');
+        for(let op of Array.from(selD.options)) { if(op.text.includes(rawD)) { selD.value = op.value; break; } }
+        
+        const mid = data.coords[Math.floor(data.coords.length/2)];
+        const pt = { type: 'Point', coordinates: [mid[1], mid[0]] };
+        estacionActual = determinarZonaPonderada(pt, estacionesIdeam);
+        densidadActual = determinarZonaPonderada(pt, zonasDensidad);
+        actualizarIntensidad();
+    }
+
+    const diametros = { "PVC": { "110 mm": 0.098, "160 mm": 0.144, "200 mm": 0.181, "250 mm": 0.226, "315 mm": 0.283, "400 mm": 0.361, "450 mm": 0.406, "500 mm": 0.451, "24\"": 0.595, "27\"": 0.671, "30\"": 0.747, "33\"": 0.823, "36\"": 0.899, "39\"": 0.975, "42\"": 0.975, "1100 mm": 1.105 }, "PEAD": { "150 mm": 0.145, "200 mm": 0.195, "250 mm": 0.245, "300 mm": 0.294, "350 mm": 0.343, "400 mm": 0.392, "450 mm": 0.441, "500 mm": 0.49, "600 mm": 0.588, "800 mm": 0.785, "1000 mm": 1.01, "1200 mm": 1.21, "1400 mm": 1.41, "1500 mm": 1.51, "1600 mm": 1.61, "1800 mm": 1.785, "2000 mm": 1.985, "2200 mm": 2.185, "2400 mm": 2.385 }, "CONCRETO": { "8 in": 0.203, "10 in": 0.254, "12 in": 0.305, "14 in": 0.356, "16 in": 0.406, "18 in": 0.457, "20 in": 0.508, "21 in": 0.533, "24 in": 0.610, "27 in": 0.686, "30 in": 0.762, "33 in": 0.838, "36 in": 0.914, "1.00 m": 1, "1.10 m": 1.1, "1.20 m": 1.2, "1.30 m": 1.3, "1.40 m": 1.4, "1.50 m": 2.5 } };
+    const manning_n = { "PVC": 0.009, "PEAD": 0.009, "CONCRETO": 0.013 };
+
+    function actualizarDiametros() {
+        let t = document.getElementById('tipoTuberia').value;
+        let s = document.getElementById('diametro');
+        let old = s.value; s.innerHTML = '';
+        for (let d in diametros[t]) { let o = document.createElement('option'); o.value = diametros[t][d]; o.textContent = d; s.appendChild(o); }
+        s.value = old;
+    }
+    actualizarDiametros();
+
+    function calcularTodo() {
+        let A = parseFloat(document.getElementById('areaInput').value) || 0;
+        let Cr = parseFloat(document.getElementById('cr').value) || 0;
+        let D = parseFloat(document.getElementById('d').value) || 0;
+        let DOT = parseFloat(document.getElementById('dot').value) || 0;
+        let I = parseFloat(document.getElementById('i').value) || 0;
+        let Ci = parseFloat(document.getElementById('ci').value) || 0;
+
+        let qs = A * 2.5;
+        let qs2 = ((A * Cr * D * DOT) / 86400) + (A * 2);
+        let qp = A * 300;
+        let qp2 = I * A * Ci;
+        let qsc = (A * 15) + qs;
+        let qps = A * 10;
+        let qp_racional = 2.778 * Ci * I * A;
+        let q5md = (((A * Cr * D * DOT) / 86400) + (A * 2)) * 5;
+
+        document.getElementById('qs').innerText = qs.toFixed(2);
+        document.getElementById('qs2').innerText = qs2.toFixed(2);
+        document.getElementById('qp').innerText = qp.toFixed(2);
+        document.getElementById('qp2').innerText = qp2.toFixed(2);
+        document.getElementById('qsc').innerText = qsc.toFixed(2);
+        document.getElementById('qps').innerText = qps.toFixed(2);
+        document.getElementById('qp_tc').innerText = qp_racional.toFixed(2); 
+        document.getElementById('q5md').innerText = q5md.toFixed(2);
+
+        let dia = parseFloat(document.getElementById('diametro').value) || 0;
+        let pen = parseFloat(document.getElementById('pendiente').value) || 0;
+        let n = manning_n[document.getElementById('tipoTuberia').value];
+        let qo = 0;
+        
+        if (dia > 0 && pen > 0) {
+            let R = dia / 4;
+            let Area = Math.PI * Math.pow(dia, 2) / 4;
+            qo = (1/n) * Area * Math.pow(R, 2/3) * Math.pow(pen/100, 0.5) * 1000;
+        }
+        document.getElementById('qo').innerText = qo.toFixed(2);
+        document.getElementById('resultadosTuberia').classList.remove('hidden');
+
+        const setR = (id, v) => document.getElementById(id).innerText = qo > 0 ? (v/qo).toFixed(2) : '-';
+        setR('qsQo', qs); setR('qs2Qo', qs2); setR('qpQo', qp); setR('qp2Qo', qp2); setR('qscQo', qsc); setR('qpsQo', qps);
+        setR('q5mdQo', q5md); 
+    }
+    
+    let networkGraph = []; 
+    let isTraceMode = false;
+    
+    function updateGraph() { 
+        networkGraph = [];
+        layerTramos.eachLayer(l => {
+            if (l.customData && l.customData.node0 && l.customData.node1) {
+                networkGraph.push({ 
+                    id: L.Util.stamp(l), 
+                    node0: l.customData.node0, 
+                    node1: l.customData.node1, 
+                    layer: l 
+                });
+            }
+        });
+    }
+    
+    function toggleTraceMode() {
+        isTraceMode = !isTraceMode;
+        let btn = document.getElementById('btnTrace');
+        let ind = document.getElementById('traceIndicator');
+        
+        if (isTraceMode) {
+            btn.classList.remove('btn-outline');
+            btn.classList.add('bg-blue-600', 'text-white', 'border-blue-600');
+            btn.innerText = 'Activo';
+            ind.classList.remove('text-gray-400');
+            ind.classList.add('text-blue-500');
+            map.getContainer().style.cursor = 'crosshair';
+            updateGraph();
+        } else {
+            btn.classList.remove('bg-blue-600', 'text-white', 'border-blue-600');
+            btn.classList.add('btn-outline');
+            btn.innerText = 'Activar';
+            ind.classList.remove('text-blue-500');
+            ind.classList.add('text-gray-400');
+            map.getContainer().style.cursor = '';
+            
+            resetTraceVisually();
+        }
+    }
+
+    function resetTraceVisually() {
+        layerTramos.eachLayer(l => { if(l instanceof L.Polyline) l.setStyle({color: '#3b82f6', weight: 3}); });
+        activeTraceStarts = [];
+        if(capaAreaGenerada) drawnItems.removeLayer(capaAreaGenerada);
+        document.getElementById('traceSlope').innerText = '-';
+        document.getElementById('traceLength').innerText = '-';
+        document.getElementById('areaInput').value = '0.00';
+    }
+
+    function clearTraceButton() {
+        resetTraceVisually();
+        if(isTraceMode) toggleTraceMode(); 
+    }
+    
+    function getLength(layer) {
+        if (layer.customData && layer.customData.longitud) return parseFloat(layer.customData.longitud);
+        const latlngs = layer.getLatLngs();
+        let dist = 0;
+        for(let i=0; i<latlngs.length-1; i++) dist += map.distance(latlngs[i], latlngs[i+1]);
+        return dist;
+    }
+
+    class MinHeap {
+        constructor() { this.heap = []; }
+        push(val) {
+            this.heap.push(val);
+            this.bubbleUp(this.heap.length - 1);
+        }
+        pop() {
+            if (this.heap.length === 1) return this.heap.pop();
+            const top = this.heap[0];
+            this.heap[0] = this.heap.pop();
+            this.bubbleDown(0);
+            return top;
+        }
+        bubbleUp(idx) {
+            while (idx > 0) {
+                let p = Math.floor((idx - 1) / 2);
+                if (this.heap[idx].z >= this.heap[p].z) break;
+                [this.heap[idx], this.heap[p]] = [this.heap[p], this.heap[idx]];
+                idx = p;
+            }
+        }
+        bubbleDown(idx) {
+            while (true) {
+                let left = 2 * idx + 1, right = 2 * idx + 2, min = idx;
+                if (left < this.heap.length && this.heap[left].z < this.heap[min].z) min = left;
+                if (right < this.heap.length && this.heap[right].z < this.heap[min].z) min = right;
+                if (min === idx) break;
+                [this.heap[idx], this.heap[min]] = [this.heap[min], this.heap[idx]];
+                idx = min;
+            }
+        }
+        get length() { return this.heap.length; }
+    }
+
+    function performTrace(startL, append = false) {
+        if (!append) {
+            layerTramos.eachLayer(l => { if(l instanceof L.Polyline) l.setStyle({color: '#3b82f6', weight: 3}); });
+            activeTraceStarts = [];
+        }
+        
+        if (!activeTraceStarts.includes(startL)) {
+            activeTraceStarts.push(startL);
+        }
+
+        let visitedLayersArray = [];
+        let combinedMaxPathLen = 0;
+        let globalCotaDown = Infinity;
+        let globalCotaUp = -Infinity;
+
+        let idx_tocan = {};
+        let tramos = {};
+
+        networkGraph.forEach(seg => {
+            if (!idx_tocan[seg.node0]) idx_tocan[seg.node0] = [];
+            if (!idx_tocan[seg.node1]) idx_tocan[seg.node1] = [];
+            idx_tocan[seg.node0].push(seg.id);
+            idx_tocan[seg.node1].push(seg.id);
+
+            let tData = seg.layer.customData;
+            
+            let z0 = parseFloat(tData.fondo_inicial);
+            if (!z0 || isNaN(z0)) { z0 = (pozoMap[seg.node0] ? parseFloat(pozoMap[seg.node0].cota) : 0.0); }
+            let z1 = parseFloat(tData.fondo_final);
+            if (!z1 || isNaN(z1)) { z1 = (pozoMap[seg.node1] ? parseFloat(pozoMap[seg.node1].cota) : 0.0); }
+
+            tramos[seg.id] = {
+                layer: seg.layer,
+                id: seg.id,
+                raw_0: { id: seg.node0, z: z0 || 0.0 },
+                raw_1: { id: seg.node1, z: z1 || 0.0 },
+                L: getLength(seg.layer)
+            };
+        });
+
+        let pq = new MinHeap();
+        let encontrados = {};
+
+        activeTraceStarts.forEach(sL => {
+            const p_id = L.Util.stamp(sL);
+            if (tramos[p_id]) {
+                let t = tramos[p_id];
+                if (t.raw_0.z > t.raw_1.z) { t.up = t.raw_0; t.dn = t.raw_1; }
+                else { t.up = t.raw_1; t.dn = t.raw_0; }
+                
+                encontrados[p_id] = t;
+                pq.push({ z: t.up.z, nodeId: t.up.id, pathLen: t.L });
+                
+                sL.setStyle({ color: '#eab308', weight: 6 });
+                visitedLayersArray.push(sL);
+
+                if (t.dn.z > 0 && t.dn.z < globalCotaDown) globalCotaDown = t.dn.z;
+                if (t.up.z > 0 && t.up.z > globalCotaUp) globalCotaUp = t.up.z;
+                if (t.L > combinedMaxPathLen) combinedMaxPathLen = t.L;
+            }
+        });
+
+        while (pq.length > 0) {
+            let act = pq.pop();
+            let z_ref_recibo = act.z;
+            let N_act = act.nodeId;
+            let actPathLen = act.pathLen;
+
+            let conexos = idx_tocan[N_act] || [];
+            
+            for (let p_id of conexos) {
+                if (encontrados[p_id]) continue;
+                let t = tramos[p_id];
+                
+                let con_idx = (t.raw_0.id === N_act) ? 0 : 1;
+                let con = (con_idx === 0) ? t.raw_0 : t.raw_1;
+                let rem = (con_idx === 0) ? t.raw_1 : t.raw_0;
+                
+                let cota_entrega = con.z;
+                let cota_origen = rem.z;
+                let cota_recibo = z_ref_recibo;
+                
+                let es_aguas_arriba = false;
+                if (cota_origen > 1.0 && cota_entrega > 1.0) {
+                    if (cota_origen >= cota_entrega) es_aguas_arriba = true;
+                } else {
+                    if (con_idx === 1) es_aguas_arriba = true;
+                }
+
+                if (!es_aguas_arriba) continue;
+
+                let es_valido = false;
+                if (cota_entrega > 1.0 && cota_recibo > 1.0) {
+                    if (cota_entrega >= cota_recibo) es_valido = true;
+                } else if (cota_origen > 1.0 && cota_recibo > 1.0) {
+                    if (cota_origen >= cota_recibo) es_valido = true;
+                } else {
+                    es_valido = true;
+                }
+
+                if (es_valido) {
+                    t.up = rem; t.dn = con;
+                    encontrados[p_id] = t;
+
+                    let newPathLen = actPathLen + t.L;
+                    pq.push({ z: rem.z, nodeId: rem.id, pathLen: newPathLen });
+
+                    t.layer.setStyle({ color: '#ef4444', weight: 5 });
+                    visitedLayersArray.push(t.layer);
+
+                    if (newPathLen > combinedMaxPathLen) combinedMaxPathLen = newPathLen;
+                    if (rem.z > 0 && rem.z > globalCotaUp) globalCotaUp = rem.z;
+                }
+            }
+        }
+
+        generarAreaUnida(visitedLayersArray);
+
+        let sAvgText = "N/A";
+        let sAvgVal = 0;
+
+        if (globalCotaUp !== -Infinity && globalCotaDown !== Infinity && globalCotaUp > globalCotaDown && combinedMaxPathLen > 0) {
+            let diffH = globalCotaUp - globalCotaDown;
+            let sAvg = (diffH / combinedMaxPathLen) * 100;
+            sAvgVal = sAvg; 
+            sAvgText = sAvg.toFixed(2) + " %";
+        }
+        
+        document.getElementById('traceSlope').innerText = sAvgText;
+        document.getElementById('traceLength').innerText = combinedMaxPathLen.toFixed(1);
+        
+        calcularTc(combinedMaxPathLen, sAvgVal);
+    }
+
+    const drawControlManual = new L.Control.Draw({ 
+        edit: { featureGroup: drawnItems }, 
+        draw: { 
+            polygon: { allowIntersection: false, showArea: true, shapeOptions: { color: '#16a34a', fillColor: '#22c55e', fillOpacity: 0.4 } }, 
+            rectangle: false, circle: false, circlemarker: false, marker: false, polyline: false 
+        } 
+    });
+    map.addControl(drawControlManual);
+    
+    map.on(L.Draw.Event.CREATED, e => {
+        const layer = e.layer;
+        if(e.layerType !== 'polyline') {
+            const geo = layer.toGeoJSON();
+            const areaHa = turf.area(geo) / 10000;
+            document.getElementById('areaInput').value = areaHa.toFixed(4);
+            const center = turf.center(geo);
+            estacionActual = determinarZonaPonderada(center.geometry, estacionesIdeam);
+            densidadActual = determinarZonaPonderada(center.geometry, zonasDensidad);
+            actualizarIntensidad();
+            
+            if (capaAreaGenerada) drawnItems.removeLayer(capaAreaGenerada);
+            drawnItems.eachLayer(l => { if (l.isAutoArea) drawnItems.removeLayer(l); });
+
+            layer.bindTooltip(`${areaHa.toFixed(4)} Ha`, { permanent: true, direction: "center", className: "area-label" });
+        }
+        drawnItems.addLayer(layer);
+    });
+
+    map.on(L.Draw.Event.EDITED, e => {
+        const layers = e.layers;
+        layers.eachLayer(function (layer) {
+            if (layer instanceof L.Polygon) {
+                const geo = layer.toGeoJSON();
+                const areaHa = turf.area(geo) / 10000;
+                document.getElementById('areaInput').value = areaHa.toFixed(4);
+                const center = turf.center(geo);
+                estacionActual = determinarZonaPonderada(center.geometry, estacionesIdeam);
+                densidadActual = determinarZonaPonderada(center.geometry, zonasDensidad);
+                actualizarIntensidad();
+                layer.bindTooltip(`${areaHa.toFixed(4)} Ha`, { permanent: true, direction: "center", className: "area-label" }).openTooltip();
+            }
+        });
+    });
+
 </script>
 </body>
 </html>
