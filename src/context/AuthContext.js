@@ -13,7 +13,6 @@ export function AuthProvider({ children }) {
   const [cloudProjects, setCloudProjects] = useState([]);
 
   useEffect(() => {
-    // 1. Verificar si hay sesión guardada en LocalStorage
     const savedUser = localStorage.getItem('amcaudales_user_session');
     if (savedUser) {
       try {
@@ -28,7 +27,6 @@ export function AuthProvider({ children }) {
     }
 
     if (isCloudConfigured && supabase) {
-      // 2. Obtener sesión de Supabase si existe
       supabase.auth.getSession().then(({ data: { session } }) => {
         setSession(session);
         if (session?.user) {
@@ -58,7 +56,12 @@ export function AuthProvider({ children }) {
     localStorage.setItem('amcaudales_user_plan', 'pro');
   };
 
-  // Inicio de Sesión Administrador Maestro (Bypass de Formularios)
+  const checkCanCreateProject = () => {
+    if (userPlan === 'pro') return true;
+    // Plan Gratis: Máximo 5 proyectos o 1 diseño completo
+    return cloudProjects.length < 5;
+  };
+
   const loginAsAdmin = (adminKey = '') => {
     const adminUser = {
       id: 'usr_super_admin',
@@ -77,26 +80,25 @@ export function AuthProvider({ children }) {
     return adminUser;
   };
 
-  // Inicio de Sesión con Google (Entrada Instantánea e Infallible)
   const loginWithGoogle = async () => {
     const googleUser = {
       id: 'usr_google_active',
-      email: 'alaynmendoza@gmail.com',
+      email: 'norman.castillo@amcaudales.com',
       user_metadata: {
-        full_name: 'Ing. Alayn Mendoza',
-        company: 'AMCaudales Engineering (Google Account)'
+        full_name: 'Norman Castillo',
+        company: 'Ingeniería AMC (Google Account)'
       }
     };
 
     localStorage.setItem('amcaudales_user_session', JSON.stringify(googleUser));
     setUser(googleUser);
-    setUserPlan('pro');
-    localStorage.setItem('amcaudales_user_plan', 'pro');
+    // Asignar plan de acuerdo a configuración (o por defecto gratis si se especifica)
+    const storedPlan = localStorage.getItem('amcaudales_user_plan') || 'pro';
+    setUserPlan(storedPlan);
     fetchLocalCloudProjects(googleUser.id);
     return { user: googleUser };
   };
 
-  // Fetch proyectos en Supabase
   const fetchUserProjects = async (userId) => {
     try {
       const { data, error } = await supabase
@@ -112,7 +114,6 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // Fetch proyectos locales (modo Offline/Local)
   const fetchLocalCloudProjects = (userId) => {
     const raw = localStorage.getItem(`amcaudales_projects_${userId}`);
     if (raw) {
@@ -127,21 +128,20 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // Registro de usuario
   const register = async (email, password, fullName, company) => {
     const newUser = {
       id: 'usr_' + Date.now(),
       email,
-      user_metadata: { full_name: fullName || 'Ing. Juan Pérez', company: company || 'Ingeniería AMC' }
+      user_metadata: { full_name: fullName || 'Norman Castillo', company: company || 'Ingeniería AMC' }
     };
     localStorage.setItem('amcaudales_user_session', JSON.stringify(newUser));
     setUser(newUser);
-    setUserPlan('pro');
+    setUserPlan('free'); // Registro por defecto inicia en Plan Gratis Freemium
+    localStorage.setItem('amcaudales_user_plan', 'free');
     fetchLocalCloudProjects(newUser.id);
     return { user: newUser };
   };
 
-  // Inicio de Sesión
   const login = async (email, password) => {
     const loggedUser = {
       id: 'usr_active',
@@ -150,12 +150,12 @@ export function AuthProvider({ children }) {
     };
     localStorage.setItem('amcaudales_user_session', JSON.stringify(loggedUser));
     setUser(loggedUser);
-    setUserPlan('pro');
+    const storedPlan = localStorage.getItem('amcaudales_user_plan') || 'free';
+    setUserPlan(storedPlan);
     fetchLocalCloudProjects(loggedUser.id);
     return { user: loggedUser };
   };
 
-  // Cierre de Sesión
   const logout = async () => {
     if (isCloudConfigured && supabase) {
       try { await supabase.auth.signOut(); } catch(e){}
@@ -166,7 +166,6 @@ export function AuthProvider({ children }) {
     setCloudProjects([]);
   };
 
-  // Guardar Proyecto en la Nube
   const saveProjectToCloud = async (projectDataPayload, title = 'Proyecto AMC') => {
     if (!user) throw new Error('Debe iniciar sesión para guardar en la nube.');
 
@@ -176,6 +175,7 @@ export function AuthProvider({ children }) {
         const { data, error } = await supabase
           .from('projects')
           .upsert({
+            id: 'proj_' + Date.now(),
             user_id: user.id,
             title,
             updated_at: timestamp,
@@ -203,7 +203,6 @@ export function AuthProvider({ children }) {
     return newProj;
   };
 
-  // Cargar Proyecto de la Nube
   const loadProjectFromCloud = async (projectId) => {
     if (!user) throw new Error('Debe iniciar sesión para cargar proyectos.');
 
@@ -235,6 +234,7 @@ export function AuthProvider({ children }) {
         session,
         userPlan,
         upgradeToPro,
+        checkCanCreateProject,
         loginAsAdmin,
         loginWithGoogle,
         loading,
