@@ -28,11 +28,12 @@ function agruparTuberias(R,sumLat,sumTrans,params){
   var matGrupos={};
   R.filter(function(r){return !r.sep&&r.reponer==="S";}).forEach(function(r){
     var nom = r.nom;
+    var lenEfectiva = r.Le || r.L || 0;
     if(!grupos[nom])grupos[nom]={nom:nom,red:0,sum:0,acom:0};
-    grupos[nom].red+=r.L||0;
+    grupos[nom].red+=lenEfectiva;
     var mk=nom+"|"+(r.mat||"PVC");
     if(!matGrupos[mk])matGrupos[mk]={nom:nom,mat:r.mat||"PVC",red:0};
-    matGrupos[mk].red+=r.L||0;
+    matGrupos[mk].red+=lenEfectiva;
   });
   if(sumLat)sumLat.forEach(function(f){if((f.cant||0)>0){var dSum=(f.diam||200);var nom=dSum+" mm";if(!grupos[nom])grupos[nom]={nom:nom,red:0,sum:0,acom:0};grupos[nom].sum+=(f.long||6)*(f.cant||0);}});
   if(sumTrans)sumTrans.forEach(function(f){if((f.cant||0)>0){var dSumT=(f.diam||200);var nom=dSumT+" mm";if(!grupos[nom])grupos[nom]={nom:nom,red:0,sum:0,acom:0};grupos[nom].sum+=(f.long||6)*(f.cant||0);}});

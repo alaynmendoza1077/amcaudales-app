@@ -33,7 +33,7 @@ export function recalcPbItems(data) {
 
   var dR = R.filter(r => !r.sep);
   var dN = dR.filter(r => r.reponer === "S");
-  var lt = dN.reduce((s, r) => s + (r.L || 0), 0);
+  var lt = dN.reduce((s, r) => s + (r.Le || r.L || 0), 0);
   var tE = dN.reduce((s, r) => s + (r.volE || 0), 0);
   var t025 = dN.reduce((s, r) => s + (r.v025 || 0), 0);
   var t2550 = dN.reduce((s, r) => s + (r.v2550 || 0), 0);

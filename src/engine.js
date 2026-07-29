@@ -305,7 +305,11 @@ function runCalc(T,P){
     // H1,H2=prof+0.2m: sobre-excavación por cimentación
     // v025/v2550/v50p: volúmenes por rangos de profundidad (tarifas diferenciadas)
     // Ver DOC_MOTOR_HIDRAULICO.md §12.3
-    var Dp=1.2;var Le=Math.max(0,L-Dp);var bz=D+.4;
+    var Dp = parseFloat(P.diametroPozo || 1.20);
+    var L_horiz = Math.max(0, L - Dp);
+    var slopeDec = Math.abs(S) / 100;
+    var Le = L_horiz * Math.sqrt(1 + slopeDec * slopeDec);
+    var bz = D + 0.4;
     var H1=profE+.2;var H2=profS+.2;var HP=(H1+H2)/2;
     var volE=Le*HP*bz;var v025=HP<=2.5?volE:Le*2.5*bz;
     var v2550=HP>2.5?Le*Math.min(HP-2.5,2.5)*bz:0;

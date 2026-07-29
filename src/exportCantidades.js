@@ -147,7 +147,7 @@ export async function exportCantidades(P, R, T, sumLat, sumTrans, pbItems, estSe
 
   // 2. Pozos
   const pozosH = ["#","Pozo","Prof(m)","M/C","hConc(m)","hMamp(m)","Conc(m3)","Mamp(m2)","Exc(m3)","PDR-60","A-37(m2)","Peld","C.Pobre(m3)","Reducc(m3)"];
-  var pozDataCompleto = calcPozosCompleto(R, T);
+  var pozDataCompleto = calcPozosCompleto(R, T, P);
   var pzData = [];
   if(pozDataCompleto && pozDataCompleto.pz) {
     let pzRow = 7;

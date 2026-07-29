@@ -14,8 +14,8 @@ async function exportMAESTRA(P,R,T,sumLat,sumTrans,pbItems,inpData,estSepData, u
   pbItems = recalcPbItems({R, P, T, sumLat, sumTrans, pbItems, urbanismoData});
   var dR=R.filter(function(r){return !r.sep;});
   var dN=dR.filter(function(r){return r.reponer==="S";});
-  var lt=dN.reduce(function(s,r){return s+(r.L||0);},0);
-  var pozData=calcPozosCompleto(R,T);
+  var lt=dN.reduce(function(s,r){return s+(r.Le||r.L||0);},0);
+  var pozData=calcPozosCompleto(R,T,P);
   var pz=pozData.pz;
 
   var cdTotal = 0;

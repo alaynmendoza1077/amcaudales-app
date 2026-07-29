@@ -52,7 +52,7 @@ export function getItemAnalyticalBreakdown(item, data = {}) {
       else if (code === "1.03.04.02" && t.tipoVia === "AN") match = true;
 
       if (match) {
-        const L = parseFloat(t.L || t.longitud || 0);
+        const L = parseFloat(t.Le || t.L || t.longitud || 0);
         const B = parseFloat(t.anchoVia || P.anchoVia || 6.0);
         const areaRot = (t.rotP !== undefined && t.rotP > 0) ? parseFloat(t.rotP) : (L * B);
         subtotalTramos += areaRot;
@@ -131,7 +131,7 @@ export function getItemAnalyticalBreakdown(item, data = {}) {
     const tramoExcRows = [];
     let subTramosExc = 0;
     dN.forEach(t => {
-      const L = parseFloat(t.L || t.longitud || 0);
+      const L = parseFloat(t.Le || t.L || t.longitud || 0);
       const volB = is25 ? (t.v025 || 0) : (t.v2550 || 0);
       const volP = volB * factorTipo * factorAcarreo;
       subTramosExc += volP;
@@ -216,7 +216,7 @@ export function getItemAnalyticalBreakdown(item, data = {}) {
     let subtotalTubTramos = 0;
     dN.forEach(t => {
       const dNom = String(t.diametroCom || t.diametro || 200).trim();
-      const L = parseFloat(t.L || t.longitud || 0);
+      const L = parseFloat(t.Le || t.L || t.longitud || 0);
       const L_desp = L * fD;
       subtotalTubTramos += L_desp;
 

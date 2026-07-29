@@ -50,7 +50,7 @@ function PreBancoTab(props){
     }
   },[pbItems.length]);
   if(!dR.length&&pbItems.length===0)return <div className="c"><p style={{color:"#7088A8"}}>Cargue datos y/o PtoBase</p></div>;
-  var lt=dN.reduce(function(s,r){return s+(r.L||0);},0);
+  var lt=dN.reduce(function(s,r){return s+(r.Le||r.L||0);},0);
   var tE=dN.reduce(function(s,r){return s+(r.volE||0);},0);
   var t025=dN.reduce(function(s,r){return s+(r.v025||0);},0);
   var t2550=dN.reduce(function(s,r){return s+(r.v2550||0);},0);
@@ -79,7 +79,7 @@ function PreBancoTab(props){
   var profProm=P.profProm!==undefined?P.profProm:calcProfProm;
   var repP=dN.reduce(function(s,r){return s+(r.repP||0);},0);
   var tLe=dN.reduce(function(s,r){return s+(r.Le||0);},0);
-  var ep2=calcPozosCompleto(R,T);var nPN=ep2.pz.length;
+  var ep2=calcPozosCompleto(R,T,P);var nPN=ep2.pz.length;
   
   var caidasCount = {
     "4.05.01.01": 0, "4.05.01.02": 0, "4.05.01.03": 0, "4.05.01.04": 0,
