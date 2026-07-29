@@ -5,7 +5,8 @@
   "env": {
     "CI": "false",
     "DISABLE_ESLINT_PLUGIN": "true",
-    "GENERATE_SOURCEMAP": "false"
+    "GENERATE_SOURCEMAP": "false",
+    "NODE_OPTIONS": "--max-old-space-size=4096"
   },
   "rewrites": [
     {
