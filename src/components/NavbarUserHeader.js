@@ -10,6 +10,11 @@ export default function NavbarUserHeader({ onSaveCloud, onLoadCloud }) {
   const [showProjectsModal, setShowProjectsModal] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
+  const handleLogout = async () => {
+    await logout();
+    setShowAuthModal(true);
+  };
+
   return (
     <>
       <header style={headerContainerStyle}>
@@ -62,7 +67,7 @@ export default function NavbarUserHeader({ onSaveCloud, onLoadCloud }) {
                 </span>
               </div>
 
-              <button onClick={logout} style={logoutBtnStyle} title="Cerrar Sesión y Salir">
+              <button onClick={handleLogout} style={logoutBtnStyle} title="Cerrar Sesión e Iniciar Sesión con Otra Cuenta">
                 🚪 Salir
               </button>
             </div>

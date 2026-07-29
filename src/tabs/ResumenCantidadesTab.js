@@ -687,20 +687,20 @@ export default function ResumenCantidadesTab(props) {
                                 <span style={{ color: '#38bdf8' }}>Subtotal Sección: {sec.subtotal.toLocaleString("es-CO", { maximumFractionDigits: 2 })} {sec.u}</span>
                               </div>
 
-                              <div style={{ overflowX: 'auto', maxHeight: '350px', overflowY: 'auto' }}>
-                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
+                              <div style={{ overflowX: 'auto', maxHeight: '380px', overflowY: 'auto', border: '1px solid #1e293b', borderRadius: '6px' }}>
+                                <table style={{ width: '100%', minWidth: '1200px', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
                                   <thead style={{ position: 'sticky', top: 0, zIndex: 2 }}>
                                     <tr style={{ backgroundColor: '#1e293b', color: '#94a3b8', fontSize: '11px' }}>
-                                      <th style={{ padding: '8px 10px', width: '30px', textAlign: 'center' }}>#</th>
-                                      <th style={{ padding: '8px 10px' }}>Identificador / Elemento</th>
-                                      <th style={{ padding: '8px 10px', textAlign: 'center' }}>Cant. (N°)</th>
-                                      <th style={{ padding: '8px 10px', textAlign: 'right' }}>Long. L (m)</th>
-                                      <th style={{ padding: '8px 10px', textAlign: 'right' }}>Ancho W (m)</th>
-                                      <th style={{ padding: '8px 10px', textAlign: 'right' }}>Prof. H (m)</th>
-                                      <th style={{ padding: '8px 10px' }}>Expresión / Dimensión</th>
-                                      <th style={{ padding: '8px 10px', textAlign: 'right' }}>Subtotal Cantidad</th>
-                                      <th style={{ padding: '8px 10px', textAlign: 'center' }}>Unidad</th>
-                                      <th style={{ padding: '8px 10px' }}>Criterio y Nota Técnica</th>
+                                      <th style={{ padding: '8px 10px', width: '40px', textAlign: 'center' }}>#</th>
+                                      <th style={{ padding: '8px 10px', width: '220px' }}>Identificador / Elemento</th>
+                                      <th style={{ padding: '8px 10px', width: '60px', textAlign: 'center' }}>Cant. (N°)</th>
+                                      <th style={{ padding: '8px 10px', width: '90px', textAlign: 'right' }}>Long. L (m)</th>
+                                      <th style={{ padding: '8px 10px', width: '90px', textAlign: 'right' }}>Ancho W (m)</th>
+                                      <th style={{ padding: '8px 10px', width: '90px', textAlign: 'right' }}>Prof. H (m)</th>
+                                      <th style={{ padding: '8px 10px', width: '220px' }}>Expresión / Dimensión</th>
+                                      <th style={{ padding: '8px 10px', width: '130px', textAlign: 'right' }}>Subtotal Cantidad</th>
+                                      <th style={{ padding: '8px 10px', width: '70px', textAlign: 'center' }}>Unidad</th>
+                                      <th style={{ padding: '8px 10px', width: '250px' }}>Criterio y Nota Técnica</th>
                                     </tr>
                                   </thead>
                                   <tbody>
