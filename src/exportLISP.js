@@ -646,7 +646,9 @@ export function exportPlantaLISP(R, P, T, inpData) {
   lines.push("  (SETVAR \"OSMODE\" 0)");
   lines.push(`  (vl-load-com)`);
   lines.push(`  (setq acadObj (vlax-get-acad-object))`);
-  // Removed setTrueColor function to avoid AutoCAD plot crashes
+  lines.push(`  (defun setTrueColor (ent r g b / clr ver)`);
+  lines.push(`    (vl-catch-all-apply '(lambda () (setq ver (substr (getvar "ACADVER") 1 2)) (setq clr (vla-GetInterfaceObject acadObj (strcat "AutoCAD.AcCmColor." ver))) (vla-SetRGB clr r g b) (vla-put-TrueColor (vlax-ename->vla-object ent) clr)))`);
+  lines.push(`    (princ))`);
   lines.push("  (GRAPHSCR)");
   
   lines.push("  (IF (NOT (TBLSEARCH \"STYLE\" \"COTAS\")) (COMMAND \"_-STYLE\" \"COTAS\" \"romans.shx\" \"0.0\" \"1.0\" \"0.0\" \"_N\" \"_N\" \"_N\"))");
@@ -1005,7 +1007,7 @@ export function exportPlantaLISP(R, P, T, inpData) {
       if (!t.areaPoli || t.areaPoli.length < 3) return;
       let pts = t.areaPoli;
       lines.push(`  (COMMAND "_LAYER" "_Make" "AREAS-AFERENTES" "")`);
-      lines.push(`  (SETVAR "CELTSCALE" 2.4)`);
+      lines.push(`  (SETVAR "CELTSCALE" 0.05)`);
       let sumX = 0, sumY = 0;
       let validPts = 0;
       let plineStr = `  (COMMAND "_PLINE"`;
@@ -1026,12 +1028,14 @@ export function exportPlantaLISP(R, P, T, inpData) {
       plineStr += ` "_C")`;
       if (validPts < 3) return;
       lines.push(plineStr);
+      lines.push(`  (IF (TBLSEARCH "LTYPE" "AM_DASHED") (COMMAND "_CHPROP" (ENTLAST) "" "_LType" "AM_DASHED" ""))`);
       lines.push(`  (SETVAR "CELTSCALE" 1.0)`);
       
-      lines.push(`  (COMMAND "_-HATCH" "_P" "SOLID" "_S" (ENTLAST) "" "")`);
-      lines.push(`  (COMMAND "_CHPROP" (ENTLAST) "" "_Color" "151" "_TRansparency" "50" "")`);
+      lines.push(`  (vl-catch-all-apply '(lambda () (COMMAND "_-HATCH" "_P" "SOLID" "_S" (ENTLAST) "" "")))`);
+      lines.push(`  (setTrueColor (ENTLAST) 150 200 255)`);
+      lines.push(`  (vl-catch-all-apply '(lambda () (COMMAND "_CHPROP" (ENTLAST) "" "_TRansparency" "70" "")))`);
       lines.push(`  (SETVAR "CECOLOR" "BYLAYER")`);
-      lines.push(`  ;; (COMMAND "_DRAWORDER" (ENTLAST) "" "_Back")`);
+      lines.push(`  (COMMAND "_DRAWORDER" (ENTLAST) "" "_Back")`);
       
       let cx = sumX / validPts;
       let cy = sumY / validPts;
@@ -1115,7 +1119,7 @@ export function exportPlantaLISP(R, P, T, inpData) {
           let pts = groupedVerts[nid];
           if (pts.length < 3) continue;
           lines.push(`  (COMMAND "_LAYER" "_Make" "AREAS-AFERENTES" "")`);
-          lines.push(`  (SETVAR "CELTSCALE" 2.4)`);
+          lines.push(`  (SETVAR "CELTSCALE" 0.05)`);
           let sumX = 0, sumY = 0;
           let validPts = 0;
           let plineStr = `  (COMMAND "_PLINE"`;
@@ -1135,10 +1139,12 @@ export function exportPlantaLISP(R, P, T, inpData) {
           plineStr += ` "_C")`;
           if (validPts < 3) continue;
           lines.push(plineStr);
+          lines.push(`  (IF (TBLSEARCH "LTYPE" "AM_DASHED") (COMMAND "_CHPROP" (ENTLAST) "" "_LType" "AM_DASHED" ""))`);
           lines.push(`  (SETVAR "CELTSCALE" 1.0)`);
           
-          lines.push(`  (COMMAND "_-HATCH" "_P" "SOLID" "_S" (ENTLAST) "" "")`);
-          lines.push(`  (COMMAND "_CHPROP" (ENTLAST) "" "_Color" "151" "")`);
+          lines.push(`  (vl-catch-all-apply '(lambda () (COMMAND "_-HATCH" "_P" "SOLID" "_S" (ENTLAST) "" "")))`);
+          lines.push(`  (setTrueColor (ENTLAST) 150 200 255)`);
+          lines.push(`  (vl-catch-all-apply '(lambda () (COMMAND "_CHPROP" (ENTLAST) "" "_TRansparency" "70" "")))`);
           lines.push(`  (SETVAR "CECOLOR" "BYLAYER")`);
           lines.push(`  (COMMAND "_DRAWORDER" (ENTLAST) "" "_Back")`);
           
