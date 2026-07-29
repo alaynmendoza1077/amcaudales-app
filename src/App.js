@@ -18,9 +18,84 @@ const Loader = () => (
   </div>
 );
 
+class GlobalErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error("Error en GlobalErrorBoundary:", error, errorInfo);
+  }
+
+  handleReset = () => {
+    try {
+      localStorage.removeItem('amcaudales_user_session');
+    } catch(e){}
+    window.location.reload();
+  };
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: '100vh',
+          backgroundColor: '#050a15',
+          color: '#ffffff',
+          fontFamily: 'system-ui, -apple-system, sans-serif',
+          padding: '2rem',
+          textAlign: 'center'
+        }}>
+          <div style={{
+            backgroundColor: 'rgba(30, 41, 59, 0.8)',
+            border: '1px solid #334155',
+            borderRadius: '16px',
+            padding: '2.5rem',
+            maxWidth: '600px',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)'
+          }}>
+            <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>⚡</div>
+            <h2 style={{ fontSize: '1.5rem', fontWeight: '800', color: '#60a5fa', margin: '0 0 1rem 0' }}>
+              AMCaudales Pro • Acceso a la Plataforma
+            </h2>
+            <p style={{ color: '#94a3b8', fontSize: '0.95rem', lineHeight: '1.6', marginBottom: '1.5rem' }}>
+              Haz clic en el botón para ingresar directamente a la plataforma y restablecer el entorno de trabajo.
+            </p>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+              <button
+                onClick={this.handleReset}
+                style={{
+                  backgroundColor: '#3b82f6',
+                  color: '#ffffff',
+                  fontWeight: 'bold',
+                  padding: '12px 24px',
+                  borderRadius: '10px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: '0.95rem'
+                }}
+              >
+                🚀 Ingresar Directamente a AMCaudales
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 function AppContent() {
   const { user, saveProjectToCloud, userPlan, loginAsGuest } = useAuth();
-  const [isGuest, setIsGuest] = useState(false);
   const [activeModule, setActiveModule] = useState('home');
   const [initialData, setInitialData] = useState(null);
   const [showNewProjectModal, setShowNewProjectModal] = useState(false);
@@ -28,25 +103,16 @@ function AppContent() {
   const [blockedFeatureName, setBlockedFeatureName] = useState('');
 
   React.useEffect(() => {
-    if (!user && !isGuest) {
-      loginAsGuest();
-      setIsGuest(true);
+    if (!user) {
+      try {
+        loginAsGuest();
+      } catch (e) {
+        console.warn("Auto guest login warning:", e);
+      }
     }
-  }, [user, isGuest, loginAsGuest]);
-
-  if (!user && !isGuest) {
-    return (
-      <StartLoginPortal
-        onGuestAccess={() => {
-          loginAsGuest();
-          setIsGuest(true);
-        }}
-      />
-    );
-  }
+  }, [user, loginAsGuest]);
 
   const handleSetModule = (mod, data = null) => {
-    // Restricción por módulos según plan
     if ((mod === 'presupuesto') && userPlan === 'free') {
       setBlockedFeatureName('Cantidades y Presupuestos de Obra');
       setShowUpgradeModal(true);
@@ -131,8 +197,10 @@ function AppContent() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
+    <GlobalErrorBoundary>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </GlobalErrorBoundary>
   );
 }

@@ -622,7 +622,7 @@ const handleBack = () => {
     visibleTabs = [
       {id:"dash",l:"Dashboard"}, {id:"parObra",l:"Parámetros Obra"},
       {id:"tra",l:"Tramos"}, {id:"poz",l:"Pozos"}, {id:"tub",l:"Tuberías"}, {id:"aco",l:"Acometidas"}, {id:"sum",l:"Sumideros"}, {id:"exc",l:"Excavaciones"},
-      {id:"urbanismo",l:"Urbanismo"}, {id:"preBanco",l:"Cantidades de Obra"}, {id:"pre",l:"Presupuesto"}, {id:"resumen",l:"Resumen"}, {id:"cro",l:"Cronograma"}, {id:"abrev", l:"Abreviaturas"}
+      {id:"urbanismo",l:"Urbanismo"}, {id:"resumen",l:"Cantidades de Obra"}, {id:"pre",l:"Presupuesto"}, {id:"preBanco",l:"Presupuesto Banco"}, {id:"cro",l:"Cronograma"}, {id:"abrev", l:"Abreviaturas"}
     ];
   } else {
     // Fase 1: Diseño
