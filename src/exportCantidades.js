@@ -1,6 +1,6 @@
 import ExcelJS from 'exceljs';
 import { saveFileWithDialog } from './utils/fileSaver';
-import { calcCantSumidero, agruparTuberias, calcExcPozos, calcPozosCompleto } from './calcHelpers';
+import { calcCantSumidero, agruparTuberias, calcExcPozos, calcPozosCompleto, getItemAnalyticalBreakdown } from './calcHelpers';
 
 const titleFont = { name: 'Arial', family: 2, size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
 const subTitleFont = { name: 'Arial', family: 2, size: 11, bold: true, color: { argb: 'FF000000' } };
@@ -790,9 +790,6 @@ export async function exportMemoriaCantidades(P, R, T, sumLat, sumTrans, pbItems
 
   let activeItems = (pbItems || []).filter(it => it.lv === 3 && it.q > 0);
   if (activeItems.length === 0) activeItems = (pbItems || []).filter(it => it.q > 0);
-
-  // Import dynamically breakdown calculation
-  const { getItemAnalyticalBreakdown } = require('./tabs/ResumenCantidadesTab');
 
   let curRowIndex = 5;
 

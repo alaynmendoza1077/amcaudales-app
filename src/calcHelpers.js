@@ -280,4 +280,396 @@ function calcPozosCompleto(R,T,P){
     v50p:tV50p};
 }
 
+export function getItemAnalyticalBreakdown(item, data = {}) {
+  const { R = [], T = [], sumLat = [], sumTrans = [], P = {}, urbanismoData = [] } = data;
+  const code = item.c || "";
+  const q = item.q || 0;
+  const unit = item.u || "UND";
+
+  let formula = "";
+  let originTitle = "Análisis Detallado por Componentes";
+  let sections = [];
+
+  const fD = 1 + (P.porcDesperdicio || 0);
+  const pT = P.porcExcTierra !== undefined ? parseFloat(P.porcExcTierra) : 0.55;
+  const pG = P.porcExcGranular !== undefined ? parseFloat(P.porcExcGranular) : 0.30;
+  const pR = P.porcExcRoca !== undefined ? parseFloat(P.porcExcRoca) : 0.15;
+  const pAL = P.porcAcarreoLibre !== undefined ? parseFloat(P.porcAcarreoLibre) : 0.50;
+
+  const nAc = (parseFloat(P.nAcom06)||0) + (parseFloat(P.nAcom610)||0) + (parseFloat(P.nAcom10)||0);
+  const largoAco = parseFloat(P.largoAco)||6.0;
+  const ep2 = calcPozosCompleto(R, T, P);
+
+  let sumRotTot = 0, sumExcTot = 0, sumConcTot = 0;
+  if (sumLat) sumLat.forEach(f => { if ((f.cant || 0) > 0) { var c = calcCantSumidero(f, P); sumRotTot += (c.rot || 0); sumExcTot += (c.totExc || 0); sumConcTot += (c.c4 || 0); } });
+  if (sumTrans) sumTrans.forEach(f => { if ((f.cant || 0) > 0) { var c = calcCantSumidero(f, P); sumRotTot += (c.rot || 0); sumExcTot += (c.totExc || 0); sumConcTot += (c.c4 || 0); } });
+
+  const dN = (R || []).filter(r => !r.sep && r.reponer === "S");
+
+  if (code.startsWith("1.03.")) {
+    formula = `Rotura Pavimento = Σ(Tramos según Tipo Vía y Espesor) + Σ(Sumideros en Vía)`;
+    originTitle = `Análisis de Rotura de Pavimento - Ítem ${code} (${item.d})`;
+
+    const esp = P.espesorPav || 0.15;
+    const tramoRows = [];
+    let subtotalTramos = 0;
+
+    dN.forEach(t => {
+      let match = false;
+      if (code === "1.03.01.01" && (t.tipoVia === "FX" || t.tipoVia === "TL") && esp < 0.10) match = true;
+      else if (code === "1.03.01.02" && (t.tipoVia === "FX" || t.tipoVia === "TL" || !t.tipoVia) && esp >= 0.10 && esp <= 0.20) match = true;
+      else if (code === "1.03.01.03" && (t.tipoVia === "FX" || t.tipoVia === "TL") && esp > 0.20) match = true;
+      else if (code === "1.03.02.01" && t.tipoVia === "RG" && esp < 0.15) match = true;
+      else if (code === "1.03.02.02" && t.tipoVia === "RG" && esp >= 0.15 && esp <= 0.25) match = true;
+      else if (code === "1.03.02.03" && t.tipoVia === "RG" && esp > 0.25) match = true;
+      else if (code === "1.03.03.02" && (t.tipoVia === "PP" || t.tipoVia === "AD")) match = true;
+      else if (code === "1.03.04.02" && t.tipoVia === "AN") match = true;
+
+      if (match) {
+        const L = parseFloat(t.Le || t.L || t.longitud || 0);
+        const B = parseFloat(t.anchoVia || P.anchoVia || 6.0);
+        const areaRot = (t.rotP !== undefined && t.rotP > 0) ? parseFloat(t.rotP) : (L * B);
+        subtotalTramos += areaRot;
+
+        tramoRows.push({
+          elem: `Tramo ${t.de} -> ${t.a}`,
+          n: 1,
+          l: L.toFixed(2),
+          w: B.toFixed(2),
+          h: esp.toFixed(2),
+          expr: `${L.toFixed(2)}m x ${B.toFixed(2)}m`,
+          sub: areaRot.toFixed(2),
+          u: "m²",
+          nota: `Tipo Vía: ${t.tipoVia || "Convencional"}`
+        });
+      }
+    });
+
+    if (tramoRows.length > 0) {
+      sections.push({ title: "1. Tramos de Red Principal Afectados", rows: tramoRows, subtotal: subtotalTramos, u: "m²" });
+    }
+
+    if (nAc > 0 && (code === "1.03.01.02" || code === "1.03.04.02")) {
+      const areaAcom = nAc * (P.anchoAnden || 1.0) * 0.56;
+      sections.push({
+        title: "2. Acometidas Domiciliarias en Vía / Andén",
+        rows: [{
+          elem: "Acometidas de Alcantarillado",
+          n: nAc,
+          l: (P.anchoAnden || 1.0).toFixed(2),
+          w: "0.56",
+          h: "-",
+          expr: `${nAc} Acom. x ${(P.anchoAnden||1.0)}m x 0.56m`,
+          sub: areaAcom.toFixed(2),
+          u: "m²",
+          nota: "Rotura de andén y franja de acometida"
+        }],
+        subtotal: areaAcom,
+        u: "m²"
+      });
+    }
+
+    if (sumRotTot > 0 && code === "1.03.01.02") {
+      sections.push({
+        title: "3. Sumideros e Imprevistos en Vía",
+        rows: [{
+          elem: "Sumideros Laterales / Transversales",
+          n: (sumLat.length + sumTrans.length),
+          l: "1.20",
+          w: "0.80",
+          h: "-",
+          expr: `Sumatoria de captaciones`,
+          sub: sumRotTot.toFixed(2),
+          u: "m²",
+          nota: "Rotura para cajas de captación"
+        }],
+        subtotal: sumRotTot,
+        u: "m²"
+      });
+    }
+
+  } else if (code.startsWith("2.01.01") || code.startsWith("2.01.02")) {
+    const isLibre = code.endsWith("01") || code.endsWith("02") || code.endsWith("04") || code.endsWith("05") || code.endsWith("07");
+    const is25 = code.includes(".01") || code.includes(".04");
+    const factorTipo = (code.includes(".01.01") || code.includes(".01.02") || code.includes(".02.01") || code.includes(".02.02")) ? pT : ((code.includes(".01.04") || code.includes(".01.05") || code.includes(".02.04") || code.includes(".02.05")) ? pG : pR);
+    const factorAcarreo = isLibre ? pAL : (1 - pAL);
+    formula = `Vol. Excavación = (Vol. Tramos + Vol. Pozos + Vol. Sumideros) x % Terreno (${(factorTipo*100).toFixed(0)}%) x % Acarreo (${(factorAcarreo*100).toFixed(0)}%)`;
+    originTitle = `Análisis de Excavación por Rango - Ítem ${code} (${item.d})`;
+
+    const tramoExcRows = [];
+    let subTramosExc = 0;
+    dN.forEach(t => {
+      const L = parseFloat(t.Le || t.L || t.longitud || 0);
+      const volB = is25 ? (t.v025 || 0) : (t.v2550 || 0);
+      const volP = volB * factorTipo * factorAcarreo;
+      subTramosExc += volP;
+
+      if (volP > 0) {
+        tramoExcRows.push({
+          elem: `Tramo ${t.de} -> ${t.a}`,
+          n: 1,
+          l: L.toFixed(2),
+          w: ((parseFloat(t.diametroCom||200)/1000)+0.60).toFixed(2),
+          h: (((+t.profE||1.5)+(+t.profS||1.5))/2).toFixed(2),
+          expr: `${volB.toFixed(2)}m³ x ${(factorTipo*100).toFixed(0)}% x ${(factorAcarreo*100).toFixed(0)}%`,
+          sub: volP.toFixed(2),
+          u: "m³",
+          nota: `Vol. Bruto Tramo: ${volB.toFixed(2)}m³`
+        });
+      }
+    });
+    if (tramoExcRows.length > 0) {
+      sections.push({ title: "1. Excavación Zanjas Tramos de Red", rows: tramoExcRows, subtotal: subTramosExc, u: "m³" });
+    }
+
+    const pozExcRows = [];
+    let subPozExc = 0;
+    if (ep2 && ep2.pz) {
+      ep2.pz.forEach(pz => {
+        if (pz.isRemodelar) return;
+        const prof = parseFloat(pz.prof || 1.5);
+        const volBPz = is25 ? (pz.v025 || 0) : (pz.v2550 || 0);
+        const volPPz = volBPz * factorTipo * factorAcarreo;
+        subPozExc += volPPz;
+
+        if (volPPz > 0) {
+          pozExcRows.push({
+            elem: `Pozo ${pz.nodo}`,
+            n: 1,
+            l: (pz.DE||1.72).toFixed(2),
+            w: (pz.DE||1.72).toFixed(2),
+            h: prof.toFixed(2),
+            expr: `${volBPz.toFixed(2)}m³ x ${(factorTipo*100).toFixed(0)}% x ${(factorAcarreo*100).toFixed(0)}%`,
+            sub: volPPz.toFixed(2),
+            u: "m³",
+            nota: `Profundidad: ${prof.toFixed(2)}m`
+          });
+        }
+      });
+    }
+    if (pozExcRows.length > 0) {
+      sections.push({ title: "2. Excavación Pozos de Inspección", rows: pozExcRows, subtotal: subPozExc, u: "m³" });
+    }
+
+    if (sumExcTot > 0 && is25) {
+      const volSumP = sumExcTot * factorTipo * factorAcarreo;
+      sections.push({
+        title: "3. Excavación Cajas de Sumideros",
+        rows: [{
+          elem: "Sumideros de Captación",
+          n: (sumLat.length + sumTrans.length),
+          l: "1.20",
+          w: "0.80",
+          h: "1.20",
+          expr: `${sumExcTot.toFixed(2)}m³ x ${(factorTipo*100).toFixed(0)}% x ${(factorAcarreo*100).toFixed(0)}%`,
+          sub: volSumP.toFixed(2),
+          u: "m³",
+          nota: "Excavación para estructuras de sumideros"
+        }],
+        subtotal: volSumP,
+        u: "m³"
+      });
+    }
+
+  } else if (code.startsWith("3.02.02")) {
+    formula = `Longitud Tubería ${item.d} = Σ(Tramos con ${item.d}) x Factor Desperdicio (1 + ${(P.porcDesperdicio||0)*100}%)`;
+    originTitle = `Desglose Detallado de Tubería - Ítem ${code} (${item.d})`;
+
+    const tramoTubRows = [];
+    let subtotalTubTramos = 0;
+    dN.forEach(t => {
+      const dNom = String(t.diametroCom || t.diametro || 200).trim();
+      const L = parseFloat(t.Le || t.L || t.longitud || 0);
+      const L_desp = L * fD;
+      subtotalTubTramos += L_desp;
+
+      tramoTubRows.push({
+        elem: `Tramo ${t.de} -> ${t.a}`,
+        n: 1,
+        l: L.toFixed(2),
+        w: "-",
+        h: "-",
+        expr: `${L.toFixed(2)}m x ${fD.toFixed(2)} (fD)`,
+        sub: L_desp.toFixed(2),
+        u: "m",
+        nota: `Material: ${t.material || "PVC"} | Diámetro: ${dNom}mm`
+      });
+    });
+    if (tramoTubRows.length > 0) {
+      sections.push({ title: "1. Colectores Red Principal", rows: tramoTubRows, subtotal: subtotalTubTramos, u: "m" });
+    }
+
+  } else if (code === "4.01.01.01") {
+    formula = `Concreto Reforzado 4000 PSI = (Volumen Paredes Pozos + Volumen Concreto Sumideros) x (1 + Desperdicio)`;
+    originTitle = "Análisis Pozo por Pozo de Concreto Reforzado 4000 PSI";
+
+    const pozConcRows = [];
+    let subtotalConcPoz = 0;
+    if (ep2 && ep2.pz) {
+      ep2.pz.forEach(pz => {
+        if (pz.pozoNuevo === "S" && !pz.isRemodelar) {
+          const prof = parseFloat(pz.prof || 1.5);
+          const volBrutoPz = parseFloat(pz.volConc || 0);
+          const volFinalPz = volBrutoPz * fD;
+          subtotalConcPoz += volFinalPz;
+
+          pozConcRows.push({
+            elem: `Pozo ${pz.nodo}`,
+            n: 1,
+            l: (pz.DI||1.20).toFixed(2),
+            w: (pz.DE||1.72).toFixed(2),
+            h: prof.toFixed(2),
+            expr: `(${volBrutoPz.toFixed(2)}m³ Pared+Base+Tapa) x ${fD.toFixed(2)}`,
+            sub: volFinalPz.toFixed(2),
+            u: "m³",
+            nota: `Profundidad: ${prof.toFixed(2)}m | Tipo: ${pz.tipoPozo}`
+          });
+        }
+      });
+    }
+    if (pozConcRows.length > 0) {
+      sections.push({ title: "1. Estructuras de Pozos de Inspección Nuevos", rows: pozConcRows, subtotal: subtotalConcPoz, u: "m³" });
+    }
+
+    if (sumConcTot > 0) {
+      const volSumConcF = sumConcTot * fD;
+      sections.push({
+        title: "2. Concreto Estructuras de Sumideros",
+        rows: [{
+          elem: "Sumideros de Captación",
+          n: (sumLat.length + sumTrans.length),
+          l: "1.20",
+          w: "0.80",
+          h: "1.20",
+          expr: `${sumConcTot.toFixed(2)}m³ x ${fD.toFixed(2)} (fD)`,
+          sub: volSumConcF.toFixed(2),
+          u: "m³",
+          nota: "Concreto de cajas y aletas de sumideros"
+        }],
+        subtotal: volSumConcF,
+        u: "m³"
+      });
+    }
+
+  } else if (code === "5.01.03.02") {
+    formula = `Demolición Concreto = Σ(Anillo Tubular Pozo Existente: π x ((DE/2)² - (DI/2)²) x Prof) + Demoliciones Urbanismo`;
+    originTitle = "Análisis Pozo por Pozo y Tramo por Tramo de Demolición de Concreto";
+
+    const pozDemRows = [];
+    let subtotalDemPoz = 0;
+    if (ep2 && ep2.pz) {
+      ep2.pz.forEach(pz => {
+        const prof = parseFloat(pz.prof || 1.5);
+        const DI = 1.20;
+        const ESP = 0.26;
+        const DE = DI + 2 * ESP;
+        const areaTubular = Math.PI * (Math.pow(DE / 2, 2) - Math.pow(DI / 2, 2));
+        const volDemPz = areaTubular * prof;
+        subtotalDemPoz += volDemPz;
+
+        pozDemRows.push({
+          elem: `Pozo Existente ${pz.nodo}`,
+          n: 1,
+          l: DI.toFixed(2),
+          w: DE.toFixed(2),
+          h: prof.toFixed(2),
+          expr: `${areaTubular.toFixed(4)} m² (Anillo) x ${prof.toFixed(2)}m (H)`,
+          sub: volDemPz.toFixed(2),
+          u: "m³",
+          nota: `Estructura Tubular DI=${DI}m, ESP=${ESP}m, DE=${DE}m`
+        });
+      });
+    }
+    if (pozDemRows.length > 0) {
+      sections.push({ title: "1. Demolición de Pozos Existentes (Estructura Tubular)", rows: pozDemRows, subtotal: subtotalDemPoz, u: "m³" });
+    }
+
+    if (urbanismoData && urbanismoData.length > 0) {
+      const urbRows = [];
+      let subtotalUrbDem = 0;
+      urbanismoData.forEach(u => {
+        if (u.reqUrbanismo && u.pavEspesorDem > 0) {
+          const L = parseFloat(u.pavL || 0);
+          const W = parseFloat(u.ancho || 6.0);
+          const H = parseFloat(u.pavEspesorDem || 0.15);
+          const volUrb = L * W * H;
+          subtotalUrbDem += volUrb;
+
+          urbRows.push({
+            elem: `Demolición Urbanismo Tramo ${u.id}`,
+            n: 1,
+            l: L.toFixed(2),
+            w: W.toFixed(2),
+            h: H.toFixed(2),
+            expr: `${L.toFixed(2)}m x ${W.toFixed(2)}m x ${H.toFixed(2)}m`,
+            sub: volUrb.toFixed(2),
+            u: "m³",
+            nota: "Demolición de pavimentos y estructuras en urbanismo"
+          });
+        }
+      });
+      if (urbRows.length > 0) {
+        sections.push({ title: "2. Demolición de Estructuras en Urbanismo", rows: urbRows, subtotal: subtotalUrbDem, u: "m³" });
+      }
+    }
+
+  } else if (code.startsWith("5.02.01")) {
+    formula = `Pozos a Remodelar ${item.d} = Lista de Pozos Marcados con Check 'Remodelar' en Cantidades Pozos`;
+    originTitle = "Análisis Pozo por Pozo de Pozos Marcados para Remodelación";
+
+    const pozRemRows = [];
+    let subtotalRemPoz = 0;
+    if (ep2 && ep2.pz) {
+      ep2.pz.forEach(pz => {
+        if (pz.isRemodelar) {
+          const prof = parseFloat(pz.prof || 1.5);
+          let itemCodePz = "5.02.01.01";
+          if (prof > 4.0) itemCodePz = "5.02.01.03";
+          else if (prof > 2.0) itemCodePz = "5.02.01.02";
+
+          if (itemCodePz === code) {
+            subtotalRemPoz += 1;
+            pozRemRows.push({
+              elem: `Pozo Remodelar ${pz.nodo}`,
+              n: 1,
+              l: (pz.DI||1.20).toFixed(2),
+              w: (pz.DE||1.72).toFixed(2),
+              h: prof.toFixed(2),
+              expr: `Profundidad: ${prof.toFixed(2)} m`,
+              sub: 1,
+              u: "UND",
+              nota: "Pozo adaptado y excluido de cantidades de obra nueva"
+            });
+          }
+        }
+      });
+    }
+    if (pozRemRows.length > 0) {
+      sections.push({ title: `1. Listado de Pozos a Remodelar (${item.d})`, rows: pozRemRows, subtotal: subtotalRemPoz, u: "UND" });
+    }
+
+  } else {
+    formula = `Cantidad Analizada = Parámetros de obra e ingeniería consolidada`;
+    originTitle = `Análisis de Cantidad de Obra - ${item.d}`;
+    sections.push({
+      title: "1. Componentes Principales del Ítem",
+      rows: [{
+        elem: item.d,
+        n: 1,
+        l: "-",
+        w: "-",
+        h: "-",
+        expr: `${q.toFixed(2)} ${unit}`,
+        sub: q.toFixed(2),
+        u: unit,
+        nota: "Cantidad inyectada directamente al Presupuesto Oficial"
+      }],
+      subtotal: q,
+      u: unit
+    });
+  }
+
+  return { formula, originTitle, sections };
+}
+
 export {calcCantSumidero, agruparTuberias, calcExcPozos, calcExcSumideros, calcVallasAuto, calcPozosCompleto};
