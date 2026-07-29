@@ -9,8 +9,8 @@ export function getItemAnalyticalBreakdown(item, data = {}) {
   const unit = item.u || "UND";
 
   let formula = "";
-  let originTitle = "Cálculo Detallado Elemento por Elemento (AMCaudales)";
-  let details = [];
+  let originTitle = "Análisis Detallado por Componentes";
+  let sections = [];
 
   const fD = 1 + (P.porcDesperdicio || 0);
   const pT = P.porcExcTierra !== undefined ? parseFloat(P.porcExcTierra) : 0.55;
@@ -18,42 +18,102 @@ export function getItemAnalyticalBreakdown(item, data = {}) {
   const pR = P.porcExcRoca !== undefined ? parseFloat(P.porcExcRoca) : 0.15;
   const pAL = P.porcAcarreoLibre !== undefined ? parseFloat(P.porcAcarreoLibre) : 0.50;
 
+  const nAc = (parseFloat(P.nAcom06)||0) + (parseFloat(P.nAcom610)||0) + (parseFloat(P.nAcom10)||0);
+  const largoAco = parseFloat(P.largoAco)||6.0;
+  const diamAco = (parseFloat(P.diamAcom)||160)/1000;
   const ep2 = calcPozosCompleto(R, T, P);
 
-  // 1. ROTURA Y DEMOLICIÓN DE PAVIMENTOS
-  if (code.startsWith("1.03.01") || code.startsWith("1.03.02") || code.startsWith("1.03.03") || code.startsWith("1.03.04")) {
-    formula = `Rotura Pavimento = Σ(Longitud Tramo L x Ancho Vía B) + Rotura por Sumideros en Vía`;
-    originTitle = "Análisis Detallado de Rotura de Pavimento por Tramo y Sumidero";
+  // --------------------------------------------------------------------------
+  // 1. ROTURA Y DEMOLICIÓN DE PAVIMENTOS (1.03.xx)
+  // --------------------------------------------------------------------------
+  if (code.startsWith("1.03.")) {
+    formula = `Rotura Pavimento = Σ(Tramos: L x B) + Σ(Acometidas: N° x L x W) + Σ(Sumideros: N° x Área) + Urbanismo`;
+    originTitle = `Análisis de Rotura de Pavimentos - Ítem ${code} (${item.d})`;
 
-    const tramosRot = (T || []).filter(t => (t.rotP || 0) > 0 || (t.L || 0) > 0);
-    tramosRot.forEach(t => {
+    // Sección 1: Tramos
+    const tramoRows = [];
+    let subtotalTramos = 0;
+    (T || []).forEach(t => {
+      if (t.sep) return;
       const L = parseFloat(t.L || t.longitud || 0);
       const B = parseFloat(t.anchoVia || P.anchoVia || 6.0);
-      const areaRot = (t.rotP !== undefined && t.rotP > 0) ? t.rotP : (L * B);
-      if (areaRot > 0) {
-        details.push({
-          elemento: `Tramo ${t.de} -> ${t.a}`,
-          expresion: `${L.toFixed(2)} m x ${B.toFixed(2)} m`,
-          cantidad: areaRot.toFixed(2),
-          unidad: "m²",
-          nota: `Tipo Vía: ${t.tipoVia || "Convencional"} (Espesor: ${(P.espesorPav || 0.15).toFixed(2)}m)`
-        });
-      }
-    });
+      const areaRot = (t.rotP !== undefined && t.rotP > 0) ? parseFloat(t.rotP) : (L * B);
+      subtotalTramos += areaRot;
 
-    if (details.length === 0) {
-      details.push({ elemento: "Superficie Total de Pavimento a Demoler", expresion: `${q.toFixed(2)} m²`, cantidad: q.toFixed(2), unidad: "m²", nota: "Consolidado de tramos y áreas de sumideros" });
+      tramoRows.push({
+        elem: `Tramo ${t.de} -> ${t.a}`,
+        n: 1,
+        l: L.toFixed(2),
+        w: B.toFixed(2),
+        h: (P.espesorPav || 0.15).toFixed(2),
+        expr: `${L.toFixed(2)}m x ${B.toFixed(2)}m`,
+        sub: areaRot.toFixed(2),
+        u: "m²",
+        nota: `Tipo Vía: ${t.tipoVia || "Convencional"}`
+      });
+    });
+    if (tramoRows.length > 0) {
+      sections.push({ title: "1. Tramos de Red Principal", rows: tramoRows, subtotal: subtotalTramos, u: "m²" });
     }
 
-  // 2. EXCAVACIÓN DE ZANJAS Y POZOS
+    // Sección 2: Acometidas
+    if (nAc > 0) {
+      const areaAcom = nAc * (P.anchoAnden || 1.0) * 0.56;
+      sections.push({
+        title: "2. Acometidas Domiciliarias en Vía / Andén",
+        rows: [{
+          elem: "Acometidas de Alcantarillado",
+          n: nAc,
+          l: (P.anchoAnden || 1.0).toFixed(2),
+          w: "0.56",
+          h: "-",
+          expr: `${nAc} Acom. x ${(P.anchoAnden||1.0)}m x 0.56m`,
+          sub: areaAcom.toFixed(2),
+          u: "m²",
+          nota: "Rotura de andén y franja de acometida"
+        }],
+        subtotal: areaAcom,
+        u: "m²"
+      });
+    }
+
+    // Sección 3: Sumideros
+    let totalSumArea = 0;
+    const sumRows = [];
+    (sumLat || []).forEach(s => {
+      const cant = parseFloat(s.cant || 1);
+      const areaUnit = 1.20 * 0.80; // 0.96 m2
+      const subS = cant * areaUnit;
+      totalSumArea += subS;
+      sumRows.push({
+        elem: `Sumidero Lateral (${s.tipo || 'SL'})`,
+        n: cant,
+        l: "1.20",
+        w: "0.80",
+        h: "-",
+        expr: `${cant} UND x (1.20m x 0.80m)`,
+        sub: subS.toFixed(2),
+        u: "m²",
+        nota: "Rotura para caja de captación lateral"
+      });
+    });
+    if (sumRows.length > 0) {
+      sections.push({ title: "3. Sumideros e Imprevistos de Pavimento", rows: sumRows, subtotal: totalSumArea, u: "m²" });
+    }
+
+  // --------------------------------------------------------------------------
+  // 2. EXCAVACIÓN DE ZANJAS Y POZOS (2.01.xx)
+  // --------------------------------------------------------------------------
   } else if (code.startsWith("2.01.01") || code.startsWith("2.01.02")) {
     const isLibre = code.endsWith("01") || code.endsWith("02") || code.endsWith("04") || code.endsWith("05") || code.endsWith("07");
     const factorTipo = (code.includes(".01.01") || code.includes(".01.02") || code.includes(".02.01") || code.includes(".02.02")) ? pT : ((code.includes(".01.04") || code.includes(".01.05") || code.includes(".02.04") || code.includes(".02.05")) ? pG : pR);
     const factorAcarreo = isLibre ? pAL : (1 - pAL);
-    formula = `Vol. Excavación ${item.d} = Σ(Vol. Zanja Tramo + Vol. Zanja Pozo) x % Suelo (${(factorTipo*100).toFixed(0)}%) x % Acarreo (${(factorAcarreo*100).toFixed(0)}%)`;
-    originTitle = `Análisis Elemento por Elemento de Excavación (${(factorTipo*100).toFixed(0)}% Terreno, ${(factorAcarreo*100).toFixed(0)}% Acarreo)`;
+    formula = `Vol. Excavación = [Σ(Vol. Zanja Tramos) + Σ(Vol. Zanja Pozos) + Σ(Vol. Sumideros) + Σ(Vol. Acometidas)] x % Terreno (${(factorTipo*100).toFixed(0)}%) x % Acarreo (${(factorAcarreo*100).toFixed(0)}%)`;
+    originTitle = `Análisis de Excavación por Rango - Ítem ${code} (${item.d})`;
 
-    // Detalle por Tramo
+    // Sección 1: Tramos
+    const tramoExcRows = [];
+    let subTramosExc = 0;
     (T || []).forEach(t => {
       if (t.sep) return;
       const L = parseFloat(t.L || t.longitud || 0);
@@ -61,92 +121,180 @@ export function getItemAnalyticalBreakdown(item, data = {}) {
       const profS = parseFloat(t.profS || t.H_fin || 1.5);
       const profProm = (profE + profS) / 2;
       const diamMM = parseFloat(t.diametroCom || t.diametro || 200);
-      const anchoZanja = (diamMM / 1000) + 0.60; // Ancho zanja = D + 0.60m
-      const volBruto = L * anchoZanja * profProm;
+      const W = (diamMM / 1000) + 0.60;
+      const volBruto = L * W * profProm;
       const volPonderado = volBruto * factorTipo * factorAcarreo;
+      subTramosExc += volPonderado;
 
-      if (volPonderado > 0) {
-        details.push({
-          elemento: `Tramo ${t.de} -> ${t.a}`,
-          expresion: `${L.toFixed(2)}m x ${anchoZanja.toFixed(2)}m x ${profProm.toFixed(2)}m (Prof)`,
-          cantidad: volPonderado.toFixed(2),
-          unidad: "m³",
-          nota: `Vol. Bruto: ${volBruto.toFixed(2)}m³ | Suelo: ${(factorTipo*100).toFixed(0)}%`
-        });
-      }
+      tramoExcRows.push({
+        elem: `Tramo ${t.de} -> ${t.a}`,
+        n: 1,
+        l: L.toFixed(2),
+        w: W.toFixed(2),
+        h: profProm.toFixed(2),
+        expr: `${L.toFixed(2)}m x ${W.toFixed(2)}m x ${profProm.toFixed(2)}m (H)`,
+        sub: volPonderado.toFixed(2),
+        u: "m³",
+        nota: `Vol. Bruto: ${volBruto.toFixed(2)}m³ | %Suelo: ${(factorTipo*100).toFixed(0)}%`
+      });
     });
+    if (tramoExcRows.length > 0) {
+      sections.push({ title: "1. Excavación Zanjas Tramos de Red Principal", rows: tramoExcRows, subtotal: subTramosExc, u: "m³" });
+    }
 
-    // Detalle por Pozo
+    // Sección 2: Pozos
+    const pozExcRows = [];
+    let subPozExc = 0;
     if (ep2 && ep2.pz) {
       ep2.pz.forEach(pz => {
         if (pz.isRemodelar) return;
         const prof = parseFloat(pz.prof || 1.5);
         const DE_EXC = (pz.DI || 1.20) + 2 * (pz.ESP || 0.26) + 0.22;
-        const volBrutoPz = Math.PI * Math.pow(DE_EXC / 2, 2) * (prof + 0.20);
+        const H_exc = prof + 0.20;
+        const volBrutoPz = Math.PI * Math.pow(DE_EXC / 2, 2) * H_exc;
         const volPzPonderado = volBrutoPz * factorTipo * factorAcarreo;
+        subPozExc += volPzPonderado;
 
-        if (volPzPonderado > 0) {
-          details.push({
-            elemento: `Pozo Excavación ${pz.nodo}`,
-            expresion: `π x (${(DE_EXC/2).toFixed(2)}m)² x ${(prof + 0.20).toFixed(2)}m (H_exc)`,
-            cantidad: volPzPonderado.toFixed(2),
-            unidad: "m³",
-            nota: `DE_exc=${DE_EXC.toFixed(2)}m | Prof=${prof.toFixed(2)}m`
-          });
-        }
+        pozExcRows.push({
+          elem: `Pozo ${pz.nodo}`,
+          n: 1,
+          l: DE_EXC.toFixed(2),
+          w: DE_EXC.toFixed(2),
+          h: H_exc.toFixed(2),
+          expr: `π x (${(DE_EXC/2).toFixed(2)}m)² x ${H_exc.toFixed(2)}m`,
+          sub: volPzPonderado.toFixed(2),
+          u: "m³",
+          nota: `DE_exc=${DE_EXC.toFixed(2)}m | Prof=${prof.toFixed(2)}m`
+        });
+      });
+    }
+    if (pozExcRows.length > 0) {
+      sections.push({ title: "2. Excavación para Pozos de Inspección", rows: pozExcRows, subtotal: subPozExc, u: "m³" });
+    }
+
+    // Sección 3: Acometidas
+    if (nAc > 0) {
+      const volBrutoAcom = nAc * (largoAco - (P.anchoAnden||1.0)) * 0.56 * 1.50;
+      const volAcomPonderado = volBrutoAcom * factorTipo * factorAcarreo;
+      sections.push({
+        title: "3. Excavación Zanja Acometidas Domiciliarias",
+        rows: [{
+          elem: "Zanjas Acometidas",
+          n: nAc,
+          l: (largoAco - (P.anchoAnden||1.0)).toFixed(2),
+          w: "0.56",
+          h: "1.50",
+          expr: `${nAc} Acom. x ${(largoAco - (P.anchoAnden||1.0)).toFixed(2)}m x 0.56m x 1.50m`,
+          sub: volAcomPonderado.toFixed(2),
+          u: "m³",
+          nota: `Vol. Bruto: ${volBrutoAcom.toFixed(2)}m³`
+        }],
+        subtotal: volAcomPonderado,
+        u: "m³"
       });
     }
 
-  // 3. TUBERÍAS POR DIÁMETRO
+  // --------------------------------------------------------------------------
+  // 3. TUBERÍAS POR DIÁMETRO (3.02.02.xx)
+  // --------------------------------------------------------------------------
   } else if (code.startsWith("3.02.02")) {
-    formula = `Longitud Tubería ${item.d} = Σ(Longitud de Tramo en ${item.d}) x Factor Desperdicio (1 + ${(P.porcDesperdicio||0)*100}%)`;
-    originTitle = `Desglose Tramo por Tramo de Tubería ${item.d}`;
+    formula = `Longitud Tubería ${item.d} = [Σ(Longitud Tramos) + Σ(Longitud Conexiones Sumideros)] x Factor Desperdicio (1 + ${(P.porcDesperdicio||0)*100}%)`;
+    originTitle = `Desglose Detallado de Tubería - Ítem ${code} (${item.d})`;
 
-    const tramosTub = (T || []).filter(t => !t.sep);
-    tramosTub.forEach(t => {
-      const dNom = String(t.diametroCom || t.diametro || "200").trim();
+    // Sección 1: Tramos
+    const tramoTubRows = [];
+    let subtotalTubTramos = 0;
+    (T || []).filter(t => !t.sep).forEach(t => {
       const L = parseFloat(t.L || t.longitud || 0);
-      const L_conDesp = L * fD;
+      const L_desp = L * fD;
+      subtotalTubTramos += L_desp;
 
-      if (L > 0) {
-        details.push({
-          elemento: `Tramo ${t.de} -> ${t.a}`,
-          expresion: `${L.toFixed(2)} m x ${fD.toFixed(2)} (fD)`,
-          cantidad: L_conDesp.toFixed(2),
-          unidad: "m",
-          nota: `Diámetro: ${dNom} mm | Material: ${t.material || "PVC"}`
-        });
-      }
+      tramoTubRows.push({
+        elem: `Tramo ${t.de} -> ${t.a}`,
+        n: 1,
+        l: L.toFixed(2),
+        w: "-",
+        h: "-",
+        expr: `${L.toFixed(2)}m x ${fD.toFixed(2)} (fD)`,
+        sub: L_desp.toFixed(2),
+        u: "m",
+        nota: `Material: ${t.material || "PVC"} | Diámetro: ${t.diametroCom || t.diametro || 200}mm`
+      });
     });
+    if (tramoTubRows.length > 0) {
+      sections.push({ title: "1. Colectores Red Principal", rows: tramoTubRows, subtotal: subtotalTubTramos, u: "m" });
+    }
 
-  // 4. CONCRETO DE POZOS Y ESTRUCTURAS
+    // Sección 2: Conexiones Sumideros
+    const sumTubRows = [];
+    let subtotalTubSum = 0;
+    (sumLat || []).forEach(s => {
+      const cant = parseFloat(s.cant || 1);
+      const L_conn = parseFloat(s.longitud || s.L || 4.5);
+      const L_total = cant * L_conn * fD;
+      subtotalTubSum += L_total;
+
+      sumTubRows.push({
+        elem: `Conexión Sumidero ${s.tipo || 'SL'}`,
+        n: cant,
+        l: L_conn.toFixed(2),
+        w: "-",
+        h: "-",
+        expr: `${cant} UND x ${L_conn.toFixed(2)}m x ${fD.toFixed(2)} (fD)`,
+        sub: L_total.toFixed(2),
+        u: "m",
+        nota: "Tubería de acometida desde sumidero a pozo"
+      });
+    });
+    if (sumTubRows.length > 0) {
+      sections.push({ title: "2. Tuberías de Conexión de Sumideros", rows: sumTubRows, subtotal: subtotalTubSum, u: "m" });
+    }
+
+  // --------------------------------------------------------------------------
+  // 4. CONCRETO DE POZOS 4000 PSI (4.01.01.01)
+  // --------------------------------------------------------------------------
   } else if (code === "4.01.01.01") {
-    formula = `Concreto Reforzado 4000 PSI = Σ(Volumen Paredes + Solera + Cúpula por Pozo Nuevo) x (1 + Desperdicio)`;
-    originTitle = "Análisis Detallado Pozo por Pozo de Concreto Reforzado";
+    formula = `Concreto Reforzado 4000 PSI = Σ(Volumen Paredes + Solera Fondo + Cúpula Corona por Pozo) x Desperdicio`;
+    originTitle = "Análisis Pozo por Pozo de Concreto Reforzado 4000 PSI";
 
+    const pozConcRows = [];
+    let subtotalConcPoz = 0;
     if (ep2 && ep2.pz) {
       ep2.pz.forEach(pz => {
         if (pz.pozoNuevo === "S" && !pz.isRemodelar) {
           const prof = parseFloat(pz.prof || 1.5);
-          const volConcPz = parseFloat(pz.volConc || 0);
-          const volConDesp = volConcPz * fD;
+          const volBrutoPz = parseFloat(pz.volConc || 0);
+          const volFinalPz = volBrutoPz * fD;
+          subtotalConcPoz += volFinalPz;
 
-          details.push({
-            elemento: `Pozo ${pz.nodo}`,
-            expresion: `H_conc=${pz.hConc}m, Vol Pared+Base+Tapa`,
-            cantidad: volConDesp.toFixed(2),
-            unidad: "m³",
+          pozConcRows.push({
+            elem: `Pozo ${pz.nodo}`,
+            n: 1,
+            l: (pz.DI||1.20).toFixed(2),
+            w: (pz.DE||1.72).toFixed(2),
+            h: prof.toFixed(2),
+            expr: `(${volBrutoPz.toFixed(2)}m³ Pared+Base+Tapa) x ${fD.toFixed(2)}`,
+            sub: volFinalPz.toFixed(2),
+            u: "m³",
             nota: `Profundidad: ${prof.toFixed(2)}m | Tipo: ${pz.tipoPozo}`
           });
         }
       });
     }
+    if (pozConcRows.length > 0) {
+      sections.push({ title: "1. Estructuras de Pozos de Inspección Nuevos", rows: pozConcRows, subtotal: subtotalConcPoz, u: "m³" });
+    }
 
-  // 5. DEMOLICIÓN DE POZOS Y ESTRUCTURAS DE CONCRETO
+  // --------------------------------------------------------------------------
+  // 5. DEMOLICIÓN DE ESTRUCTURAS EN CONCRETO (5.01.03.02)
+  // --------------------------------------------------------------------------
   } else if (code === "5.01.03.02") {
     formula = `Demolición Concreto = Σ(Anillo Tubular Pozo Existente: π x ((DE/2)² - (DI/2)²) x Prof) + Demoliciones Urbanismo`;
-    originTitle = "Análisis Pozo por Pozo de Volumen de Demolición Tubular";
+    originTitle = "Análisis Pozo por Pozo y Tramo por Tramo de Demolición de Concreto";
 
+    // Sección 1: Pozos Existentes a Demoler
+    const pozDemRows = [];
+    let subtotalDemPoz = 0;
     if (ep2 && ep2.pz) {
       ep2.pz.forEach(pz => {
         const prof = parseFloat(pz.prof || 1.5);
@@ -155,37 +303,64 @@ export function getItemAnalyticalBreakdown(item, data = {}) {
         const DE = DI + 2 * ESP; // 1.72m
         const areaTubular = Math.PI * (Math.pow(DE / 2, 2) - Math.pow(DI / 2, 2)); // 1.1926 m2
         const volDemPz = areaTubular * prof;
+        subtotalDemPoz += volDemPz;
 
-        details.push({
-          elemento: `Pozo Demolición ${pz.nodo}`,
-          expresion: `Area Anillo (${areaTubular.toFixed(4)} m²) x ${prof.toFixed(2)}m (Prof)`,
-          cantidad: volDemPz.toFixed(2),
-          unidad: "m³",
+        pozDemRows.push({
+          elem: `Pozo Existente ${pz.nodo}`,
+          n: 1,
+          l: DI.toFixed(2),
+          w: DE.toFixed(2),
+          h: prof.toFixed(2),
+          expr: `${areaTubular.toFixed(4)} m² (Anillo) x ${prof.toFixed(2)}m (H)`,
+          sub: volDemPz.toFixed(2),
+          u: "m³",
           nota: `Estructura Tubular DI=${DI}m, ESP=${ESP}m, DE=${DE}m`
         });
       });
     }
+    if (pozDemRows.length > 0) {
+      sections.push({ title: "1. Demolición de Pozos Existentes (Estructura Tubular)", rows: pozDemRows, subtotal: subtotalDemPoz, u: "m³" });
+    }
 
+    // Sección 2: Urbanismo Demoliciones
     if (urbanismoData && urbanismoData.length > 0) {
+      const urbRows = [];
+      let subtotalUrbDem = 0;
       urbanismoData.forEach(u => {
         if (u.reqUrbanismo && u.pavEspesorDem > 0) {
-          const volUrb = (u.pavL || 0) * (u.ancho || 6) * u.pavEspesorDem;
-          details.push({
-            elemento: `Demolición Urbanismo Tramo ${u.id}`,
-            expresion: `${(u.pavL||0).toFixed(2)}m x ${(u.ancho||6).toFixed(2)}m x ${(u.pavEspesorDem).toFixed(2)}m`,
-            cantidad: volUrb.toFixed(2),
-            unidad: "m³",
-            nota: "Demolición de losas y estructuras en urbanismo"
+          const L = parseFloat(u.pavL || 0);
+          const W = parseFloat(u.ancho || 6.0);
+          const H = parseFloat(u.pavEspesorDem || 0.15);
+          const volUrb = L * W * H;
+          subtotalUrbDem += volUrb;
+
+          urbRows.push({
+            elem: `Demolición Urbanismo Tramo ${u.id}`,
+            n: 1,
+            l: L.toFixed(2),
+            w: W.toFixed(2),
+            h: H.toFixed(2),
+            expr: `${L.toFixed(2)}m x ${W.toFixed(2)}m x ${H.toFixed(2)}m`,
+            sub: volUrb.toFixed(2),
+            u: "m³",
+            nota: "Demolición de pavimentos y estructuras en urbanismo"
           });
         }
       });
+      if (urbRows.length > 0) {
+        sections.push({ title: "2. Demolición de Estructuras en Urbanismo", rows: urbRows, subtotal: subtotalUrbDem, u: "m³" });
+      }
     }
 
-  // 6. REMODELACIÓN DE POZOS (5.02.01)
+  // --------------------------------------------------------------------------
+  // 6. REMODELACIÓN DE POZOS (5.02.01.xx)
+  // --------------------------------------------------------------------------
   } else if (code.startsWith("5.02.01")) {
-    formula = `Pozos a Remodelar ${item.d} = Listado Individual de Pozos Seleccionados con Check 'Remodelar'`;
+    formula = `Pozos a Remodelar ${item.d} = Lista de Pozos Marcados con Check 'Remodelar' en Cantidades Pozos`;
     originTitle = "Análisis Pozo por Pozo de Pozos Marcados para Remodelación";
 
+    const pozRemRows = [];
+    let subtotalRemPoz = 0;
     if (ep2 && ep2.pz) {
       ep2.pz.forEach(pz => {
         if (pz.isRemodelar) {
@@ -195,28 +370,51 @@ export function getItemAnalyticalBreakdown(item, data = {}) {
           else if (prof > 2.0) itemCodePz = "5.02.01.02";
 
           if (itemCodePz === code) {
-            details.push({
-              elemento: `Pozo Remodelar ${pz.nodo}`,
-              expresion: `Profundidad ${prof.toFixed(2)} m (Rango: ${item.d})`,
-              cantidad: 1,
-              unidad: "UND",
-              nota: "Pozo existente conservado y adaptado en obra"
+            subtotalRemPoz += 1;
+            pozRemRows.push({
+              elem: `Pozo Remodelar ${pz.nodo}`,
+              n: 1,
+              l: (pz.DI||1.20).toFixed(2),
+              w: (pz.DE||1.72).toFixed(2),
+              h: prof.toFixed(2),
+              expr: `Profundidad: ${prof.toFixed(2)} m`,
+              sub: 1,
+              u: "UND",
+              nota: "Pozo adaptado y excluido de cantidades de obra nueva"
             });
           }
         }
       });
     }
+    if (pozRemRows.length > 0) {
+      sections.push({ title: `1. Listado de Pozos a Remodelar (${item.d})`, rows: pozRemRows, subtotal: subtotalRemPoz, u: "UND" });
+    }
 
+  // --------------------------------------------------------------------------
   // 7. OTROS ÍTEMS GENERALES
+  // --------------------------------------------------------------------------
   } else {
-    formula = `Cantidad Analizada = Consolidado de elementos hidráulicos y de obra`;
+    formula = `Cantidad Analizada = Parámetros de obra e ingeniería consolidada`;
     originTitle = `Análisis de Cantidad de Obra - ${item.d}`;
-    details = [
-      { elemento: item.d, expresion: `${q.toFixed(2)} ${unit}`, cantidad: q.toFixed(2), unidad: unit, nota: "Inyectado directamente al Presupuesto Oficial" }
-    ];
+    sections.push({
+      title: "1. Componentes Principales del Ítem",
+      rows: [{
+        elem: item.d,
+        n: 1,
+        l: "-",
+        w: "-",
+        h: "-",
+        expr: `${q.toFixed(2)} ${unit}`,
+        sub: q.toFixed(2),
+        u: unit,
+        nota: "Cantidad inyectada directamente al Presupuesto Oficial"
+      }],
+      subtotal: q,
+      u: unit
+    });
   }
 
-  return { formula, originTitle, details };
+  return { formula, originTitle, sections };
 }
 
 export default function ResumenCantidadesTab(props) {
@@ -287,10 +485,10 @@ export default function ResumenCantidadesTab(props) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '16px', borderBottom: '1px solid #1e293b', paddingBottom: '16px' }}>
         <div>
           <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 800, color: '#38bdf8', display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span>📋</span> Cantidades de Obra - Análisis Detallado Elemento por Elemento
+            <span>📋</span> Cantidades de Obra - Cuadro Analítico Detallado (Villanueva / Comuneros)
           </h1>
           <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#94a3b8' }}>
-            Informe analítico detallado tramo por tramo, pozo por pozo y sumidero por sumidero (Sin Valores Monetarios)
+            Planilla de Cantidades de Obra por Tramo, Pozo, Acometida y Sumidero con dimensiones físicas y expresiones geométricas (Sin Precios)
           </p>
         </div>
 
@@ -402,48 +600,73 @@ export default function ResumenCantidadesTab(props) {
                     </td>
                   </tr>
 
-                  {/* VISTA DESPLEGABLE DE ANÁLISIS DE SOPORTE */}
+                  {/* VISTA DESPLEGABLE DE ANÁLISIS MULTI-SECCIÓN (FORMATO P2 VILLANUEVA / COMUNEROS) */}
                   {isExpanded && (
                     <tr style={{ backgroundColor: '#070c18' }}>
                       <td colSpan="5" style={{ padding: '16px 24px', borderBottom: '2px solid #1e293b' }}>
-                        <div style={{ backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '10px', padding: '16px' }}>
+                        <div style={{ backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '10px', padding: '18px' }}>
                           
-                          {/* TÍTULO Y FÓRMULA */}
-                          <div style={{ marginBottom: '14px' }}>
-                            <div style={{ fontSize: '12px', fontWeight: 700, color: '#38bdf8', textTransform: 'uppercase' }}>
-                              📌 Soporte y Origen: {bk.originTitle}
+                          {/* HEADER & FÓRMULA MATEMÁTICA */}
+                          <div style={{ marginBottom: '16px' }}>
+                            <div style={{ fontSize: '13px', fontWeight: 800, color: '#38bdf8', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                              📌 {bk.originTitle}
                             </div>
                             <div style={{ marginTop: '6px', fontSize: '12px', fontFamily: 'monospace', backgroundColor: '#050a15', padding: '10px 14px', borderRadius: '6px', color: '#f59e0b', border: '1px solid #1e293b' }}>
-                              Fórmula: {bk.formula}
+                              Fórmula General: {bk.formula}
                             </div>
                           </div>
 
-                          {/* TABLA DE COMPONENTES DE ORIGEN DETALLADA ELEMENTO POR ELEMENTO */}
-                          <div style={{ overflowX: 'auto', maxHeight: '400px', overflowY: 'auto' }}>
-                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
-                              <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
-                                <tr style={{ backgroundColor: '#1e293b', color: '#94a3b8' }}>
-                                  <th style={{ padding: '8px 12px' }}>Elemento / Tramo / Pozo</th>
-                                  <th style={{ padding: '8px 12px' }}>Expresión / Dimensión Geométrica</th>
-                                  <th style={{ padding: '8px 12px', textAlign: 'right' }}>Subtotal Cantidad</th>
-                                  <th style={{ padding: '8px 12px', textAlign: 'center' }}>Unidad</th>
-                                  <th style={{ padding: '8px 12px' }}>Criterio y Parámetros Técnicos</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {bk.details.map((d, dIdx) => (
-                                  <tr key={dIdx} style={{ borderBottom: '1px solid #1e293b' }}>
-                                    <td style={{ padding: '8px 12px', fontWeight: 600, color: '#f1f5f9' }}>{d.elemento}</td>
-                                    <td style={{ padding: '8px 12px', color: '#cbd5e1', fontFamily: 'monospace' }}>{d.expresion || "-"}</td>
-                                    <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, color: '#38bdf8' }}>
-                                      {typeof d.cantidad === 'number' ? d.cantidad.toLocaleString("es-CO", { maximumFractionDigits: 2 }) : d.cantidad}
-                                    </td>
-                                    <td style={{ padding: '8px 12px', textAlign: 'center', color: '#94a3b8' }}>{d.unidad}</td>
-                                    <td style={{ padding: '8px 12px', color: '#64748b', fontSize: '11px' }}>{d.nota}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
+                          {/* SECCIONES DETALLADAS POR TRAMOS, ACOMETIDAS, POZOS Y SUMIDEROS */}
+                          {bk.sections.map((sec, secIdx) => (
+                            <div key={secIdx} style={{ marginBottom: '20px' }}>
+                              <div style={{ fontSize: '12px', fontWeight: 700, color: '#f1f5f9', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #334155', paddingBottom: '4px' }}>
+                                <span>{sec.title}</span>
+                                <span style={{ color: '#38bdf8' }}>Subtotal Sección: {sec.subtotal.toLocaleString("es-CO", { maximumFractionDigits: 2 })} {sec.u}</span>
+                              </div>
+
+                              <div style={{ overflowX: 'auto', maxHeight: '350px', overflowY: 'auto' }}>
+                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
+                                  <thead style={{ position: 'sticky', top: 0, zIndex: 2 }}>
+                                    <tr style={{ backgroundColor: '#1e293b', color: '#94a3b8', fontSize: '11px' }}>
+                                      <th style={{ padding: '8px 10px', width: '30px', textAlign: 'center' }}>#</th>
+                                      <th style={{ padding: '8px 10px' }}>Identificador / Elemento</th>
+                                      <th style={{ padding: '8px 10px', textAlign: 'center' }}>Cant. (N°)</th>
+                                      <th style={{ padding: '8px 10px', textAlign: 'right' }}>Long. L (m)</th>
+                                      <th style={{ padding: '8px 10px', textAlign: 'right' }}>Ancho W (m)</th>
+                                      <th style={{ padding: '8px 10px', textAlign: 'right' }}>Prof. H (m)</th>
+                                      <th style={{ padding: '8px 10px' }}>Expresión / Dimensión</th>
+                                      <th style={{ padding: '8px 10px', textAlign: 'right' }}>Subtotal Cantidad</th>
+                                      <th style={{ padding: '8px 10px', textAlign: 'center' }}>Unidad</th>
+                                      <th style={{ padding: '8px 10px' }}>Criterio y Nota Técnica</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {sec.rows.map((r, rIdx) => (
+                                      <tr key={rIdx} style={{ borderBottom: '1px solid #1e293b', backgroundColor: rIdx % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)' }}>
+                                        <td style={{ padding: '6px 10px', textAlign: 'center', color: '#64748b' }}>{rIdx + 1}</td>
+                                        <td style={{ padding: '6px 10px', fontWeight: 600, color: '#f1f5f9' }}>{r.elem}</td>
+                                        <td style={{ padding: '6px 10px', textAlign: 'center', color: '#cbd5e1' }}>{r.n || 1}</td>
+                                        <td style={{ padding: '6px 10px', textAlign: 'right', color: '#cbd5e1', fontFamily: 'monospace' }}>{r.l || "-"}</td>
+                                        <td style={{ padding: '6px 10px', textAlign: 'right', color: '#cbd5e1', fontFamily: 'monospace' }}>{r.w || "-"}</td>
+                                        <td style={{ padding: '6px 10px', textAlign: 'right', color: '#cbd5e1', fontFamily: 'monospace' }}>{r.h || "-"}</td>
+                                        <td style={{ padding: '6px 10px', color: '#f59e0b', fontFamily: 'monospace' }}>{r.expr || "-"}</td>
+                                        <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 700, color: '#38bdf8' }}>
+                                          {typeof r.sub === 'number' ? r.sub.toLocaleString("es-CO", { maximumFractionDigits: 2 }) : r.sub}
+                                        </td>
+                                        <td style={{ padding: '6px 10px', textAlign: 'center', color: '#94a3b8' }}>{r.u}</td>
+                                        <td style={{ padding: '6px 10px', color: '#64748b', fontSize: '11px' }}>{r.nota}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          ))}
+
+                          {/* RESUMEN TOTAL ÍTEM */}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#050a15', padding: '12px 16px', borderRadius: '8px', border: '1px solid #1e293b', marginTop: '12px' }}>
+                            <span style={{ fontWeight: 700, color: '#f1f5f9', fontSize: '13px' }}>TOTAL CANTIDAD ANALIZADA PARA EL ÍTEM {it.c}:</span>
+                            <span style={{ fontWeight: 800, color: '#10b981', fontSize: '16px' }}>{it.q.toLocaleString("es-CO", { maximumFractionDigits: 2 })} {it.u || "UND"}</span>
                           </div>
 
                         </div>
