@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 
 export default function StartLoginPortal({ onGuestAccess }) {
-  const { login, register, isCloudConfigured } = useAuth();
-  const [tab, setTab] = useState('login'); // 'login' | 'register'
+  const { login, register, loginAsAdmin, isCloudConfigured } = useAuth();
+  const [tab, setTab] = useState('login'); // 'login' | 'register' | 'admin'
 
   // Form State
   const [email, setEmail] = useState('');
@@ -11,6 +11,7 @@ export default function StartLoginPortal({ onGuestAccess }) {
   const [fullName, setFullName] = useState('');
   const [cedula, setCedula] = useState('');
   const [company, setCompany] = useState('');
+  const [adminPass, setAdminPass] = useState('ADMIN2026');
 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -23,7 +24,10 @@ export default function StartLoginPortal({ onGuestAccess }) {
     setLoading(true);
 
     try {
-      if (tab === 'register') {
+      if (tab === 'admin') {
+        loginAsAdmin(adminPass);
+        setSuccessMsg('¡Modo Super Admin Activado! Acceso Total Pro desbloqueado.');
+      } else if (tab === 'register') {
         if (!email || !password || !fullName) {
           throw new Error('Por favor complete los campos obligatorios (*).');
         }
@@ -40,6 +44,14 @@ export default function StartLoginPortal({ onGuestAccess }) {
       setErrorMsg(err.message || 'Error al procesar la solicitud.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleQuickAdminBypass = () => {
+    try {
+      loginAsAdmin('ADMIN2026');
+    } catch (e) {
+      console.error(e);
     }
   };
 
@@ -100,7 +112,7 @@ export default function StartLoginPortal({ onGuestAccess }) {
           </div>
         </div>
 
-        {/* Columna Derecha: Tarjeta de Login / Registro */}
+        {/* Columna Derecha: Tarjeta de Login / Registro / Admin */}
         <div style={authCardContainerStyle}>
           <div style={authCardStyle}>
             
@@ -114,7 +126,7 @@ export default function StartLoginPortal({ onGuestAccess }) {
                   ...(tab === 'login' ? activeTabBtnStyle : {})
                 }}
               >
-                🔑 Iniciar Sesión
+                🔑 Login
               </button>
               <button
                 type="button"
@@ -124,13 +136,23 @@ export default function StartLoginPortal({ onGuestAccess }) {
                   ...(tab === 'register' ? activeTabBtnStyle : {})
                 }}
               >
-                📝 Registro Ingeniero
+                📝 Registro
+              </button>
+              <button
+                type="button"
+                onClick={() => { setTab('admin'); setErrorMsg(''); setSuccessMsg(''); }}
+                style={{
+                  ...tabBtnStyle,
+                  ...(tab === 'admin' ? activeTabBtnStyle : {})
+                }}
+              >
+                🔐 Admin
               </button>
             </div>
 
             {!isCloudConfigured && (
               <div style={localBadgeStyle}>
-                💡 <strong>Modo Demo / Local Activo:</strong> Puedes iniciar sesión o registrarte libremente para probar todas las funciones.
+                💡 <strong>Modo Local:</strong> Puedes ingresar libremente como Administrador o Usuario.
               </div>
             )}
 
@@ -138,6 +160,23 @@ export default function StartLoginPortal({ onGuestAccess }) {
             {successMsg && <div style={successStyle}>{successMsg}</div>}
 
             <form onSubmit={handleSubmit} style={formStyle}>
+              {tab === 'admin' && (
+                <div>
+                  <label style={labelStyle}>Clave Maestra de Administrador *</label>
+                  <input
+                    type="password"
+                    placeholder="ADMIN2026"
+                    value={adminPass}
+                    onChange={(e) => setAdminPass(e.target.value)}
+                    style={inputStyle}
+                    required
+                  />
+                  <small style={{ color: '#94a3b8', fontSize: '0.72rem', marginTop: '4px', display: 'block' }}>
+                    Clave por defecto: <code>ADMIN2026</code> o <code>123456</code> (Acceso Total Pro Sin Restricciones)
+                  </small>
+                </div>
+              )}
+
               {tab === 'register' && (
                 <>
                   <div>
@@ -176,29 +215,33 @@ export default function StartLoginPortal({ onGuestAccess }) {
                 </>
               )}
 
-              <div>
-                <label style={labelStyle}>Correo Electrónico *</label>
-                <input
-                  type="email"
-                  placeholder="ingeniero@amcaudales.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  style={inputStyle}
-                  required
-                />
-              </div>
+              {tab !== 'admin' && (
+                <>
+                  <div>
+                    <label style={labelStyle}>Correo Electrónico *</label>
+                    <input
+                      type="email"
+                      placeholder="ingeniero@amcaudales.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      style={inputStyle}
+                      required
+                    />
+                  </div>
 
-              <div>
-                <label style={labelStyle}>Contraseña *</label>
-                <input
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  style={inputStyle}
-                  required
-                />
-              </div>
+                  <div>
+                    <label style={labelStyle}>Contraseña *</label>
+                    <input
+                      type="password"
+                      placeholder="••••••••"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      style={inputStyle}
+                      required
+                    />
+                  </div>
+                </>
+              )}
 
               <button
                 type="submit"
@@ -211,6 +254,8 @@ export default function StartLoginPortal({ onGuestAccess }) {
               >
                 {loading
                   ? 'Verificando...'
+                  : tab === 'admin'
+                  ? 'Entrar como Super Admin Pro'
                   : tab === 'register'
                   ? 'Registrar Cuenta de Ingeniero'
                   : 'Ingresar al Sistema'}
@@ -218,15 +263,23 @@ export default function StartLoginPortal({ onGuestAccess }) {
             </form>
 
             <div style={dividerStyle}>
-              <span style={dividerTextStyle}>o también</span>
+              <span style={dividerTextStyle}>Acceso Rápido Maestro</span>
             </div>
+
+            <button
+              type="button"
+              onClick={handleQuickAdminBypass}
+              style={adminQuickBtnStyle}
+            >
+              👑 Entrar Directamente como Super Admin (Bypass Total)
+            </button>
 
             <button
               type="button"
               onClick={onGuestAccess}
               style={guestBtnStyle}
             >
-              🚀 Ingresar Directamente como Invitado / Modo Demo
+              🚀 Modo Invitado Demo
             </button>
           </div>
         </div>
@@ -236,7 +289,7 @@ export default function StartLoginPortal({ onGuestAccess }) {
   );
 }
 
-// Estilos Portal de Inicio (Modern Glassmorphism Dark Mode)
+// Estilos Portal de Inicio
 const pageContainerStyle = {
   minHeight: '100vh',
   backgroundColor: '#050a15',
@@ -358,7 +411,7 @@ const authCardStyle = {
   padding: '30px',
   display: 'flex',
   flexDirection: 'column',
-  gap: '18px'
+  gap: '14px'
 };
 
 const tabContainerStyle = {
@@ -371,12 +424,12 @@ const tabContainerStyle = {
 
 const tabBtnStyle = {
   flex: 1,
-  padding: '10px',
+  padding: '8px 4px',
   backgroundColor: 'transparent',
   border: 'none',
   borderRadius: '8px',
   color: '#94a3b8',
-  fontSize: '0.85rem',
+  fontSize: '0.82rem',
   fontWeight: '600',
   cursor: 'pointer',
   transition: 'all 0.2s ease'
@@ -392,9 +445,9 @@ const localBadgeStyle = {
   backgroundColor: 'rgba(234, 179, 8, 0.12)',
   border: '1px solid rgba(234, 179, 8, 0.3)',
   color: '#facc15',
-  padding: '10px',
+  padding: '8px 12px',
   borderRadius: '8px',
-  fontSize: '0.8rem',
+  fontSize: '0.78rem',
   lineHeight: '1.4'
 };
 
@@ -402,7 +455,7 @@ const errorStyle = {
   backgroundColor: 'rgba(239, 68, 68, 0.15)',
   border: '1px solid rgba(239, 68, 68, 0.4)',
   color: '#f87171',
-  padding: '10px',
+  padding: '8px 12px',
   borderRadius: '8px',
   fontSize: '0.82rem'
 };
@@ -411,7 +464,7 @@ const successStyle = {
   backgroundColor: 'rgba(34, 197, 94, 0.15)',
   border: '1px solid rgba(34, 197, 94, 0.4)',
   color: '#4ade80',
-  padding: '10px',
+  padding: '8px 12px',
   borderRadius: '8px',
   fontSize: '0.82rem'
 };
@@ -419,39 +472,39 @@ const successStyle = {
 const formStyle = {
   display: 'flex',
   flexDirection: 'column',
-  gap: '14px'
+  gap: '12px'
 };
 
 const labelStyle = {
   display: 'block',
-  fontSize: '0.8rem',
+  fontSize: '0.78rem',
   fontWeight: '600',
   color: '#cbd5e1',
-  marginBottom: '6px'
+  marginBottom: '4px'
 };
 
 const inputStyle = {
   width: '100%',
-  padding: '11px 14px',
+  padding: '10px 12px',
   backgroundColor: '#030712',
   border: '1px solid #1f2937',
   borderRadius: '8px',
   color: '#ffffff',
-  fontSize: '0.9rem',
+  fontSize: '0.88rem',
   outline: 'none',
   boxSizing: 'border-box'
 };
 
 const submitBtnStyle = {
   width: '100%',
-  padding: '12px',
-  marginTop: '6px',
+  padding: '11px',
+  marginTop: '4px',
   backgroundColor: '#2563eb',
   backgroundImage: 'linear-gradient(135deg, #00c6ff 0%, #0072ff 100%)',
   border: 'none',
   borderRadius: '8px',
   color: '#ffffff',
-  fontSize: '0.95rem',
+  fontSize: '0.9rem',
   fontWeight: '600',
   boxShadow: '0 4px 16px rgba(0, 114, 255, 0.4)'
 };
@@ -460,24 +513,38 @@ const dividerStyle = {
   textAlign: 'center',
   borderBottom: '1px solid #1f2937',
   lineHeight: '0.1em',
-  margin: '10px 0 6px 0'
+  margin: '6px 0'
 };
 
 const dividerTextStyle = {
   backgroundColor: '#111827',
   padding: '0 10px',
   color: '#64748b',
-  fontSize: '0.75rem'
+  fontSize: '0.72rem'
+};
+
+const adminQuickBtnStyle = {
+  width: '100%',
+  padding: '11px',
+  backgroundColor: '#f59e0b',
+  backgroundImage: 'linear-gradient(135deg, #fbbf24 0%, #d97706 100%)',
+  border: 'none',
+  borderRadius: '8px',
+  color: '#0f172a',
+  fontSize: '0.85rem',
+  fontWeight: '700',
+  cursor: 'pointer',
+  boxShadow: '0 4px 14px rgba(245, 158, 11, 0.3)'
 };
 
 const guestBtnStyle = {
   width: '100%',
-  padding: '10px',
+  padding: '9px',
   backgroundColor: 'rgba(255, 255, 255, 0.05)',
   border: '1px solid rgba(255, 255, 255, 0.1)',
   borderRadius: '8px',
   color: '#cbd5e1',
-  fontSize: '0.85rem',
+  fontSize: '0.82rem',
   fontWeight: '500',
   cursor: 'pointer'
 };

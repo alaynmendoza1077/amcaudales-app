@@ -58,6 +58,32 @@ export function AuthProvider({ children }) {
     localStorage.setItem('amcaudales_user_plan', 'pro');
   };
 
+  // Inicio de Sesión Administrador Maestro (Bypass de Formularios)
+  const loginAsAdmin = (adminKey = '') => {
+    const validKeys = ['ADMIN2026', 'ADMIN', '123456', 'AMCADMIN'];
+    const keyToTest = adminKey.trim().toUpperCase();
+
+    if (adminKey && !validKeys.includes(keyToTest)) {
+      throw new Error('Clave de Administrador Incorrecta.');
+    }
+
+    const adminUser = {
+      id: 'usr_super_admin',
+      email: 'admin@amcaudales.com',
+      user_metadata: {
+        full_name: 'Super Administrador AMC',
+        company: 'AMCaudales Master Control'
+      }
+    };
+
+    localStorage.setItem('amcaudales_user_session', JSON.stringify(adminUser));
+    setUser(adminUser);
+    setUserPlan('pro');
+    localStorage.setItem('amcaudales_user_plan', 'pro');
+    fetchLocalCloudProjects(adminUser.id);
+    return adminUser;
+  };
+
   // Fetch proyectos en Supabase
   const fetchUserProjects = async (userId) => {
     try {
@@ -102,7 +128,6 @@ export function AuthProvider({ children }) {
       if (error) throw error;
       return data;
     } else {
-      // Simulación Local
       const mockUser = {
         id: 'usr_' + Date.now(),
         email,
@@ -125,7 +150,6 @@ export function AuthProvider({ children }) {
       if (error) throw error;
       return data;
     } else {
-      // Simulación Local
       const mockUser = {
         id: 'usr_local',
         email,
@@ -213,6 +237,7 @@ export function AuthProvider({ children }) {
         session,
         userPlan,
         upgradeToPro,
+        loginAsAdmin,
         loading,
         cloudProjects,
         register,
