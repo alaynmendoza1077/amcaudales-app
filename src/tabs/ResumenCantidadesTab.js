@@ -3,8 +3,6 @@ import PTOBASE_DATA from '../ptoBaseData';
 import { calcPozosCompleto, calcCantSumidero, getItemAnalyticalBreakdown } from '../calcHelpers';
 import { exportMemoriaCantidades } from '../exportCantidades';
 
-}
-
 export default function ResumenCantidadesTab(props) {
   const { pbItems = [], R = [], T = [], sumLat = [], sumTrans = [], P = {}, urbanismoData = [] } = props;
 
