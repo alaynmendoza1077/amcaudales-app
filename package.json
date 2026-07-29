@@ -8,6 +8,7 @@
     "@react-leaflet/core": "^2.1.0",
     "@supabase/supabase-js": "^2.39.0",
     "@turf/turf": "^6.5.0",
+    "cross-env": "^7.0.3",
     "dxf-writer": "^1.18.4",
     "exceljs": "^4.4.0",
     "file-saver": "^2.0.5",
@@ -28,7 +29,7 @@
   },
   "scripts": {
     "start": "react-scripts start",
-    "build": "react-scripts build",
+    "build": "cross-env CI=false GENERATE_SOURCEMAP=false DISABLE_ESLINT_PLUGIN=true NODE_OPTIONS=--max-old-space-size=4096 react-scripts build",
     "test": "react-scripts test --env=jsdom",
     "eject": "react-scripts eject"
   },

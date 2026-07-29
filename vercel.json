@@ -1,13 +1,7 @@
 {
   "version": 2,
-  "buildCommand": "react-scripts build",
+  "buildCommand": "npm run build",
   "outputDirectory": "build",
-  "env": {
-    "CI": "false",
-    "DISABLE_ESLINT_PLUGIN": "true",
-    "GENERATE_SOURCEMAP": "false",
-    "NODE_OPTIONS": "--max-old-space-size=4096"
-  },
   "rewrites": [
     {
       "source": "/(.*)",
