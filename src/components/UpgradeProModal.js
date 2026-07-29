@@ -37,7 +37,7 @@ export default function UpgradeProModal({ isOpen, onClose, featureName }) {
             <span>📊</span>
             <div>
               <strong>Hoja Maestra & Presupuesto Banco</strong>
-              <p style={benefitDescStyle}>Exportación oficial Excel con todos los APU y cantidades de obra.</p>
+              <p style={benefitDescStyle}>Exportación oficial Excel con todas las cantidades de obra y presupuestos.</p>
             </div>
           </div>
 

@@ -48,11 +48,11 @@ export default function LandingPage({ onStartTrial, onOpenExpress, onOpenLogin, 
           </div>
           <div style={metricCardStyle}>
             <span style={metricValStyle}>100%</span>
-            <span style={metricLblStyle}>Cumplimiento Norma RAS-2017 & MAED-03</span>
+            <span style={metricLblStyle}>Cumplimiento Norma RAS-2017 & Reglamentos</span>
           </div>
           <div style={metricCardStyle}>
             <span style={metricValStyle}>1-Click</span>
-            <span style={metricLblStyle}>Planos AutoCAD LISP & Excel Maestra APU</span>
+            <span style={metricLblStyle}>Planos AutoCAD LISP & Excel Maestra de Cantidades</span>
           </div>
         </div>
       </section>
@@ -85,9 +85,9 @@ export default function LandingPage({ onStartTrial, onOpenExpress, onOpenLogin, 
 
           <div style={featureCardStyle}>
             <div style={{ ...iconBoxStyle, background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b' }}>📊</div>
-            <h3 style={featureTitleStyle}>Presupuesto & APU Banco</h3>
+            <h3 style={featureTitleStyle}>Presupuesto & Cantidades de Obra</h3>
             <p style={featureDescStyle}>
-              Generación automática de APU para zanjas, excavaciones, tuberías, acometidas y obras de urbanismo.
+              Generación automática de listados de cantidades para zanjas, excavaciones, tuberías, acometidas y obras de urbanismo.
             </p>
           </div>
 
@@ -189,11 +189,11 @@ export default function LandingPage({ onStartTrial, onOpenExpress, onOpenLogin, 
             </div>
             <ul style={featureListStyle}>
               <li>✔ <strong>Proyectos Ilimitados</strong> en la Nube</li>
-              <li>✔ Exportación <strong>Hoja Maestra Excel APU</strong></li>
+              <li>✔ Exportación <strong>Hoja Maestra Excel de Cantidades</strong></li>
               <li>✔ Generador <strong>Planos AutoCAD LISP</strong></li>
               <li>✔ Presupuesto Banco & Cantidades de Obra</li>
               <li>✔ Informes PDF para Interventoría</li>
-              <li>✔ Soporte Técnico Prioritario en Colombia</li>
+              <li>✔ Soporte Técnico Prioritario</li>
             </ul>
             <button onClick={onOpenProModal} style={proPlanBtnStyle}>
               💳 Suscribirse a Plan Pro
@@ -219,10 +219,10 @@ export default function LandingPage({ onStartTrial, onOpenExpress, onOpenLogin, 
       {/* ── PIE DE PÁGINA ── */}
       <footer style={footerStyle}>
         <p style={{ margin: '0 0 6px 0', fontSize: '0.85rem', color: '#64748b' }}>
-          AMCaudales Pro v3.0 — Propiedad Exclusiva de <strong>Ing. Alayn Mendoza Castillo</strong> (alaynmendoza@gmail.com)
+          AMCaudales Pro v3.0 — Plataforma de Ingeniería Hidráulica & Presupuestos
         </p>
         <p style={{ margin: 0, fontSize: '0.78rem', color: '#475569' }}>
-          Diseñado bajo las especificaciones técnicas del Ministerio de Vivienda, Ciudad y Territorio de Colombia (Res. 0330 / 2017 & MAED-03).
+          Diseñado bajo las especificaciones técnicas del Ministerio de Vivienda, Ciudad y Territorio de Colombia (Res. 0330 / 2017).
         </p>
       </footer>
 

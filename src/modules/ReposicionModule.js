@@ -27,6 +27,7 @@ import PreGenTab from '../tabs/PreGenTab';
 import PreBancoTab from '../tabs/PreBancoTab';
 import SwmmTab from '../tabs/SwmmTab';
 import CronoTab from '../tabs/CronoTab';
+import UserProjectsModal from '../components/UserProjectsModal';
 
 import ResumenCantidadesTab from '../tabs/ResumenCantidadesTab';
 import MapTab from '../tabs/MapTab';
@@ -49,6 +50,19 @@ var TABS=[
 export default function ReposicionModule({ onBack, initialData }){
   const { user, saveProjectToCloud } = useAuth();
   const [isThinking, setIsThinking] = useState(false);
+  const [showCloudProjectsModal, setShowCloudProjectsModal] = useState(false);
+  const [tabHistory, setTabHistory] = useState(['map']);
+
+  const handleVolverTab = () => {
+    if (tabHistory.length > 0) {
+      const prev = tabHistory[tabHistory.length - 1];
+      setTabHistory(h => h.slice(0, -1));
+      setTab(prev);
+    } else {
+      setTab('par');
+    }
+  };
+
   var sTab=useState("map");var tab=sTab[0],setTab=sTab[1];
   var sP=useState(DP);var P=sP[0],setP=sP[1];
   var sT=useState([]);var T=sT[0],setT=sT[1];
@@ -721,27 +735,35 @@ const handleBack = () => {
           
           {/* GRUPO IZQUIERDO: ARCHIVO */}
           <div style={{display:'flex', gap:'5px', paddingRight:'15px', borderRight: lightMode?'1px solid #e5e7eb':'1px solid #4b5563', alignItems: 'center'}}>
-            <button className="hdr-btn" onClick={onBack} title="Volver al Menú Principal" style={{ height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '135px' }}>
+            <button className="hdr-btn" onClick={handleVolverTab} title="Volver a la pestaña anterior" style={{ height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '110px' }}>
               <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
               <span style={{marginLeft: 6}}>Volver</span>
             </button>
-            <button className="hdr-btn" onClick={handleNewProject} title="Crear Nuevo Proyecto en Blanco" style={{ height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '135px' }}>
+            <button className="hdr-btn" onClick={onBack} title="Salir al Menú Principal" style={{ height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '110px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#fca5a5' }}>
+              <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>
+              <span style={{marginLeft: 6}}>Menú</span>
+            </button>
+            <button className="hdr-btn" onClick={handleNewProject} title="Crear Nuevo Proyecto en Blanco" style={{ height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '110px' }}>
               <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4"/></svg>
               <span style={{marginLeft: 6}}>Nuevo</span>
             </button>
-            <button className="hdr-btn" onClick={() => { if(refAMC.current) refAMC.current.click(); }} title="Abrir Proyecto (.AMC)" style={{ height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '135px' }}>
+            <button className="hdr-btn" onClick={() => { if(refAMC.current) refAMC.current.click(); }} title="Abrir Proyecto (.AMC) desde tu Computador" style={{ height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '125px' }}>
               <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
               <span style={{marginLeft: 6}}>Abrir .AMC</span>
             </button>
-            <button className="hdr-btn" onClick={handleSaveAMC} title="Guardar Proyecto (.AMC) y en la Nube" style={{ height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '135px' }}>
+            <button className="hdr-btn" onClick={() => setShowCloudProjectsModal(true)} title="Abrir Proyecto alojado en la Nube de Supabase" style={{ height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '125px', background: 'rgba(59, 130, 246, 0.15)', border: '1px solid #3b82f6', color: '#60a5fa' }}>
+              <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M3 15a4 4 0 004 4h9a5 5 0 001-9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+              <span style={{marginLeft: 6}}>Abrir Nube</span>
+            </button>
+            <button className="hdr-btn" onClick={handleSaveAMC} title="Guardar Proyecto (.AMC) y en la Nube" style={{ height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '125px' }}>
               <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg>
               <span style={{marginLeft: 6}}>Guardar .AMC</span>
             </button>
-            <button className="hdr-btn" onClick={handleSaveAMC} title="Guardar directamente en tu cuenta de la Nube" style={{ height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '135px', background: 'rgba(16, 185, 129, 0.15)', border: '1px solid #10b981', color: '#10b981' }}>
+            <button className="hdr-btn" onClick={handleSaveAMC} title="Guardar directamente en tu cuenta de la Nube" style={{ height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '125px', background: 'rgba(16, 185, 129, 0.15)', border: '1px solid #10b981', color: '#10b981' }}>
               <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M3 15a4 4 0 004 4h9a5 5 0 001-9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
               <span style={{marginLeft: 6}}>Guardar Nube</span>
             </button>
-            <button className="hdr-btn" onClick={() => setTab('consolidador')} title="Consolidar Proyectos" style={{ height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '135px', background: 'rgba(59, 130, 246, 0.1)', border: '1px solid #3b82f6', color: '#3b82f6' }}>
+            <button className="hdr-btn" onClick={() => setTab('consolidador')} title="Consolidar Proyectos" style={{ height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '125px', background: 'rgba(99, 102, 241, 0.1)', border: '1px solid #6366f1', color: '#818cf8' }}>
               <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16m-7 6h7"/></svg>
               <span style={{marginLeft: 6}}>Consolidar</span>
             </button>
@@ -945,6 +967,42 @@ const handleBack = () => {
       {tab==="abrev"? <AbrevTab />:null}
       {tab==="urbanismo"? <UrbanismoTab R={R} setR={setR} P={P} sP={setP} T={T} selMap={selMap} urbanismoData={urbanismoData} setUrbanismoData={setUrbanismoData}/>:null}
       <Glossary />
+
+      <UserProjectsModal
+        isOpen={showCloudProjectsModal}
+        onClose={() => setShowCloudProjectsModal(false)}
+        onLoadProject={(payload) => {
+          try {
+            var data = typeof payload === 'string' ? JSON.parse(payload) : payload;
+            if(data.P){
+              var restoredP2 = Object.assign({}, DP, data.P);
+              setP(restoredP2);
+              setIdfEst(data.P.estacion||"BUC");
+            }
+            if(data.T)setT(data.T);
+            if(data.sumLat)setSumLat(data.sumLat);
+            if(data.sumTrans)setSumTrans(data.sumTrans);
+            if(data.pbItems)setPbItems(data.pbItems);
+            if(data.alivData)setAlivData(data.alivData);
+            if(data.sumData)setSumData(data.sumData);
+            if(data.estSepData)setEstSepData(data.estSepData);
+            if(data.urbanismoData)setUrbanismoData(data.urbanismoData);
+            if(data.inpData)setInpData(data.inpData);
+            if(data.autoAreasPoly)setAutoAreasPoly(data.autoAreasPoly);
+            if(data.selMap)setSelMap(data.selMap);
+            if(data.outfalls)setOutfalls(data.outfalls);
+            if(data.filterSel!==undefined)setFilterSel(data.filterSel);
+            if(data.R)setR(data.R);
+            setFlowStage(data.flowStage || 'visor');
+            setTab(data.tab || 'calc');
+            alert("¡Proyecto cargado exitosamente desde la Nube!");
+          } catch(err) {
+            console.error(err);
+            alert("Error al restaurar proyecto desde la Nube.");
+          }
+        }}
+        onSaveCurrentProject={(title) => saveProjectToCloud(P, title)}
+      />
     </div>
   </div>;
 }

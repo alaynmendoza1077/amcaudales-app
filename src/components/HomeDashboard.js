@@ -1,6 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { useAuth } from '../context/AuthContext';
+import UpgradeProModal from './UpgradeProModal';
 
 export default function HomeDashboard({ setModule }) {
+  const { userPlan, cloudProjects } = useAuth();
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [blockedFeature, setBlockedFeature] = useState('');
+
   const styles = {
     container: {
       minHeight: 'calc(100vh - 70px)',
@@ -29,20 +35,20 @@ export default function HomeDashboard({ setModule }) {
       fontSize: '1rem',
       color: '#94a3b8',
       margin: 0,
-      maxWidth: '600px',
+      maxWidth: '650px',
       lineHeight: '1.6'
     },
     grid: {
       display: 'grid',
-      gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+      gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
       gap: '1.5rem',
       width: '100%',
-      maxWidth: '1080px'
+      maxWidth: '1100px'
     },
     card: {
       background: 'rgba(30, 41, 59, 0.4)',
       backdropFilter: 'blur(12px)',
-      border: '1px solid rgba(255, 255, 255, 0.05)',
+      border: '1px solid rgba(255, 255, 255, 0.08)',
       borderRadius: '16px',
       padding: '1.5rem',
       cursor: 'pointer',
@@ -51,8 +57,8 @@ export default function HomeDashboard({ setModule }) {
       flexDirection: 'column',
       position: 'relative',
       overflow: 'hidden',
-      height: '310px',
-      justifyContent: 'flex-start'
+      minHeight: '260px',
+      justifyContent: 'space-between'
     },
     iconWrapper: {
       width: '48px',
@@ -66,7 +72,7 @@ export default function HomeDashboard({ setModule }) {
     },
     cardTitle: {
       fontSize: '1.2rem',
-      fontWeight: '600',
+      fontWeight: '700',
       margin: '0 0 0.5rem 0',
       color: '#f8fafc'
     },
@@ -76,86 +82,120 @@ export default function HomeDashboard({ setModule }) {
       margin: 0,
       lineHeight: '1.5',
       flex: 1
+    },
+    badgeFree: {
+      alignSelf: 'flex-start',
+      background: 'rgba(16, 185, 129, 0.15)',
+      color: '#10b981',
+      border: '1px solid #10b981',
+      padding: '4px 10px',
+      borderRadius: '12px',
+      fontSize: '0.72rem',
+      fontWeight: '700',
+      marginBottom: '12px'
+    },
+    badgeTrial: {
+      alignSelf: 'flex-start',
+      background: 'rgba(59, 130, 246, 0.15)',
+      color: '#60a5fa',
+      border: '1px solid #3b82f6',
+      padding: '4px 10px',
+      borderRadius: '12px',
+      fontSize: '0.72rem',
+      fontWeight: '700',
+      marginBottom: '12px'
+    },
+    badgePro: {
+      alignSelf: 'flex-start',
+      background: 'rgba(245, 158, 11, 0.15)',
+      color: '#fbbf24',
+      border: '1px solid #f59e0b',
+      padding: '4px 10px',
+      borderRadius: '12px',
+      fontSize: '0.72rem',
+      fontWeight: '700',
+      marginBottom: '12px'
     }
   };
 
   const modules = [
     {
-      id: 'nuevo_proyecto',
-      title: 'Nuevo Proyecto de Ingeniería',
-      desc: 'Inicia desde cero ingresando el nombre del proyecto, municipio, diseñador, matrícula profesional y tipo de alcantarillado.',
-      icon: '📐',
-      color: 'linear-gradient(135deg, #10b981, #059669)',
-      glow: 'rgba(16, 185, 129, 0.25)'
-    },
-    {
       id: 'express',
       title: 'Calculadora Express',
-      desc: 'Herramienta rápida y ligera para el diseño hidráulico de un solo tramo o cálculos inmediatos.',
+      desc: 'Herramienta 100% gratuita para el diseño hidráulico de un solo tramo o chequeos inmediatos de caudales y diámetros.',
       icon: '🧮',
-      color: 'linear-gradient(135deg, #06b6d4, #0891b2)',
-      glow: 'rgba(6, 182, 212, 0.2)'
+      tier: 'free',
+      tierLabel: '⚡ 100% Gratis de por vida',
+      color: 'linear-gradient(135deg, #06b6d4, #0891b2)'
+    },
+    {
+      id: 'nuevo_proyecto',
+      title: 'Nuevo Proyecto de Ingeniería',
+      desc: 'Inicia un nuevo proyecto ingresando nombre, municipio, diseñador y parámetros normativos RAS-2017.',
+      icon: '📐',
+      tier: 'trial',
+      tierLabel: '⚡ 1er Proyecto Gratis (Freemium)',
+      color: 'linear-gradient(135deg, #10b981, #059669)'
     },
     {
       id: 'reposicion',
       title: 'Reposición & Visor GIS',
-      desc: 'Suite completa con Visor Espacial avanzado, cálculo automático de áreas aferentes y modelación de toda la red.',
+      desc: 'Suite completa con Visor Espacial avanzado, trazado espacial de pozos y calculador de áreas aferentes.',
       icon: '🗺️',
-      color: 'linear-gradient(135deg, #3b82f6, #2563eb)',
-      glow: 'rgba(59, 130, 246, 0.2)'
-    },
-    {
-      id: 'presupuesto',
-      title: 'Cantidades y Presupuesto',
-      desc: 'Módulo especializado para cargar planos maestros y extraer listados de cantidades y costos de obra.',
-      icon: '📊',
-      color: 'linear-gradient(135deg, #f59e0b, #d97706)',
-      glow: 'rgba(245, 158, 11, 0.2)'
+      tier: 'trial',
+      tierLabel: '⚡ 1er Proyecto Gratis (Freemium)',
+      color: 'linear-gradient(135deg, #3b82f6, #2563eb)'
     },
     {
       id: 'swmm',
       title: 'Importar Modelo SWMM',
-      desc: 'Carga directamente archivos .inp ya modelados y verificados para pasar al módulo de cantidades y presupuestos.',
-      disclaimer: 'EPA SWMM es un software de dominio público desarrollado por la Agencia de Protección Ambiental de Estados Unidos (US EPA). Este módulo lee archivos de texto plano (.inp) compatibles con el estándar público.',
+      desc: 'Carga directamente archivos .inp de EPA SWMM para generar topología, perfiles y listados de cantidades.',
       icon: '🌊',
-      color: 'linear-gradient(135deg, #d97706, #b45309)',
-      glow: 'rgba(217, 119, 6, 0.2)'
+      tier: 'trial',
+      tierLabel: '⚡ 1er Proyecto Gratis (Freemium)',
+      color: 'linear-gradient(135deg, #d97706, #b45309)'
     },
     {
       id: 'abrir_amc',
       title: 'Abrir Proyecto .AMC',
-      desc: 'Carga rápidamente un proyecto guardado anteriormente con todo su progreso y sus mapas.',
+      desc: 'Carga un proyecto guardado anteriormente en tu computador o abre un diseño alojado en tu cuenta en la nube.',
       icon: '📁',
-      color: 'linear-gradient(135deg, #6366f1, #4338ca)',
-      glow: 'rgba(99, 102, 241, 0.2)'
+      tier: 'trial',
+      tierLabel: '⚡ 1er Proyecto Gratis (Freemium)',
+      color: 'linear-gradient(135deg, #6366f1, #4338ca)'
+    },
+    {
+      id: 'presupuesto',
+      title: 'Cantidades y Presupuesto de Obra',
+      desc: 'Extracción completa de cantidades de obra, excavaciones, tuberías, acometidas y exportador oficial a Excel.',
+      icon: '📊',
+      tier: 'pro',
+      tierLabel: '👑 Requiere Plan Pro',
+      color: 'linear-gradient(135deg, #f59e0b, #d97706)'
     }
   ];
 
-  const fileInputRef = React.useRef(null);
   const fileAMCRef = React.useRef(null);
 
-  const handleCardClick = (modId) => {
-    if (modId === 'swmm') {
-      const ok = window.confirm("¿El archivo INP que está a punto de cargar corresponde a un diseño ya corrido y verificado?\n\n(Asegúrese de haber revisado los perfiles y diámetros en SWMM antes de importar para realizar los presupuestos).");
-      if (ok) {
-        if (fileInputRef.current) fileInputRef.current.click();
-      }
-    } else if (modId === 'abrir_amc') {
+  const handleCardClick = (mod) => {
+    // Restricciones según el Plan por módulos
+    if (mod.id === 'presupuesto' && userPlan !== 'pro') {
+      setBlockedFeature('Cantidades y Presupuestos de Obra');
+      setShowUpgradeModal(true);
+      return;
+    }
+
+    if ((mod.id === 'nuevo_proyecto' || mod.id === 'reposicion' || mod.id === 'swmm') && userPlan === 'free' && cloudProjects.length >= 5) {
+      setBlockedFeature('Límite del Plan Gratis (1 Diseño Completo / 5 Proyectos).');
+      setShowUpgradeModal(true);
+      return;
+    }
+
+    if (mod.id === 'abrir_amc') {
       if (fileAMCRef.current) fileAMCRef.current.click();
     } else {
-      setModule(modId);
+      setModule(mod.id);
     }
-  };
-
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      setModule('reposicion', { type: 'inp', content: ev.target.result });
-    };
-    reader.readAsText(file);
-    e.target.value = null;
   };
 
   const handleAMCChange = (e) => {
@@ -172,44 +212,55 @@ export default function HomeDashboard({ setModule }) {
   return (
     <div style={styles.container}>
       <div style={styles.header}>
-        <h1 style={styles.title}>AMCaudales Pro</h1>
+        <h1 style={styles.title}>Módulos de AMCaudales Pro</h1>
         <p style={styles.subtitle}>
-          Selecciona el módulo de trabajo. El sistema optimizará la memoria cargando únicamente las herramientas que necesites.
+          Selecciona el módulo de trabajo. Cada herramienta está optimizada para la ingeniería hidráulica de redes y presupuestos.
         </p>
       </div>
 
+      <input
+        type="file"
+        ref={fileAMCRef}
+        accept=".amc,.json"
+        style={{ display: 'none' }}
+        onChange={handleAMCChange}
+      />
+
       <div style={styles.grid}>
-        {modules.map((mod) => (
-          <div 
-            key={mod.id} 
+        {modules.map((m) => (
+          <div
+            key={m.id}
             style={styles.card}
+            onClick={() => handleCardClick(m)}
             onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'translateY(-8px)';
-              e.currentTarget.style.boxShadow = `0 20px 40px ${mod.glow}`;
-              e.currentTarget.style.border = '1px solid rgba(255, 255, 255, 0.1)';
+              e.currentTarget.style.transform = 'translateY(-4px)';
+              e.currentTarget.style.border = '1px solid rgba(255, 255, 255, 0.2)';
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = 'none';
-              e.currentTarget.style.border = '1px solid rgba(255, 255, 255, 0.05)';
+              e.currentTarget.style.border = '1px solid rgba(255, 255, 255, 0.08)';
             }}
-            onClick={() => handleCardClick(mod.id)}
           >
-            <div style={{ ...styles.iconWrapper, background: mod.color }}>
-              {mod.icon}
+            <div>
+              {m.tier === 'free' && <span style={styles.badgeFree}>{m.tierLabel}</span>}
+              {m.tier === 'trial' && <span style={styles.badgeTrial}>{m.tierLabel}</span>}
+              {m.tier === 'pro' && <span style={styles.badgePro}>{m.tierLabel}</span>}
+
+              <div style={{ ...styles.iconWrapper, background: m.color }}>
+                {m.icon}
+              </div>
+              <h3 style={styles.cardTitle}>{m.title}</h3>
+              <p style={styles.cardDesc}>{m.desc}</p>
             </div>
-            <h3 style={styles.cardTitle}>{mod.title}</h3>
-            <p style={styles.cardDesc}>{mod.desc}</p>
-            {mod.disclaimer && (
-              <p style={{...styles.cardDesc, fontSize: '0.65rem', marginTop: '10px', color: '#64748b', fontStyle: 'italic', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '10px'}}>
-                {mod.disclaimer}
-              </p>
-            )}
           </div>
         ))}
       </div>
-      <input type="file" accept=".inp" style={{display: 'none'}} ref={fileInputRef} onChange={handleFileChange} />
-      <input type="file" accept=".amc" style={{display: 'none'}} ref={fileAMCRef} onChange={handleAMCChange} />
+
+      <UpgradeProModal
+        isOpen={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+        featureName={blockedFeature}
+      />
     </div>
   );
 }

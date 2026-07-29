@@ -62,6 +62,23 @@ export function AuthProvider({ children }) {
     return cloudProjects.length < 5;
   };
 
+  const loginAsGuest = () => {
+    const guestUser = {
+      id: 'usr_guest',
+      email: 'invitado@amcaudales.com',
+      user_metadata: {
+        full_name: 'Usuario Invitado',
+        company: 'Modo Prueba Freemium'
+      }
+    };
+    localStorage.setItem('amcaudales_user_session', JSON.stringify(guestUser));
+    setUser(guestUser);
+    setUserPlan('free');
+    localStorage.setItem('amcaudales_user_plan', 'free');
+    fetchLocalCloudProjects(guestUser.id);
+    return guestUser;
+  };
+
   const loginAsAdmin = (adminKey = '') => {
     const adminUser = {
       id: 'usr_super_admin',
@@ -92,7 +109,6 @@ export function AuthProvider({ children }) {
 
     localStorage.setItem('amcaudales_user_session', JSON.stringify(googleUser));
     setUser(googleUser);
-    // Asignar plan de acuerdo a configuración (o por defecto gratis si se especifica)
     const storedPlan = localStorage.getItem('amcaudales_user_plan') || 'pro';
     setUserPlan(storedPlan);
     fetchLocalCloudProjects(googleUser.id);
@@ -115,7 +131,8 @@ export function AuthProvider({ children }) {
   };
 
   const fetchLocalCloudProjects = (userId) => {
-    const raw = localStorage.getItem(`amcaudales_projects_${userId}`);
+    const key = `amcaudales_projects_${userId}`;
+    const raw = localStorage.getItem(key);
     if (raw) {
       try {
         const list = JSON.parse(raw);
@@ -132,11 +149,11 @@ export function AuthProvider({ children }) {
     const newUser = {
       id: 'usr_' + Date.now(),
       email,
-      user_metadata: { full_name: fullName || 'Norman Castillo', company: company || 'Ingeniería AMC' }
+      user_metadata: { full_name: fullName || 'Ingeniero AMC', company: company || 'Ingeniería AMC' }
     };
     localStorage.setItem('amcaudales_user_session', JSON.stringify(newUser));
     setUser(newUser);
-    setUserPlan('free'); // Registro por defecto inicia en Plan Gratis Freemium
+    setUserPlan('free');
     localStorage.setItem('amcaudales_user_plan', 'free');
     fetchLocalCloudProjects(newUser.id);
     return { user: newUser };
@@ -167,16 +184,16 @@ export function AuthProvider({ children }) {
   };
 
   const saveProjectToCloud = async (projectDataPayload, title = 'Proyecto AMC') => {
-    if (!user) throw new Error('Debe iniciar sesión para guardar en la nube.');
-
+    const effectiveUser = user || { id: 'usr_guest', email: 'invitado@amcaudales.com' };
     const timestamp = new Date().toISOString();
+
     if (isCloudConfigured && supabase) {
       try {
         const { data, error } = await supabase
           .from('projects')
           .upsert({
             id: 'proj_' + Date.now(),
-            user_id: user.id,
+            user_id: effectiveUser.id,
             title,
             updated_at: timestamp,
             project_data: projectDataPayload
@@ -184,7 +201,7 @@ export function AuthProvider({ children }) {
           .select();
 
         if (!error && data) {
-          await fetchUserProjects(user.id);
+          await fetchUserProjects(effectiveUser.id);
           return data[0];
         }
       } catch (e) {
@@ -192,19 +209,19 @@ export function AuthProvider({ children }) {
       }
     }
 
-    const key = `amcaudales_projects_${user.id}`;
+    const key = `amcaudales_projects_${effectiveUser.id}`;
     const existingRaw = localStorage.getItem(key);
     let existingList = existingRaw ? JSON.parse(existingRaw) : [];
     const projId = 'proj_' + Date.now();
     const newProj = { id: projId, title, updated_at: timestamp, project_data: projectDataPayload };
     existingList.unshift(newProj);
     localStorage.setItem(key, JSON.stringify(existingList));
-    fetchLocalCloudProjects(user.id);
+    fetchLocalCloudProjects(effectiveUser.id);
     return newProj;
   };
 
   const loadProjectFromCloud = async (projectId) => {
-    if (!user) throw new Error('Debe iniciar sesión para cargar proyectos.');
+    const effectiveUser = user || { id: 'usr_guest' };
 
     if (isCloudConfigured && supabase) {
       try {
@@ -218,7 +235,7 @@ export function AuthProvider({ children }) {
       } catch (e) {}
     }
 
-    const key = `amcaudales_projects_${user.id}`;
+    const key = `amcaudales_projects_${effectiveUser.id}`;
     const raw = localStorage.getItem(key);
     if (!raw) throw new Error('Proyecto no encontrado.');
     const list = JSON.parse(raw);
@@ -235,6 +252,7 @@ export function AuthProvider({ children }) {
         userPlan,
         upgradeToPro,
         checkCanCreateProject,
+        loginAsGuest,
         loginAsAdmin,
         loginWithGoogle,
         loading,

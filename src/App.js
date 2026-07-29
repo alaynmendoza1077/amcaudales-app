@@ -19,7 +19,7 @@ const Loader = () => (
 );
 
 function AppContent() {
-  const { user, saveProjectToCloud, userPlan } = useAuth();
+  const { user, saveProjectToCloud, userPlan, loginAsGuest } = useAuth();
   const [isGuest, setIsGuest] = useState(false);
   const [activeModule, setActiveModule] = useState('home');
   const [initialData, setInitialData] = useState(null);
@@ -27,13 +27,20 @@ function AppContent() {
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [blockedFeatureName, setBlockedFeatureName] = useState('');
 
-  // Si el usuario no ha iniciado sesión ni ha entrado como invitado, muestra el portal obligatoria
+  // Si el usuario no ha iniciado sesión ni ha entrado como invitado, muestra el portal obligatoriamente
   if (!user && !isGuest) {
-    return <StartLoginPortal onGuestAccess={() => setIsGuest(true)} />;
+    return (
+      <StartLoginPortal
+        onGuestAccess={() => {
+          loginAsGuest();
+          setIsGuest(true);
+        }}
+      />
+    );
   }
 
   const handleSetModule = (mod, data = null) => {
-    // Si intenta entrar al módulo de presupuesto o funciones Pro y está en Plan Gratis
+    // Restricción por módulos según plan
     if ((mod === 'presupuesto') && userPlan === 'free') {
       setBlockedFeatureName('Cantidades y Presupuestos de Obra');
       setShowUpgradeModal(true);

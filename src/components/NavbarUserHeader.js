@@ -48,6 +48,7 @@ export default function NavbarUserHeader({ onSaveCloud, onLoadCloud }) {
               <button
                 onClick={() => setShowProjectsModal(true)}
                 style={cloudProjectsBtnStyle}
+                title="Ver tus proyectos alojados en la Nube de Supabase"
               >
                 ☁️ Mis Proyectos
               </button>
@@ -61,17 +62,26 @@ export default function NavbarUserHeader({ onSaveCloud, onLoadCloud }) {
                 </span>
               </div>
 
-              <button onClick={logout} style={logoutBtnStyle} title="Cerrar Sesión">
+              <button onClick={logout} style={logoutBtnStyle} title="Cerrar Sesión y Salir">
                 🚪 Salir
               </button>
             </div>
           ) : (
-            <button
-              onClick={() => setShowAuthModal(true)}
-              style={loginBtnStyle}
-            >
-              👤 Iniciar Sesión / Registro
-            </button>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={() => setShowProjectsModal(true)}
+                style={cloudProjectsBtnStyle}
+                title="Ver proyectos alojados en la nube"
+              >
+                ☁️ Mis Proyectos
+              </button>
+              <button
+                onClick={() => setShowAuthModal(true)}
+                style={loginBtnStyle}
+              >
+                👤 Iniciar Sesión / Registro
+              </button>
+            </div>
           )}
         </div>
       </header>
@@ -97,15 +107,18 @@ export default function NavbarUserHeader({ onSaveCloud, onLoadCloud }) {
   );
 }
 
+// ── ESTILOS CSS-IN-JS DE LA BARRA DE NAVEGACIÓN ──
 const headerContainerStyle = {
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  padding: '12px 24px',
-  backgroundColor: '#0b0f19',
+  height: '60px',
+  backgroundColor: '#0a1128',
   borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  padding: '0 24px',
   color: '#ffffff',
-  fontFamily: "'Inter', sans-serif"
+  boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+  zIndex: 100
 };
 
 const logoSectionStyle = {
@@ -115,135 +128,140 @@ const logoSectionStyle = {
 };
 
 const logoBadgeStyle = {
-  width: '38px',
-  height: '38px',
-  borderRadius: '10px',
-  background: 'linear-gradient(135deg, #00c6ff 0%, #0072ff 100%)',
+  width: '36px',
+  height: '36px',
+  background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
+  borderRadius: '8px',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
   fontWeight: '800',
-  fontFamily: "'Outfit', sans-serif",
   fontSize: '0.9rem',
   color: '#ffffff',
-  boxShadow: '0 0 15px rgba(0, 198, 255, 0.4)'
+  boxShadow: '0 0 12px rgba(59, 130, 246, 0.4)'
 };
 
 const appTitleStyle = {
-  fontSize: '1.2rem',
-  fontWeight: '700',
-  fontFamily: "'Outfit', sans-serif",
+  fontSize: '1.1rem',
+  fontWeight: '800',
   margin: 0,
-  color: '#ffffff'
+  background: 'linear-gradient(to right, #60a5fa, #a78bfa)',
+  WebkitBackgroundClip: 'text',
+  WebkitTextFillColor: 'transparent',
+  lineHeight: 1
 };
 
 const appTaglineStyle = {
   fontSize: '0.72rem',
-  color: '#64748b',
-  display: 'block'
+  color: '#94a3b8',
+  display: 'block',
+  marginTop: '2px'
 };
 
 const actionsSectionStyle = {
   display: 'flex',
   alignItems: 'center',
-  gap: '14px'
+  gap: '12px'
 };
 
 const proBadgeStyle = {
-  fontSize: '0.75rem',
-  fontWeight: '700',
-  backgroundColor: 'rgba(245, 158, 11, 0.15)',
-  border: '1px solid rgba(245, 158, 11, 0.4)',
-  color: '#fbbf24',
-  padding: '5px 12px',
-  borderRadius: '20px'
+  background: 'rgba(16, 185, 129, 0.15)',
+  border: '1px solid #10b981',
+  color: '#10b981',
+  padding: '4px 10px',
+  borderRadius: '20px',
+  fontSize: '0.78rem',
+  fontWeight: '700'
 };
 
 const freeBadgeStyle = {
-  fontSize: '0.75rem',
-  fontWeight: '700',
-  backgroundColor: 'rgba(56, 189, 248, 0.12)',
-  border: '1px solid rgba(56, 189, 248, 0.3)',
-  color: '#38bdf8',
+  background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(217, 119, 6, 0.3))',
+  border: '1px solid #f59e0b',
+  color: '#fbbf24',
   padding: '5px 12px',
   borderRadius: '20px',
-  cursor: 'pointer'
+  fontSize: '0.78rem',
+  fontWeight: '700',
+  cursor: 'pointer',
+  transition: 'transform 0.2s'
 };
 
 const offlineBadgeStyle = {
-  fontSize: '0.72rem',
-  backgroundColor: 'rgba(234, 179, 8, 0.15)',
-  border: '1px solid rgba(234, 179, 8, 0.3)',
-  color: '#facc15',
+  background: 'rgba(148, 163, 184, 0.15)',
+  border: '1px solid #64748b',
+  color: '#cbd5e1',
   padding: '4px 8px',
-  borderRadius: '6px'
-};
-
-const loginBtnStyle = {
-  padding: '8px 16px',
-  backgroundColor: '#2563eb',
-  backgroundImage: 'linear-gradient(135deg, #00c6ff 0%, #0072ff 100%)',
-  border: 'none',
-  borderRadius: '8px',
-  color: '#ffffff',
-  fontWeight: '600',
-  fontSize: '0.85rem',
-  cursor: 'pointer',
-  boxShadow: '0 4px 12px rgba(0, 114, 255, 0.3)'
+  borderRadius: '6px',
+  fontSize: '0.72rem'
 };
 
 const userControlStyle = {
   display: 'flex',
   alignItems: 'center',
-  gap: '12px'
+  gap: '10px'
 };
 
 const cloudProjectsBtnStyle = {
-  padding: '6px 14px',
-  backgroundColor: 'rgba(16, 185, 129, 0.15)',
-  border: '1px solid rgba(16, 185, 129, 0.4)',
+  background: 'rgba(59, 130, 246, 0.15)',
+  border: '1px solid #3b82f6',
+  color: '#60a5fa',
+  padding: '6px 12px',
   borderRadius: '8px',
-  color: '#34d399',
-  fontWeight: '600',
+  fontWeight: '700',
   fontSize: '0.82rem',
-  cursor: 'pointer'
+  cursor: 'pointer',
+  display: 'flex',
+  alignItems: 'center',
+  gap: '4px'
 };
 
 const userAvatarStyle = {
   display: 'flex',
   alignItems: 'center',
   gap: '8px',
-  backgroundColor: '#1e293b',
-  padding: '4px 10px 4px 4px',
+  background: 'rgba(255, 255, 255, 0.05)',
+  padding: '4px 10px',
   borderRadius: '20px',
-  border: '1px solid #334155'
+  border: '1px solid rgba(255, 255, 255, 0.1)'
 };
 
 const userInitialStyle = {
-  width: '26px',
-  height: '26px',
+  width: '24px',
+  height: '24px',
   borderRadius: '50%',
-  backgroundColor: '#3b82f6',
+  background: '#3b82f6',
+  color: 'white',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  fontSize: '0.78rem',
-  fontWeight: '700',
-  color: '#ffffff'
+  fontWeight: 'bold',
+  fontSize: '0.75rem'
 };
 
 const userNameStyle = {
   fontSize: '0.82rem',
-  fontWeight: '500',
-  color: '#e2e8f0'
+  fontWeight: '600',
+  color: '#f8fafc'
 };
 
 const logoutBtnStyle = {
-  background: 'none',
-  border: '1px solid #334155',
-  borderRadius: '6px',
-  color: '#94a3b8',
-  padding: '6px 10px',
-  fontSize: '0.8rem',
+  background: 'rgba(239, 68, 68, 0.15)',
+  border: '1px solid #ef4444',
+  color: '#fca5a5',
+  padding: '6px 12px',
+  borderRadius: '8px',
+  fontWeight: '700',
+  fontSize: '0.82rem',
+  cursor: 'pointer'
+};
+
+const loginBtnStyle = {
+  background: 'linear-gradient(135deg, #3b82f6, #2563eb)',
+  color: 'white',
+  border: 'none',
+  padding: '7px 14px',
+  borderRadius: '8px',
+  fontWeight: '700',
+  fontSize: '0.85rem',
   cursor: 'pointer'
 };
