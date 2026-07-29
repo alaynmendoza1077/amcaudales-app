@@ -1136,7 +1136,7 @@ export function exportPlantaLISP(R, P, T, inpData) {
           }
           lines.push(`  (COMMAND "_LAYER" "_Make" "AREAS-AFERENTES" "")`);
           lines.push(`  (SETVAR "CELTSCALE" 0.05)`);
-          let sumX = 0, sumY = 0;
+          sumX = 0; sumY = 0;
           let validPts = 0;
           let plineStr = `  (COMMAND "_PLINE"`;
           let lastPx = null, lastPy = null;
