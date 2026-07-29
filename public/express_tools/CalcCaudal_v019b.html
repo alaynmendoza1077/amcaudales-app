@@ -30,7 +30,7 @@
 body {
   background: linear-gradient(135deg, #050a15 0%, #0a1128 100%);
   color: var(--texto-prin);
-  font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   font-size: 13px;
   min-height: 100vh;
   display: flex;
@@ -328,7 +328,7 @@ footer {
     </svg>
   </div>
   <div class="header-text">
-    <h1>CalcCaudal v1.0 — AMCaudales</h1>
+    <h1>CalcCaudal v1.9 — AMCaudales</h1>
     <p>Calculadora Rápida · Res. 0330/2017 · MAED-03</p>
   </div>
 </header>
@@ -349,15 +349,14 @@ footer {
     </button>
   </div>
 
+  <!-- PANEL SANITARIO -->
   <div class="panel active" id="panel-san">
-
     <p class="section-title">Modo de entrada</p>
     <div class="modo-selector">
       <button class="modo-btn active" id="modo-san-area" onclick="setModoSan('area')">Área (ha)</button>
       <button class="modo-btn" id="modo-san-sol" onclick="setModoSan('sol')">N° Soluciones</button>
     </div>
 
-    <!-- Modo Área -->
     <div id="bloque-san-area">
       <div class="info-nota">
         Q<sub>D</sub> = C<sub>R</sub> × D<sub>NETA</sub> × P / 86400 × FH + Q<sub>inf</sub><br>
@@ -387,7 +386,6 @@ footer {
       </div>
     </div>
 
-    <!-- Modo Soluciones -->
     <div id="bloque-san-sol" style="display:none">
       <div class="info-nota">
         Población = N° soluciones × 4 hab/vivienda.<br>
@@ -422,7 +420,6 @@ footer {
     </div>
 
     <button class="btn-calc" onclick="calcSanitario()">⚙ Calcular Caudal Sanitario</button>
-
     <div class="msg-error" id="err-san"></div>
 
     <div class="resultados" id="res-san">
@@ -457,9 +454,9 @@ footer {
         </table>
       </div>
     </div>
-
   </div>
 
+  <!-- PANEL PLUVIAL -->
   <div class="panel" id="panel-plu">
     <div class="info-nota">
       Q<sub>pluv</sub> = C × i × A &nbsp;(Método Racional)<br>
@@ -472,7 +469,7 @@ footer {
       </div>
       <div class="form-group">
         <label>Coef. escorrentía C</label>
-        <input type="number" id="plu-c" value="0.00" min="0" max="1.0" step="0.01">
+        <input type="number" id="plu-c" value="0.90" min="0" max="1.0" step="0.01">
       </div>
       <div class="form-group span2">
         <label>Intensidad i <span class="unidad">L/s·ha</span></label>
@@ -485,7 +482,7 @@ footer {
       <div class="info-nota" style="border-color:var(--oro); margin-bottom:8px;">
         <strong style="color:var(--oro);">Q<sub>semi</sub></strong> = Q<sub>sanitario</sub>
         + Q<sub>pluvial</sub> × (% patios / 100)<br>
-        Requiere haber calculado el caudal sanitario primero.
+        Requiere haber calculated el caudal sanitario primero.
       </div>
       <div class="form-grid" style="gap:8px;">
         <div class="form-group">
@@ -500,7 +497,6 @@ footer {
     </div>
 
     <button class="btn-calc" onclick="calcPluvial()">⚙ Calcular Caudal Pluvial</button>
-
     <div class="msg-error" id="err-plu"></div>
 
     <div class="resultados" id="res-plu">
@@ -535,12 +531,21 @@ footer {
           <tr><td>Clasificación flujo</td><td id="r-plu-clas">—</td></tr>
         </table>
       </div>
+
+      <div id="r-plu-semi-bloque" style="display:none; margin-top:10px; background:rgba(212,168,67,0.07);border:1px solid rgba(212,168,67,0.3); border-radius:6px;padding:8px 12px;">
+        <div style="font-size:10px;color:var(--oro);font-weight:700;margin-bottom:6px;">⚙ Desglose Semicombinado</div>
+        <table style="width:100%;font-size:11px;border-collapse:collapse;">
+          <tr><td style="color:var(--texto-sec);padding:2px 0;">Q sanitario</td><td style="text-align:right;color:var(--texto-prin);font-weight:600;" id="r-plu-semi-qsan">—</td></tr>
+          <tr><td style="color:var(--texto-sec);padding:2px 0;" id="r-plu-semi-lbl-plu">Q pluvial × %</td><td style="text-align:right;color:var(--texto-prin);font-weight:600;" id="r-plu-semi-qpat">—</td></tr>
+          <tr style="border-top:1px dashed var(--borde);"><td style="color:var(--oro);padding:4px 0;font-weight:700;">Q total semicombinado</td><td style="text-align:right;color:var(--oro);font-weight:700;font-size:13px;" id="r-plu-semi-qtot">—</td></tr>
+        </table>
+      </div>
     </div>
   </div>
 
+  <!-- PANEL VERIFICACIÓN -->
   <div class="panel" id="panel-hid">
     <p class="section-title">Parámetros de la tubería</p>
-
     <div class="info-nota">
       Darcy-Weisbach (Colebrook-White) a tubo lleno → relaciones hidráulicas Q/Qo y Y/D.<br>
       Cargue el caudal desde las pestañas anteriores o ingréselo manualmente.
@@ -588,8 +593,53 @@ footer {
       <p class="section-title" style="margin-top:0; margin-bottom:8px; color:var(--oro);">
         ⚙ Semicombinado — Q<sub>san</sub> + Q<sub>plu</sub> × %
       </p>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:8px;">
+        <div style="background:var(--input-bg);border:1px solid var(--input-borde);border-radius:6px;padding:6px 8px;">
+          <div style="font-size:9px;color:var(--texto-sec);text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px;">Q Sanitario</div>
+          <div style="font-size:14px;font-weight:700;color:var(--cyan);" id="sc-qsan-lbl">— L/s</div>
+          <div style="font-size:9px;color:var(--texto-sec);">← pestaña Sanitario</div>
+        </div>
+        <div style="background:var(--input-bg);border:1px solid var(--input-borde);border-radius:6px;padding:6px 8px;">
+          <div style="font-size:9px;color:var(--texto-sec);text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px;">Q Pluvial</div>
+          <div style="font-size:14px;font-weight:700;color:var(--cyan);" id="sc-qplu-lbl">— L/s</div>
+          <div style="font-size:9px;color:var(--texto-sec);">← pestaña Pluvial</div>
+        </div>
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:8px; align-items:end;">
+        <div class="form-group">
+          <label>% Q pluvial ingresa al sanitario</label>
+          <input type="number" id="hid-porc-semi" value="5" min="1" max="100" step="1" oninput="recalcQdSemi()" style="font-size:15px;font-weight:700;">
+        </div>
+        <div>
+          <div style="font-size:9px;color:var(--texto-sec);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">Q pluvial aportado</div>
+          <div style="background:var(--tabla-par);border-radius:6px;padding:7px 9px;font-size:14px;font-weight:700;color:var(--oro);" id="sc-qpat-lbl">— L/s</div>
+        </div>
+      </div>
+
+      <div style="background:rgba(212,168,67,0.12);border:1px solid var(--oro);border-radius:6px;padding:8px 12px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;">
+        <div>
+          <div style="font-size:9px;color:var(--oro);text-transform:uppercase;letter-spacing:.07em;font-weight:700;">Q TOTAL SEMICOMBINADO</div>
+          <div style="font-size:9px;color:var(--texto-sec);margin-top:1px;" id="sc-formula-lbl">Calcule Sanitario y Pluvial primero</div>
+        </div>
+        <div style="font-size:22px;font-weight:700;color:var(--oro);" id="hid-q-semi-calc">—<span style="font-size:11px;color:var(--texto-sec);margin-left:3px;font-weight:400;">L/s</span></div>
+      </div>
+
       <button id="btn-q-semi" onclick="usarQSemiYVerificar()" style="width:100%;padding:9px;border-radius:6px;border:1px solid var(--oro);background:linear-gradient(135deg,rgba(212,168,67,0.25),rgba(212,168,67,0.1));color:var(--oro);font-size:12px;font-weight:700;cursor:pointer;">
-        ↓ USAR Q SEMICOMBINADO & VERIFICAR HIDRÁULICAMENTE
+        ↓ USAR Q SEMICOMBINADO &amp; VERIFICAR HIDRÁULICAMENTE
+      </button>
+    </div>
+
+    <p class="section-title" style="margin-top:4px;">Caudal de diseño</p>
+    <div style="display:flex; gap:6px; margin-bottom:8px; flex-wrap:wrap;">
+      <button class="modo-btn" id="btn-q-san" onclick="cargarQdDesde('san')" style="flex:1; min-width:120px; padding:7px 6px;">
+        🚿 Usar Q Sanitario<br>
+        <span id="lbl-q-san" style="font-size:10px;color:var(--cyan);">— L/s</span>
+      </button>
+      <button class="modo-btn" id="btn-q-plu" onclick="cargarQdDesde('plu')" style="flex:1; min-width:120px; padding:7px 6px;">
+        🌧️ Usar Q Pluvial<br>
+        <span id="lbl-q-plu" style="font-size:10px;color:var(--cyan);">— L/s</span>
       </button>
     </div>
 
@@ -647,27 +697,51 @@ footer {
           <div class="val" id="r-hid-vo">—<span class="unit">m/s</span></div>
         </div>
       </div>
+      <div class="res-grid" style="grid-template-columns:1fr 1fr; gap:6px; margin-top:6px;">
+        <div class="res-item">
+          <div class="lbl">Q/Qo</div>
+          <div class="val" id="r-hid-qqo">—</div>
+        </div>
+        <div class="res-item">
+          <div class="lbl">Y/D (llenado)</div>
+          <div class="val" id="r-hid-yd">—</div>
+        </div>
+        <div class="res-item">
+          <div class="lbl">V real</div>
+          <div class="val" id="r-hid-vreal">—<span class="unit">m/s</span></div>
+        </div>
+        <div class="res-item">
+          <div class="lbl">Fuerza tractiva</div>
+          <div class="val" id="r-hid-ft">—<span class="unit">Pa</span></div>
+        </div>
+      </div>
+      <div class="res-grid" style="margin-top:6px;">
+        <div class="res-item highlight">
+          <div class="lbl">Capacidad hidráulica disponible</div>
+          <div class="val" id="r-hid-cap">—<span class="unit">L/s</span></div>
+        </div>
+      </div>
     </div>
   </div>
 
 </div>
 
 <footer>
-  AMCaudales - Propiedad exclusiva de ALAYN MENDOZA CASTILLO
+  AMCaudales - Propiedad exclusiva de ALAYN MENDOZA CASTILLO (alaynmendoza@gmail.com)
 </footer>
 
 <script>
 let tabActiva = 'san';
 let modoSan = 'area';
-let _qdSanitario = 0, _qdPluvial = 0, _qdSemiTotal = 0;
+let _qdSanitario = 0;
+let _qdPluvial = 0;
+let _qdSemiTotal = 0;
 
 function activarTab(tab) {
   tabActiva = tab;
   ['san','plu','hid'].forEach(t => {
-    const b = document.getElementById('tab-' + t);
-    const p = document.getElementById('panel-' + t);
-    if(b) b.classList.toggle('active', t === tab);
-    if(p) p.classList.toggle('active', t === tab);
+    document.getElementById('tab-' + t).classList.toggle('active', t === tab);
+    document.getElementById('panel-' + t).classList.toggle('active', t === tab);
   });
 }
 
@@ -677,64 +751,200 @@ function setModoSan(modo) {
   document.getElementById('modo-san-sol').classList.toggle('active', modo === 'sol');
   document.getElementById('bloque-san-area').style.display = modo === 'area' ? '' : 'none';
   document.getElementById('bloque-san-sol').style.display = modo === 'sol' ? '' : 'none';
+  ocultarResultados('san');
 }
 
 function v(id) { return parseFloat(document.getElementById(id).value) || 0; }
 function tx(id, txt) { const el = document.getElementById(id); if(el) el.textContent = txt; }
 function fmt(n, d) { return n.toFixed(d !== undefined ? d : 3); }
 
-function calcSanitario() {
-  const area = v('san-area');
-  const dens = v('san-dens');
-  const dot = v('san-dot-a');
-  const cr = v('san-cr-a');
-  const qinfHA = v('san-qinf-a');
-  const P = area * dens;
-  const Qmed = (cr * P * dot) / 86400;
-  const FH = 2.5;
-  const Qd = (Qmed * FH) + (qinfHA * area);
-  const Qadop = Math.max(1.5, Qd);
+function mostrarError(tipo, msg) {
+  const el = document.getElementById('err-' + tipo);
+  if(el){ el.textContent = '⚠ ' + msg; el.classList.add('visible'); }
+}
+function limpiarError(tipo) {
+  const el = document.getElementById('err-' + tipo);
+  if(el) el.classList.remove('visible');
+}
+function ocultarResultados(tipo) {
+  const el = document.getElementById('res-' + tipo);
+  if(el) el.classList.remove('visible');
+}
 
-  tx('r-san-pob', P.toFixed(0));
-  tx('r-san-fh', FH.toFixed(2));
-  tx('r-san-qmed', Qmed.toFixed(3) + ' L/s');
-  tx('r-san-qinf', (qinfHA * area).toFixed(3) + ' L/s');
-  document.getElementById('r-san-qd').innerHTML = Qadop.toFixed(3) + '<span class="unit"> L/s</span>';
-  _qdSanitario = Qadop;
+function factorHarmon(P) {
+  const sqrtP = Math.sqrt(P / 1000);
+  const fh = (18 + sqrtP) / (4 + sqrtP);
+  return Math.min(Math.max(fh, 1.8), 3.8);
+}
+
+function calcSanitario() {
+  limpiarError('san');
+  let P, dotacion, CR, Qinf_ls;
+
+  if (modoSan === 'area') {
+    const area = v('san-area');
+    const dens = v('san-dens');
+    const dot = v('san-dot-a');
+    const cr = v('san-cr-a');
+    const qinfHA = v('san-qinf-a');
+    if (area <= 0 || dens <= 0 || dot <= 0) { mostrarError('san', 'Ingrese valores válidos.'); return; }
+    P = area * dens; dotacion = dot; CR = cr; Qinf_ls = qinfHA * area;
+  } else {
+    const nsol = v('san-nsol');
+    const hxv = v('san-hxv');
+    const dot = v('san-dot-s');
+    const cr = v('san-cr-s');
+    const areaInf = v('san-area-s');
+    const qinfHA = v('san-qinf-s');
+    if (nsol <= 0 || hxv <= 0 || dot <= 0) { mostrarError('san', 'Ingrese valores válidos.'); return; }
+    P = nsol * hxv; dotacion = dot; CR = cr; Qinf_ls = qinfHA * areaInf;
+  }
+
+  const Qmed = (CR * P * dotacion) / 86400;
+  const FH = factorHarmon(P);
+  const Qpunta = Qmed * FH;
+  const Qd = Qpunta + Qinf_ls;
+  const Qmin = 1.5;
+  const Qadoptado = Math.max(Qmin, Qd);
+
+  tx('r-san-pob', fmt(P, 0));
+  tx('r-san-fh', fmt(FH, 3));
+  tx('r-san-qmed', fmt(Qmed, 3) + ' L/s');
+  tx('r-san-qinf', fmt(Qinf_ls, 3) + ' L/s');
+  document.getElementById('r-san-qd').innerHTML = fmt(Qd, 3) + '<span class="unit"> L/s</span>';
+  tx('r-san-qmin', fmt(Qmin, 1) + ' L/s');
+  tx('r-san-qadop', fmt(Qadoptado, 3) + ' L/s');
+  document.getElementById('r-san-verif').innerHTML = Qd < Qmin
+    ? '<span class="res-badge badge-warn">⚠ Qd < 1.5 L/s — Se adopta Q mín = 1.5 L/s</span>'
+    : '<span class="res-badge badge-ok">✔ Qd ≥ 1.5 L/s</span>';
+
+  _qdSanitario = Qadoptado;
+  actualizarBotonesQ();
   document.getElementById('res-san').classList.add('visible');
 }
 
 function calcPluvial() {
-  const A = v('plu-area');
-  const C = v('plu-c') || 0.65;
-  const i = v('plu-intens-a') || 320;
-  const Qp = C * i * A;
-  document.getElementById('r-plu-q').innerHTML = Qp.toFixed(3) + '<span class="unit"> L/s</span>';
-  _qdPluvial = Qp;
+  limpiarError('plu');
+  const A_ha = v('plu-area');
+  const C = v('plu-c');
+  const i = v('plu-intens-a');
+
+  if (A_ha <= 0) { mostrarError('plu', 'El área debe ser mayor a 0.'); return; }
+  if (C <= 0 || C > 1) { mostrarError('plu', 'Ingrese un coeficiente C válido (0 a 1).'); return; }
+  if (i <= 0) { mostrarError('plu', 'La intensidad debe ser mayor a 0.'); return; }
+
+  const Qpluv = C * i * A_ha;
+  const QporHa = C * i;
+  let clas = Qpluv < 10 ? 'Bajo (< 10 L/s)' : Qpluv < 50 ? 'Medio (10–50 L/s)' : Qpluv < 200 ? 'Alto (50–200 L/s)' : 'Muy alto (> 200 L/s)';
+
+  document.getElementById('r-plu-area').innerHTML = fmt(A_ha, 4) + '<span class="unit"> ha</span>';
+  tx('r-plu-c', fmt(C, 2));
+  document.getElementById('r-plu-i').innerHTML = fmt(i, 1) + '<span class="unit"> L/s·ha</span>';
+  tx('r-plu-cia', fmt(Qpluv, 3));
+  document.getElementById('r-plu-q').innerHTML = fmt(Qpluv, 3) + '<span class="unit"> L/s</span>';
+  tx('r-plu-darea', fmt(A_ha, 4) + ' ha');
+  tx('r-plu-qha', fmt(QporHa, 3) + ' L/s/ha');
+  tx('r-plu-clas', clas);
+
+  _qdPluvial = Qpluv;
+  actualizarBotonesQ();
+  calcSemiPluvial(true);
   document.getElementById('res-plu').classList.add('visible');
 }
 
-function actualizarDiametros() {
-  const sel = document.getElementById('hid-diam');
-  if(!sel) return;
-  sel.innerHTML = '<option value="200">200 mm (8")</option><option value="250">250 mm (10")</option><option value="300">300 mm (12")</option>';
-  document.getElementById('hid-n').value = 0.009;
-  document.getElementById('hid-ks').value = 0.0015;
+function calcSemiPluvial(mostrarResultado) {
+  const porc = v('plu-porc-semi');
+  const Qpat = _qdPluvial * (porc / 100);
+  const Qsemi = _qdSanitario + Qpat;
+  document.getElementById('plu-q-semi').value = _qdPluvial > 0 ? fmt(Qsemi, 3) : '';
+
+  if (mostrarResultado && _qdPluvial > 0) {
+    document.getElementById('r-plu-semi-bloque').style.display = '';
+    tx('r-plu-semi-qsan', _qdSanitario > 0 ? fmt(_qdSanitario, 3) + ' L/s' : '(sin calcular)');
+    document.getElementById('r-plu-semi-lbl-plu').textContent = 'Q pluvial × ' + porc + '%';
+    tx('r-plu-semi-qpat', fmt(Qpat, 3) + ' L/s');
+    tx('r-plu-semi-qtot', fmt(Qsemi, 3) + ' L/s');
+    _qdSemiTotal = Qsemi;
+    actualizarBotonesQ();
+  }
 }
 
-function actualizarTipoSistema() {}
-function usarQSemiYVerificar() { calcVerificacion(); }
+const DIAMETROS = {
+  PVC: { mm: [100,150,200,250,300,355,400,450,500,600,700,800,900,1000], pulg: ['4"','6"','8"','10"','12"','14"','16"','18"','20"','24"','28"','32"','36"','40"'], n: 0.011, ks: 0.0015 },
+  PEAD: { mm: [200,250,315,355,400,450,500,560,630,710,800,900,1000], pulg: ['8"','10"','12"','14"','16"','18"','20"','22"','25"','28"','32"','36"','40"'], n: 0.012, ks: 0.003 },
+  GRES: { mm: [100,125,150,200,250,300,350,400,500,600], pulg: ['4"','5"','6"','8"','10"','12"','14"','16"','20"','24"'], n: 0.011, ks: 0.0030 }
+};
+
+function actualizarDiametros() {
+  const mat = document.getElementById('hid-mat').value;
+  const unid = document.getElementById('hid-unidad').value;
+  const sel = document.getElementById('hid-diam');
+  const datos = DIAMETROS[mat];
+  sel.innerHTML = '';
+  datos.mm.forEach((d, i) => {
+    const etiq = unid === 'mm' ? d + ' mm' : datos.pulg[i] + ' (' + d + ' mm)';
+    const opt = document.createElement('option');
+    opt.value = d; opt.textContent = etiq;
+    sel.appendChild(opt);
+  });
+  sel.selectedIndex = Math.max(0, datos.mm.findIndex(d => d >= 200));
+  document.getElementById('hid-n').value = datos.n;
+  document.getElementById('hid-ks').value = datos.ks;
+}
+
+function actualizarTipoSistema() { recalcQdSemi(); }
+function usarQSemiYVerificar() {
+  document.getElementById('hid-tipo').value = 'semi';
+  cargarQdDesde('semi');
+  calcVerificacion();
+}
+
+function recalcQdSemi() {
+  const porc = v('hid-porc-semi');
+  const Qpat = _qdPluvial * (porc / 100);
+  const Qsemi = _qdSanitario + Qpat;
+  tx('sc-qsan-lbl', _qdSanitario > 0 ? fmt(_qdSanitario,3) + ' L/s' : '— L/s');
+  tx('sc-qplu-lbl', _qdPluvial > 0 ? fmt(_qdPluvial,3) + ' L/s' : '— L/s');
+  tx('sc-qpat-lbl', fmt(Qpat,3) + ' L/s');
+  document.getElementById('hid-q-semi-calc').innerHTML = fmt(Qsemi,3) + '<span style="font-size:11px;color:var(--texto-sec);margin-left:3px;font-weight:400;">L/s</span>';
+}
+
+function actualizarBotonesQ() {
+  tx('lbl-q-san', _qdSanitario > 0 ? fmt(_qdSanitario,3) + ' L/s' : 'sin calcular');
+  tx('lbl-q-plu', _qdPluvial > 0 ? fmt(_qdPluvial,3) + ' L/s' : 'sin calcular');
+}
+
+function cargarQdDesde(fuente) {
+  let q = 0;
+  if (fuente === 'san') q = _qdSanitario;
+  else if (fuente === 'plu') q = _qdPluvial;
+  else if (fuente === 'semi') q = _qdSanitario + _qdPluvial * (v('hid-porc-semi') / 100);
+  if (q > 0) document.getElementById('hid-qd').value = fmt(q, 3);
+}
 
 function calcVerificacion() {
-  const D_mm = v('hid-diam') || 200;
-  const S_pct = v('hid-s') || 1.0;
-  const Qd = v('hid-qd') || 5.0;
-  const Qo = 25.4;
-  tx('r-hid-d', D_mm);
-  tx('r-hid-s', S_pct.toFixed(2));
-  tx('r-hid-qd', Qd.toFixed(3));
-  tx('r-hid-qo', Qo.toFixed(1));
-  tx('r-hid-vo', '1.25');
+  limpiarError('hid');
+  const D_mm = v('hid-diam');
+  const S_pct = v('hid-s');
+  const Qd = v('hid-qd');
+  if (D_mm <= 0 || S_pct <= 0 || Qd <= 0) { mostrarError('hid', 'Ingrese valores válidos.'); return; }
+  
+  const D_m = D_mm / 1000;
+  const S_frac = S_pct / 100;
+  const A = Math.PI * D_m * D_m / 4;
+  const Qo = Math.sqrt(8 * 9.81 * (D_m/4) * S_frac / 0.015) * A * 1000;
+
+  tx('r-hid-d', D_mm + ' mm');
+  tx('r-hid-s', fmt(S_pct, 2) + ' %');
+  tx('r-hid-qd', fmt(Qd, 3) + ' L/s');
+  tx('r-hid-qo', fmt(Qo, 3) + ' L/s');
+  tx('r-hid-vo', fmt(Qo / (A * 1000), 2) + ' m/s');
+  tx('r-hid-qqo', fmt(Qd / Qo, 3));
+  tx('r-hid-yd', fmt(Qd / Qo * 0.8, 3));
+  tx('r-hid-vreal', fmt(Qo / (A * 1000) * 0.9, 2) + ' m/s');
+  tx('r-hid-ft', fmt(9810 * (D_m/4) * S_frac, 2) + ' Pa');
+  document.getElementById('r-hid-cap').innerHTML = fmt(Qo * 0.9, 3) + '<span class="unit"> L/s</span>';
+
   document.getElementById('res-hid').classList.add('visible');
 }
 
