@@ -1,8 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import LandingPage from './LandingPage';
+import UpgradeProModal from './UpgradeProModal';
 
 export default function StartLoginPortal({ onGuestAccess }) {
-  const { login, register, loginAsAdmin, loginWithGoogle, isCloudConfigured } = useAuth();
+  const { login, register, loginAsAdmin, loginWithGoogle } = useAuth();
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [tab, setTab] = useState('login'); // 'login' | 'register' | 'admin'
 
   // Form State
@@ -13,20 +17,12 @@ export default function StartLoginPortal({ onGuestAccess }) {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const [fullName, setFullName] = useState('');
-  const [cedula, setCedula] = useState('');
   const [company, setCompany] = useState('');
   const [adminPass, setAdminPass] = useState('ADMIN2026');
 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
-
-  // Auto-limpiar errores de URL de OAuth al cargar
-  useEffect(() => {
-    if (window.location.search.includes('error=')) {
-      window.history.replaceState({}, document.title, window.location.pathname);
-    }
-  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -45,27 +41,19 @@ export default function StartLoginPortal({ onGuestAccess }) {
         if (password !== confirmPassword) {
           throw new Error('Las contraseñas no coinciden. Por favor verifique.');
         }
-        await register(email, password, fullName, `${company} ${cedula ? '(Mat: ' + cedula + ')' : ''}`.trim());
-        setSuccessMsg('¡Cuenta de ingeniero registrada exitosamente!');
+        await register(email, password, fullName, company);
+        setSuccessMsg('¡Cuenta registrada exitosamente!');
       } else {
         if (!email || !password) {
-          throw new Error('Por favor ingrese su correo y contraseña.');
+          throw new Error('Por favor ingrese correo y contraseña.');
         }
         await login(email, password);
-        setSuccessMsg('¡Bienvenido a AMCaudales Pro!');
+        setSuccessMsg('¡Inicio de sesión exitoso!');
       }
     } catch (err) {
-      setErrorMsg(err.message || 'Error al procesar la solicitud.');
+      setErrorMsg(err.message || 'Ocurrió un error al procesar el ingreso.');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleQuickAdminBypass = () => {
-    try {
-      loginAsAdmin('ADMIN2026');
-    } catch (e) {
-      console.error(e);
     }
   };
 
@@ -83,234 +71,87 @@ export default function StartLoginPortal({ onGuestAccess }) {
     }
   };
 
+  const handleStartTrial = () => {
+    // Si no está logueado, inicia como invitado/freemium para su 1er proyecto
+    onGuestAccess();
+  };
+
   return (
-    <div style={pageContainerStyle}>
-      <div style={contentGridStyle}>
-        
-        {/* Columna Izquierda: Presentación y Marca */}
-        <div style={heroSectionStyle}>
-          <div style={badgeStyle}>
-            <span style={badgeDotStyle}></span>
-            <span>AMCaudales Pro v3.0 • Suite de Ingeniería</span>
-          </div>
+    <>
+      <LandingPage
+        onStartTrial={handleStartTrial}
+        onOpenExpress={onGuestAccess}
+        onOpenLogin={() => setShowAuthModal(true)}
+        onOpenProModal={() => setShowUpgradeModal(true)}
+      />
 
-          <h1 style={heroTitleStyle}>
-            Diseño Hidráulico & Presupuestos <br />
-            <span style={gradientTextStyle}>en la Nube</span>
-          </h1>
-
-          <p style={heroDescriptionStyle}>
-            Plataforma integral para ingenieros civiles e hidráulicos. Realiza trazado de redes, 
-            cálculo de caudales por método racional, simulación SWMM, estructuras de aliviadero 
-            y exportación de Hoja Maestra Excel y planos AutoCAD LISP.
-          </p>
-
-          <div style={featuresGridStyle}>
-            <div style={featureCardStyle}>
-              <span style={featureIconStyle}>🗺️</span>
-              <div>
-                <strong style={featureTitleStyle}>Visor Espacial GIS</strong>
-                <p style={featureDescStyle}>Trazado interactivo de redes, pozos y áreas aferentes.</p>
-              </div>
+      {/* Modal de Autenticación / Registro / Admin */}
+      {showAuthModal && (
+        <div style={modalOverlayStyle}>
+          <div style={modalCardStyle}>
+            <div style={modalHeaderStyle}>
+              <h3 style={{ margin: 0, color: '#f8fafc', fontSize: '1.2rem', fontWeight: 800 }}>
+                AMCaudales Pro • Acceso a la Plataforma
+              </h3>
+              <button onClick={() => setShowAuthModal(false)} style={closeBtnStyle}>✕</button>
             </div>
 
-            <div style={featureCardStyle}>
-              <span style={featureIconStyle}>🧮</span>
-              <div>
-                <strong style={featureTitleStyle}>Motor Hidráulico RAS-2017</strong>
-                <p style={featureDescStyle}>Cálculo automático de Manning, Colebrook-White y Froude.</p>
-              </div>
-            </div>
-
-            <div style={featureCardStyle}>
-              <span style={featureIconStyle}>📊</span>
-              <div>
-                <strong style={featureTitleStyle}>Presupuesto & Cantidades</strong>
-                <p style={featureDescStyle}>Generación instantánea de APU, excavaciones y APU Banco.</p>
-              </div>
-            </div>
-
-            <div style={featureCardStyle}>
-              <span style={featureIconStyle}>☁️</span>
-              <div>
-                <strong style={featureTitleStyle}>Persistencia .AMC & Nube</strong>
-                <p style={featureDescStyle}>Guarda tu progreso en la nube o en tu equipo local.</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Columna Derecha: Tarjeta de Acceso Rediseñada y Clara */}
-        <div style={authCardContainerStyle}>
-          <div style={authCardStyle}>
-            
-            {/* Pestañas Principales */}
-            <div style={tabContainerStyle}>
+            {/* Pestañas de Login / Registro / Admin */}
+            <div style={tabsGroupStyle}>
               <button
                 type="button"
                 onClick={() => { setTab('login'); setErrorMsg(''); setSuccessMsg(''); }}
-                style={{
-                  ...tabBtnStyle,
-                  ...(tab === 'login' ? activeTabBtnStyle : {})
-                }}
+                style={tab === 'login' ? activeTabStyle : inactiveTabStyle}
               >
                 🔑 Iniciar Sesión
               </button>
               <button
                 type="button"
                 onClick={() => { setTab('register'); setErrorMsg(''); setSuccessMsg(''); }}
-                style={{
-                  ...tabBtnStyle,
-                  ...(tab === 'register' ? activeTabBtnStyle : {})
-                }}
+                style={tab === 'register' ? activeTabStyle : inactiveTabStyle}
               >
                 📝 Crear Cuenta
               </button>
               <button
                 type="button"
                 onClick={() => { setTab('admin'); setErrorMsg(''); setSuccessMsg(''); }}
-                style={{
-                  ...tabBtnStyle,
-                  ...(tab === 'admin' ? activeTabBtnStyle : {})
-                }}
+                style={tab === 'admin' ? activeTabStyle : inactiveTabStyle}
               >
                 👑 Admin
               </button>
             </div>
 
-            {!isCloudConfigured && (
-              <div style={localBadgeStyle}>
-                💡 <strong>Modo Local:</strong> Puedes probar el inicio de sesión y registro inmediatamente.
-              </div>
-            )}
+            {/* Google Login Button */}
+            <div style={{ marginBottom: '1rem' }}>
+              <button type="button" onClick={handleGoogleAuth} style={googleBtnStyle}>
+                🌐 {tab === 'register' ? 'Registrarse en 1 clic con Google / Gmail' : 'Ingresar con Google / Gmail'}
+              </button>
+            </div>
 
-            {errorMsg && <div style={errorStyle}>{errorMsg}</div>}
-            {successMsg && <div style={successStyle}>{successMsg}</div>}
+            <div style={separatorStyle}><span>o usa tu correo y contraseña</span></div>
 
-            {/* Opciones Específicas según Pestaña */}
-            {tab === 'login' && (
-              <>
-                <div style={formHeaderStyle}>
-                  <h2 style={formTitleStyle}>Iniciar Sesión</h2>
-                  <p style={formSubtitleStyle}>Ingresa a tus proyectos guardados en la nube</p>
-                </div>
+            {errorMsg && <div style={errorBannerStyle}>⚠️ {errorMsg}</div>}
+            {successMsg && <div style={successBannerStyle}>✔ {successMsg}</div>}
 
-                <button
-                  type="button"
-                  onClick={handleGoogleAuth}
-                  disabled={loading}
-                  style={googleBtnStyle}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" style={{ marginRight: '8px' }}>
-                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
-                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
-                  </svg>
-                  Ingresar con Google / Gmail
-                </button>
-
-                <div style={dividerStyle}>
-                  <span style={dividerTextStyle}>o usa tu correo y contraseña</span>
-                </div>
-              </>
-            )}
-
-            {tab === 'register' && (
-              <>
-                <div style={formHeaderStyle}>
-                  <h2 style={formTitleStyle}>Registro de Nuevo Ingeniero</h2>
-                  <p style={formSubtitleStyle}>Crea tu cuenta profesional para guardar diseños</p>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleGoogleAuth}
-                  disabled={loading}
-                  style={googleBtnStyle}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" style={{ marginRight: '8px' }}>
-                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
-                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
-                  </svg>
-                  Registrarse en 1 clic con Google / Gmail
-                </button>
-
-                <div style={dividerStyle}>
-                  <span style={dividerTextStyle}>o completa el formulario manual</span>
-                </div>
-              </>
-            )}
-
-            {tab === 'admin' && (
-              <div style={formHeaderStyle}>
-                <h2 style={formTitleStyle}>Acceso Administrador Maestro</h2>
-                <p style={formSubtitleStyle}>Ingreso directo con permisos Plan Pro para evaluación</p>
-              </div>
-            )}
-
-            {/* Formulario */}
-            <form onSubmit={handleSubmit} style={formStyle}>
-              {tab === 'admin' && (
-                <>
-                  <button
-                    type="button"
-                    onClick={handleQuickAdminBypass}
-                    style={adminQuickBtnStyle}
-                  >
-                    👑 Entrar Directamente como Super Admin (Bypass Total)
-                  </button>
-
-                  <div style={dividerStyle}>
-                    <span style={dividerTextStyle}>o ingresa la clave de administrador</span>
-                  </div>
-
-                  <div>
-                    <label style={labelStyle}>Clave Maestra de Administrador *</label>
-                    <input
-                      type="password"
-                      placeholder="ADMIN2026"
-                      value={adminPass}
-                      onChange={(e) => setAdminPass(e.target.value)}
-                      style={inputStyle}
-                      required
-                    />
-                  </div>
-                </>
-              )}
-
+            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {tab === 'register' && (
                 <>
                   <div>
-                    <label style={labelStyle}>Nombre Completo del Ingeniero *</label>
+                    <label style={labelStyle}>Nombre Completo *</label>
                     <input
                       type="text"
-                      placeholder="Ej. Ing. Juan Pérez"
+                      required
+                      placeholder="Ej. Ing. Norman Castillo"
                       value={fullName}
                       onChange={(e) => setFullName(e.target.value)}
                       style={inputStyle}
-                      required
                     />
                   </div>
-
                   <div>
-                    <label style={labelStyle}>Matrícula / Cédula Profesional</label>
+                    <label style={labelStyle}>Empresa / Firma de Consultoría</label>
                     <input
                       type="text"
-                      placeholder="Ej. MP-68254-98765"
-                      value={cedula}
-                      onChange={(e) => setCedula(e.target.value)}
-                      style={inputStyle}
-                    />
-                  </div>
-
-                  <div>
-                    <label style={labelStyle}>Empresa / Entidad Consultora</label>
-                    <input
-                      type="text"
-                      placeholder="Ej. Consultoría Hidráulica S.A.S"
+                      placeholder="Ej. Ingeniería AMC S.A.S."
                       value={company}
                       onChange={(e) => setCompany(e.target.value)}
                       style={inputStyle}
@@ -319,38 +160,47 @@ export default function StartLoginPortal({ onGuestAccess }) {
                 </>
               )}
 
-              {tab !== 'admin' && (
+              {tab === 'admin' ? (
+                <div>
+                  <label style={labelStyle}>Clave Maestra de Administrador</label>
+                  <input
+                    type="password"
+                    value={adminPass}
+                    onChange={(e) => setAdminPass(e.target.value)}
+                    style={inputStyle}
+                  />
+                </div>
+              ) : (
                 <>
                   <div>
                     <label style={labelStyle}>Correo Electrónico *</label>
                     <input
                       type="email"
-                      placeholder="juan.perez@amcaudales.com"
+                      required
+                      placeholder="ejemplo@amcaudales.com"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       style={inputStyle}
-                      required
                     />
                   </div>
 
                   <div>
                     <label style={labelStyle}>Contraseña *</label>
-                    <div style={passwordWrapperStyle}>
+                    <div style={{ position: 'relative' }}>
                       <input
-                        type={showPassword ? "text" : "password"}
+                        type={showPassword ? 'text' : 'password'}
+                        required
                         placeholder="••••••••"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
-                        style={passwordInputStyle}
-                        required
+                        style={inputStyle}
                       />
                       <button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
-                        style={toggleEyeBtnStyle}
-                        title={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                        style={eyeBtnStyle}
                       >
-                        {showPassword ? "🙈" : "👁️"}
+                        {showPassword ? '🙈' : '👁️'}
                       </button>
                     </div>
                   </div>
@@ -358,22 +208,21 @@ export default function StartLoginPortal({ onGuestAccess }) {
                   {tab === 'register' && (
                     <div>
                       <label style={labelStyle}>Confirmar Contraseña *</label>
-                      <div style={passwordWrapperStyle}>
+                      <div style={{ position: 'relative' }}>
                         <input
-                          type={showConfirmPassword ? "text" : "password"}
+                          type={showConfirmPassword ? 'text' : 'password'}
+                          required
                           placeholder="••••••••"
                           value={confirmPassword}
                           onChange={(e) => setConfirmPassword(e.target.value)}
-                          style={passwordInputStyle}
-                          required
+                          style={inputStyle}
                         />
                         <button
                           type="button"
                           onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                          style={toggleEyeBtnStyle}
-                          title={showConfirmPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                          style={eyeBtnStyle}
                         >
-                          {showConfirmPassword ? "🙈" : "👁️"}
+                          {showConfirmPassword ? '🙈' : '👁️'}
                         </button>
                       </div>
                     </div>
@@ -381,361 +230,188 @@ export default function StartLoginPortal({ onGuestAccess }) {
                 </>
               )}
 
-              <button
-                type="submit"
-                disabled={loading}
-                style={{
-                  ...submitBtnStyle,
-                  opacity: loading ? 0.7 : 1,
-                  cursor: loading ? 'not-allowed' : 'pointer'
-                }}
-              >
-                {loading
-                  ? 'Verificando...'
-                  : tab === 'admin'
-                  ? 'Ingresar con Clave Administrador'
-                  : tab === 'register'
-                  ? 'Crear Mi Cuenta de Ingeniero'
-                  : 'Ingresar al Sistema'}
+              <button type="submit" disabled={loading} style={submitBtnStyle}>
+                {loading ? 'Procesando...' : tab === 'admin' ? '👑 Entrar como Super Admin' : tab === 'register' ? 'Crear Cuenta e Ingresar' : 'Ingresar al Sistema'}
               </button>
             </form>
 
-            <div style={dividerStyle}>
-              <span style={dividerTextStyle}>o prueba la plataforma sin registro</span>
-            </div>
-
-            <button
-              type="button"
-              onClick={onGuestAccess}
-              style={guestBtnStyle}
-            >
-              🚀 Explorar en Modo Invitado / Demo
+            <button onClick={handleStartTrial} style={guestModeBtnStyle}>
+              🚀 Explorar en Modo Invitado / Prueba (1er Proyecto Gratis)
             </button>
           </div>
         </div>
+      )}
 
-      </div>
-    </div>
+      {/* Modal Upgrade Pro */}
+      <UpgradeProModal
+        isOpen={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+      />
+    </>
   );
 }
 
-// Estilos Portal de Inicio
-const pageContainerStyle = {
-  minHeight: '100vh',
-  backgroundColor: '#050a15',
-  backgroundImage: 'radial-gradient(circle at 20% 20%, rgba(0, 198, 255, 0.08) 0%, transparent 40%), radial-gradient(circle at 80% 80%, rgba(124, 58, 237, 0.08) 0%, transparent 40%)',
+// ── ESTILOS CSS-IN-JS PARA EL MODAL DE AUTENTICACIÓN ──
+const modalOverlayStyle = {
+  position: 'fixed',
+  top: 0, left: 0, right: 0, bottom: 0,
+  background: 'rgba(3, 7, 18, 0.85)',
+  backdropFilter: 'blur(10px)',
+  zIndex: 10000,
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  padding: '40px 20px',
-  color: '#f8fafc',
-  fontFamily: "'Inter', sans-serif"
+  padding: '16px'
 };
 
-const contentGridStyle = {
+const modalCardStyle = {
+  background: '#0a1128',
+  border: '1px solid rgba(255, 255, 255, 0.1)',
+  borderRadius: '20px',
+  padding: '28px',
   width: '100%',
-  maxWidth: '1100px',
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))',
-  gap: '40px',
-  alignItems: 'center'
+  maxWidth: '460px',
+  boxShadow: '0 25px 50px rgba(0, 0, 0, 0.6)'
 };
 
-const heroSectionStyle = {
+const modalHeaderStyle = {
   display: 'flex',
-  flexDirection: 'column',
-  gap: '20px'
-};
-
-const badgeStyle = {
-  display: 'inline-flex',
+  justifyContent: 'space-between',
   alignItems: 'center',
-  gap: '8px',
-  backgroundColor: 'rgba(56, 189, 248, 0.1)',
-  border: '1px solid rgba(56, 189, 248, 0.25)',
-  color: '#38bdf8',
-  padding: '6px 14px',
-  borderRadius: '20px',
-  fontSize: '0.82rem',
-  fontWeight: '600',
-  width: 'fit-content'
+  marginBottom: '20px'
 };
 
-const badgeDotStyle = {
-  width: '8px',
-  height: '8px',
-  borderRadius: '50%',
-  backgroundColor: '#38bdf8',
-  boxShadow: '0 0 10px #38bdf8'
-};
-
-const heroTitleStyle = {
-  fontSize: '2.5rem',
-  fontWeight: '800',
-  fontFamily: "'Outfit', sans-serif",
-  lineHeight: '1.2',
-  margin: 0,
-  color: '#ffffff'
-};
-
-const gradientTextStyle = {
-  background: 'linear-gradient(135deg, #00c6ff 0%, #0072ff 100%)',
-  WebkitBackgroundClip: 'text',
-  WebkitTextFillColor: 'transparent'
-};
-
-const heroDescriptionStyle = {
-  fontSize: '0.98rem',
-  color: '#94a3b8',
-  lineHeight: '1.6',
-  margin: 0
-};
-
-const featuresGridStyle = {
-  display: 'grid',
-  gridTemplateColumns: '1fr 1fr',
-  gap: '16px',
-  marginTop: '10px'
-};
-
-const featureCardStyle = {
-  display: 'flex',
-  gap: '12px',
-  backgroundColor: 'rgba(15, 23, 42, 0.6)',
-  border: '1px solid rgba(255, 255, 255, 0.06)',
-  padding: '14px',
-  borderRadius: '12px',
-  backdropFilter: 'blur(8px)'
-};
-
-const featureIconStyle = {
-  fontSize: '1.4rem'
-};
-
-const featureTitleStyle = {
-  display: 'block',
-  fontSize: '0.85rem',
-  color: '#f1f5f9',
-  marginBottom: '2px'
-};
-
-const featureDescStyle = {
-  fontSize: '0.75rem',
-  color: '#64748b',
-  margin: 0,
-  lineHeight: '1.3'
-};
-
-const authCardContainerStyle = {
-  display: 'flex',
-  justifyContent: 'center'
-};
-
-const authCardStyle = {
-  width: '100%',
-  maxWidth: '440px',
-  backgroundColor: '#111827',
-  border: '1px solid rgba(255, 255, 255, 0.12)',
-  borderRadius: '20px',
-  boxShadow: '0 25px 60px rgba(0, 0, 0, 0.6), 0 0 40px rgba(0, 198, 255, 0.12)',
-  padding: '30px',
-  display: 'flex',
-  flexDirection: 'column',
-  gap: '14px'
-};
-
-const formHeaderStyle = {
-  marginBottom: '4px'
-};
-
-const formTitleStyle = {
-  fontSize: '1.2rem',
-  fontWeight: '700',
-  color: '#ffffff',
-  margin: '0 0 4px 0'
-};
-
-const formSubtitleStyle = {
-  fontSize: '0.8rem',
-  color: '#94a3b8',
-  margin: 0
-};
-
-const tabContainerStyle = {
-  display: 'flex',
-  backgroundColor: '#0f172a',
-  padding: '4px',
-  borderRadius: '10px',
-  border: '1px solid #1e293b'
-};
-
-const tabBtnStyle = {
-  flex: 1,
-  padding: '8px 4px',
-  backgroundColor: 'transparent',
+const closeBtnStyle = {
+  background: 'transparent',
   border: 'none',
+  color: '#94a3b8',
+  fontSize: '1.2rem',
+  cursor: 'pointer'
+};
+
+const tabsGroupStyle = {
+  display: 'grid',
+  gridTemplateColumns: '1fr 1fr 1fr',
+  gap: '6px',
+  marginBottom: '20px'
+};
+
+const activeTabStyle = {
+  padding: '8px',
+  background: 'rgba(59, 130, 246, 0.2)',
+  border: '1px solid #3b82f6',
+  borderRadius: '8px',
+  color: '#60a5fa',
+  fontWeight: '700',
+  fontSize: '0.85rem',
+  cursor: 'pointer'
+};
+
+const inactiveTabStyle = {
+  padding: '8px',
+  background: 'rgba(255, 255, 255, 0.03)',
+  border: '1px solid rgba(255, 255, 255, 0.08)',
   borderRadius: '8px',
   color: '#94a3b8',
-  fontSize: '0.8rem',
-  fontWeight: '600',
-  cursor: 'pointer',
-  transition: 'all 0.2s ease'
-};
-
-const activeTabBtnStyle = {
-  backgroundColor: '#1e293b',
-  color: '#ffffff',
-  boxShadow: '0 2px 8px rgba(0,0,0,0.3)'
+  fontSize: '0.85rem',
+  cursor: 'pointer'
 };
 
 const googleBtnStyle = {
   width: '100%',
-  padding: '11px',
-  backgroundColor: '#ffffff',
-  border: '1px solid #d1d5db',
+  padding: '12px',
+  background: '#ffffff',
+  color: '#0f172a',
+  border: 'none',
   borderRadius: '8px',
-  color: '#1f2937',
-  fontSize: '0.88rem',
-  fontWeight: '600',
+  fontWeight: '700',
+  fontSize: '0.9rem',
   cursor: 'pointer',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
+  gap: '8px'
 };
 
-const localBadgeStyle = {
-  backgroundColor: 'rgba(234, 179, 8, 0.12)',
-  border: '1px solid rgba(234, 179, 8, 0.3)',
-  color: '#facc15',
-  padding: '8px 12px',
-  borderRadius: '8px',
+const separatorStyle = {
+  textAlign: 'center',
+  margin: '12px 0',
   fontSize: '0.78rem',
-  lineHeight: '1.4'
-};
-
-const errorStyle = {
-  backgroundColor: 'rgba(239, 68, 68, 0.15)',
-  border: '1px solid rgba(239, 68, 68, 0.4)',
-  color: '#f87171',
-  padding: '8px 12px',
-  borderRadius: '8px',
-  fontSize: '0.82rem'
-};
-
-const successStyle = {
-  backgroundColor: 'rgba(34, 197, 94, 0.15)',
-  border: '1px solid rgba(34, 197, 94, 0.4)',
-  color: '#4ade80',
-  padding: '8px 12px',
-  borderRadius: '8px',
-  fontSize: '0.82rem'
-};
-
-const formStyle = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: '12px'
+  color: '#64748b'
 };
 
 const labelStyle = {
   display: 'block',
   fontSize: '0.78rem',
-  fontWeight: '600',
-  color: '#cbd5e1',
-  marginBottom: '4px'
+  fontWeight: '700',
+  color: '#94a3b8',
+  marginBottom: '4px',
+  textTransform: 'uppercase'
 };
 
 const inputStyle = {
   width: '100%',
   padding: '10px 12px',
-  backgroundColor: '#030712',
-  border: '1px solid #1f2937',
+  background: '#030712',
+  border: '1px solid rgba(255, 255, 255, 0.12)',
   borderRadius: '8px',
   color: '#ffffff',
-  fontSize: '0.88rem',
-  outline: 'none',
-  boxSizing: 'border-box'
+  fontSize: '0.9rem',
+  outline: 'none'
 };
 
-const passwordWrapperStyle = {
-  position: 'relative',
-  display: 'flex',
-  alignItems: 'center'
-};
-
-const passwordInputStyle = {
-  width: '100%',
-  padding: '10px 38px 10px 12px',
-  backgroundColor: '#030712',
-  border: '1px solid #1f2937',
-  borderRadius: '8px',
-  color: '#ffffff',
-  fontSize: '0.88rem',
-  outline: 'none',
-  boxSizing: 'border-box'
-};
-
-const toggleEyeBtnStyle = {
+const eyeBtnStyle = {
   position: 'absolute',
-  right: '8px',
-  background: 'none',
+  right: '10px',
+  top: '50%',
+  transform: 'translateY(-50%)',
+  background: 'transparent',
   border: 'none',
-  cursor: 'pointer',
-  fontSize: '1rem',
-  padding: '4px'
+  color: '#94a3b8',
+  cursor: 'pointer'
 };
 
 const submitBtnStyle = {
   width: '100%',
-  padding: '11px',
-  marginTop: '4px',
-  backgroundColor: '#2563eb',
-  backgroundImage: 'linear-gradient(135deg, #00c6ff 0%, #0072ff 100%)',
+  padding: '12px',
+  background: 'linear-gradient(135deg, #3b82f6, #2563eb)',
+  color: 'white',
   border: 'none',
   borderRadius: '8px',
-  color: '#ffffff',
-  fontSize: '0.9rem',
-  fontWeight: '600',
-  boxShadow: '0 4px 16px rgba(0, 114, 255, 0.4)'
-};
-
-const dividerStyle = {
-  textAlign: 'center',
-  borderBottom: '1px solid #1f2937',
-  lineHeight: '0.1em',
-  margin: '6px 0'
-};
-
-const dividerTextStyle = {
-  backgroundColor: '#111827',
-  padding: '0 10px',
-  color: '#64748b',
-  fontSize: '0.72rem'
-};
-
-const adminQuickBtnStyle = {
-  width: '100%',
-  padding: '11px',
-  backgroundColor: '#f59e0b',
-  backgroundImage: 'linear-gradient(135deg, #fbbf24 0%, #d97706 100%)',
-  border: 'none',
-  borderRadius: '8px',
-  color: '#0f172a',
-  fontSize: '0.85rem',
   fontWeight: '700',
+  fontSize: '0.95rem',
   cursor: 'pointer',
-  boxShadow: '0 4px 14px rgba(245, 158, 11, 0.3)'
+  marginTop: '8px'
 };
 
-const guestBtnStyle = {
+const guestModeBtnStyle = {
   width: '100%',
-  padding: '9px',
-  backgroundColor: 'rgba(255, 255, 255, 0.05)',
-  border: '1px solid rgba(255, 255, 255, 0.1)',
+  padding: '10px',
+  background: 'transparent',
+  border: '1px dashed rgba(255, 255, 255, 0.2)',
   borderRadius: '8px',
-  color: '#cbd5e1',
+  color: '#94a3b8',
   fontSize: '0.82rem',
-  fontWeight: '500',
-  cursor: 'pointer'
+  cursor: 'pointer',
+  marginTop: '12px'
+};
+
+const errorBannerStyle = {
+  padding: '10px',
+  background: 'rgba(239, 68, 68, 0.15)',
+  border: '1px solid #ef4444',
+  borderRadius: '8px',
+  color: '#fca5a5',
+  fontSize: '0.82rem',
+  marginBottom: '10px'
+};
+
+const successBannerStyle = {
+  padding: '10px',
+  background: 'rgba(16, 185, 129, 0.15)',
+  border: '1px solid #10b981',
+  borderRadius: '8px',
+  color: '#6ee7b7',
+  fontSize: '0.82rem',
+  marginBottom: '10px'
 };
