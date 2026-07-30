@@ -131,6 +131,7 @@ export function AuthProvider({ children }) {
   };
 
   const fetchUserProjects = async (userId) => {
+    if (!userId) return;
     let cloudList = [];
     if (isCloudConfigured && supabase) {
       try {

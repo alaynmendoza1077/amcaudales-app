@@ -34,9 +34,7 @@ class GlobalErrorBoundary extends React.Component {
   }
 
   handleReset = () => {
-    try {
-      localStorage.removeItem('amcaudales_user_session');
-    } catch(e){}
+    this.setState({ hasError: false, error: null });
     window.location.reload();
   };
 
