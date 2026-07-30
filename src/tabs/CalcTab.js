@@ -416,15 +416,21 @@ export default function CalcTab(props){
         if(i===chain.length-1)pts.push({x:xAcc,crDE:r.crA,cfDE:r.cfA,de:r.a,D:r.D,nom:"",L:0});
       });
       var xMax=xAcc||100;
-      var allY=pts.map(function(p){return p.crDE;}).concat(pts.map(function(p){return p.cfDE;}));
-      var yMin=Math.min.apply(null,allY)-1;var yMax=Math.max.apply(null,allY)+1;var yR=yMax-yMin||1;
+      var allY=pts.map(function(p){return parseFloat(p.crDE);}).concat(pts.map(function(p){return parseFloat(p.cfDE);})).filter(function(v){return !isNaN(v);});
+      var yMin=(allY.length>0?Math.min.apply(null,allY):0)-1;var yMax=(allY.length>0?Math.max.apply(null,allY):10)+1;var yR=yMax-yMin||1;
       /* >>> ADICIÓN v36.6: zoom para perfil <<< */
       var zoomLvl=props.perfilZoom||1;
       var W=Math.round(900*zoomLvl);var H=Math.round(380*zoomLvl);var mL=60;var mR=20;var mT=20;var mB=80;
       /* >>> FIN ADICIÓN v36.6 <<< */
       var pw=W-mL-mR;var ph=H-mT-mB;
-      var sx=function(v){return mL+v/xMax*pw;};
-      var sy=function(v){return mT+(yMax-v)/yR*ph;};
+      var sx=function(v){
+        var val=parseFloat(v);if(isNaN(val))val=0;
+        return mL+(xMax>0?(val/xMax)*pw:0);
+      };
+      var sy=function(v){
+        var val=parseFloat(v);if(isNaN(val))val=yMin;
+        return mT+(yR>0?((yMax-val)/yR)*ph:0);
+      };
       var terr="M"+pts.map(function(p){return sx(p.x)+","+sy(p.crDE);}).join(" L");
       var bat="M"+pts.map(function(p){return sx(p.x)+","+sy(p.cfDE);}).join(" L");
       var gridY=[];var step=yR>10?2:yR>5?1:.5;for(var gy=Math.ceil(yMin/step)*step;gy<=yMax;gy+=step)gridY.push(gy);
