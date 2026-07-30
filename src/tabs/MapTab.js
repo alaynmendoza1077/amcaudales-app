@@ -1766,7 +1766,7 @@ function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, se
         setInpData(updatedInpData);
     }
 
-    sT(topoSort(processed));
+    setT(topoSort(processed));
     if(setTab) setTab("calc");
     alert("¡Red y Áreas Inyectadas a AMCaudales!");
 };
