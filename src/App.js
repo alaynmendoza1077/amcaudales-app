@@ -35,6 +35,7 @@ class GlobalErrorBoundary extends React.Component {
 
   handleReset = () => {
     this.setState({ hasError: false, error: null });
+    window.location.href = window.location.origin;
   };
 
   render() {
