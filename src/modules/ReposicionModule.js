@@ -572,7 +572,46 @@ export default function ReposicionModule({ onBack, initialData }){
             var restoredP = Object.assign({}, DP, data.P);
             setP(restoredP);
             setIdfEst(data.P.estacion||"BUC");
+          } else if (initialData && (initialData.type === 'amc' || initialData.type === 'amc_payload')) {
+        try {
+          var data = typeof initialData.content === 'string' ? JSON.parse(initialData.content) : initialData.content;
+          var loadedP = data.P || (data.proyecto || data.pozos || data.tr || data.estacion ? data : null);
+          if (loadedP) {
+            var restoredP2 = Object.assign({}, DP, loadedP);
+            setP(restoredP2);
+            setIdfEst(restoredP2.estacion || "BUC");
           }
+          var loadedT = data.T || data.tr || data.tramos || [];
+          if (loadedT && loadedT.length > 0) setT(loadedT);
+
+          if (data.sumLat) setSumLat(data.sumLat);
+          if (data.sumTrans) setSumTrans(data.sumTrans);
+          if (data.pbItems) setPbItems(data.pbItems);
+          if (data.alivData) setAlivData(data.alivData);
+          if (data.sumData) setSumData(data.sumData);
+          if (data.estSepData) setEstSepData(data.estSepData);
+          if (data.urbanismoData) setUrbanismoData(data.urbanismoData);
+          if (data.inpData) setInpData(data.inpData);
+          if (data.autoAreasPoly) setAutoAreasPoly(data.autoAreasPoly);
+          if (data.selMap) setSelMap(data.selMap);
+          if (data.outfalls) setOutfalls(data.outfalls);
+          if (data.filterSel !== undefined) setFilterSel(data.filterSel);
+          if (data.R) setR(data.R);
+          if (data.flowStage && data.flowStage !== 'select') {
+            setFlowStage(data.flowStage);
+          } else {
+            setFlowStage('visor');
+          }
+          if (data.tab) {
+            setTab(data.tab);
+          } else {
+            setTab('calc');
+          }
+        } catch(err) {
+          console.error("Error cargando .AMC:", err);
+          alert("Aviso: Se abrieron las configuraciones del proyecto cargado.");
+        }
+     }
           if(data.T)setT(data.T);
           if(data.sumLat)setSumLat(data.sumLat);
           if(data.sumTrans)setSumTrans(data.sumTrans);

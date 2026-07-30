@@ -156,7 +156,7 @@ function AppContent() {
       case 'express':
         return <ExpressModule onBack={() => handleSetModule('home')} />;
       case 'presupuesto':
-        return <PresupuestoModule onBack={() => handleSetModule('home')} />;
+        return <ReposicionModule onBack={() => handleSetModule('home')} initialData={{ type: 'setup', projectSetup: { flowStage: 'quantities', tab: 'pre' } }} />;
       case 'home':
       default:
         return <HomeDashboard setModule={handleSetModule} />;
