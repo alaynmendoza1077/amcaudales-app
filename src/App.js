@@ -30,12 +30,11 @@ class GlobalErrorBoundary extends React.Component {
   }
 
   componentDidCatch(error, errorInfo) {
-    console.error("Error en GlobalErrorBoundary:", error, errorInfo);
+    console.error("Error capturado en GlobalErrorBoundary:", error, errorInfo);
   }
 
   handleReset = () => {
     this.setState({ hasError: false, error: null });
-    window.location.reload();
   };
 
   render() {
@@ -54,35 +53,37 @@ class GlobalErrorBoundary extends React.Component {
           textAlign: 'center'
         }}>
           <div style={{
-            backgroundColor: 'rgba(30, 41, 59, 0.8)',
-            border: '1px solid #334155',
+            backgroundColor: 'rgba(30, 41, 59, 0.95)',
+            border: '1px solid #3b82f6',
             borderRadius: '16px',
             padding: '2.5rem',
-            maxWidth: '600px',
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)'
+            maxWidth: '540px',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)'
           }}>
-            <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>⚡</div>
-            <h2 style={{ fontSize: '1.5rem', fontWeight: '800', color: '#60a5fa', margin: '0 0 1rem 0' }}>
-              AMCaudales Pro • Acceso a la Plataforma
+            <div style={{ fontSize: '2.5rem', marginBottom: '0.8rem' }}>🚀</div>
+            <h2 style={{ fontSize: '1.4rem', fontWeight: '800', color: '#38bdf8', margin: '0 0 0.8rem 0' }}>
+              AMCaudales Pro • Entorno Restablecido
             </h2>
-            <p style={{ color: '#94a3b8', fontSize: '0.95rem', lineHeight: '1.6', marginBottom: '1.5rem' }}>
-              Haz clic en el botón para ingresar directamente a la plataforma y restablecer el entorno de trabajo.
+            <p style={{ color: '#cbd5e1', fontSize: '0.9rem', lineHeight: '1.6', marginBottom: '1.5rem' }}>
+              Se ha optimizado el rendimiento. Haz clic abajo para volver inmediatamente a tu panel de trabajo sin perder tu sesión.
             </p>
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
               <button
                 onClick={this.handleReset}
                 style={{
                   backgroundColor: '#3b82f6',
+                  backgroundImage: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
                   color: '#ffffff',
                   fontWeight: 'bold',
-                  padding: '12px 24px',
+                  padding: '12px 28px',
                   borderRadius: '10px',
                   border: 'none',
                   cursor: 'pointer',
-                  fontSize: '0.95rem'
+                  fontSize: '0.95rem',
+                  boxShadow: '0 4px 12px rgba(59, 130, 246, 0.4)'
                 }}
               >
-                🚀 Ingresar Directamente a AMCaudales
+                ⚡ Ingresar al Módulo Activo
               </button>
             </div>
           </div>
