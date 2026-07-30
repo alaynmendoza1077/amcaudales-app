@@ -1453,7 +1453,8 @@ export function exportPlantaLISP(R, P, T, inpData) {
               if (len > maxPozoLen) maxPozoLen = len;
           }
       });
-      // Table       let col1 = Math.max(25.0 * fEscala, (maxPozoLen * 2.2 + 6.0) * fEscala); // Pozo width
+      // Table dimensioning
+      let col1 = Math.max(25.0 * fEscala, (maxPozoLen * 2.2 + 6.0) * fEscala); // Pozo width
       let col2 = 28.0 * fEscala; // Este width
       let col3 = 28.0 * fEscala; // Norte width
       let rowH = 4.5 * fEscala;
@@ -1543,7 +1544,7 @@ export function exportPlantaLISP(R, P, T, inpData) {
       curY -= rowH * 3.5;
       let convStartY = curY;
       // Convenciones dimensioning dynamically
-      let convW = Math.max(totalW, (maxConvLen * 1.8 + 35.0) * fEscala);) * fEscala);
+      let convW = Math.max(totalW, (maxConvLen * 1.8 + 35.0) * fEscala);
       
       lines.push(`  (SETVAR "CECOLOR" "150")`);
       lines.push(`  (COMMAND "_SOLID" ${rPt(tableStartX, curY)} ${rPt(tableStartX + convW, curY)} ${rPt(tableStartX, curY - rowH*1.5)} ${rPt(tableStartX + convW, curY - rowH*1.5)} "" "")`);

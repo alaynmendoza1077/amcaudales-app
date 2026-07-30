@@ -34,11 +34,11 @@ export default function AuthModal({ isOpen, onClose }) {
         if (password !== confirmPassword) {
           throw new Error('Las contraseñas no coinciden. Por favor verifique.');
         }
-        await register(email, password, fullName, company);
-        setSuccessMsg('¡Cuenta registrada exitosamente!');
+        const result = await register(email, password, fullName, company);
+        setSuccessMsg('¡Cuenta registrada exitosamente en Supabase!');
         setTimeout(() => {
           onClose();
-        }, 1200);
+        }, 1800);
       } else {
         if (!email || !password) {
           throw new Error('Por favor ingrese correo y contraseña.');

@@ -146,6 +146,36 @@ export function AuthProvider({ children }) {
   };
 
   const register = async (email, password, fullName, company) => {
+    if (isCloudConfigured && supabase) {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: fullName || 'Ingeniero AMC',
+            company: company || 'Ingeniería AMC'
+          }
+        }
+      });
+      if (error) {
+        if (error.message.includes('already registered')) {
+          throw new Error('Este correo electrónico ya está registrado en Supabase. Por favor inicie sesión.');
+        } else if (error.message.includes('Password should be at least')) {
+          throw new Error('La contraseña debe tener al menos 6 caracteres.');
+        }
+        throw new Error(error.message);
+      }
+      if (data?.user) {
+        setUser(data.user);
+        setSession(data.session);
+        setUserPlan('free');
+        localStorage.setItem('amcaudales_user_plan', 'free');
+        localStorage.removeItem('amcaudales_user_session');
+        fetchUserProjects(data.user.id);
+        return data;
+      }
+    }
+
     const newUser = {
       id: 'usr_' + Date.now(),
       email,
@@ -160,6 +190,30 @@ export function AuthProvider({ children }) {
   };
 
   const login = async (email, password) => {
+    if (isCloudConfigured && supabase) {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
+      if (error) {
+        if (error.message.includes('Invalid login credentials')) {
+          throw new Error('Correo o contraseña incorrectos. Verifique sus datos.');
+        } else if (error.message.includes('Email not confirmed')) {
+          throw new Error('Su correo electrónico no ha sido confirmado. Revise su bandeja de entrada o desactive "Confirm email" en el Dashboard de Supabase.');
+        }
+        throw new Error(error.message);
+      }
+      if (data?.user) {
+        setUser(data.user);
+        setSession(data.session);
+        localStorage.removeItem('amcaudales_user_session');
+        const storedPlan = localStorage.getItem('amcaudales_user_plan') || 'free';
+        setUserPlan(storedPlan);
+        fetchUserProjects(data.user.id);
+        return data;
+      }
+    }
+
     const loggedUser = {
       id: 'usr_active',
       email,
