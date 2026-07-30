@@ -1,0 +1,177 @@
+/* ==========================================================================
+   AMCaudales Pro - Design System & Visual Polish
+   ========================================================================== */
+
+/* 1. Global Typography & Colors */
+body, input, select, button, textarea {
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+}
+
+/* 2. Uniform Textbox & Input Design */
+input[type="text"],
+input[type="number"],
+input[type="search"],
+input[type="email"],
+input[type="password"],
+select,
+textarea,
+.ec {
+  background: rgba(15, 23, 42, 0.85) !important;
+  color: #f8fafc !important;
+  border: 1px solid rgba(59, 130, 246, 0.35) !important;
+  border-radius: 6px !important;
+  padding: 6px 10px !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.4) !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+/* Hover & Focus state for inputs */
+input:hover, select:hover, textarea:hover, .ec:hover {
+  border-color: rgba(59, 130, 246, 0.6) !important;
+}
+
+input:focus, select:focus, textarea:focus, .ec:focus {
+  outline: none !important;
+  border-color: #3b82f6 !important;
+  background: rgba(15, 23, 42, 0.95) !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25), inset 0 1px 3px rgba(0, 0, 0, 0.4) !important;
+}
+
+/* Styling dropdown options */
+select option {
+  background-color: #0f172a !important;
+  color: #f8fafc !important;
+  padding: 8px !important;
+}
+
+/* Light mode overrides for inputs */
+.light-mode input[type="text"],
+.light-mode input[type="number"],
+.light-mode select,
+.light-mode textarea,
+.light-mode .ec {
+  background: #ffffff !important;
+  color: #0f172a !important;
+  border: 1px solid #cbd5e1 !important;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05) !important;
+}
+
+.light-mode select option {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+/* 3. Homogenized Buttons */
+button, .hdr-btn, .tab {
+  font-family: inherit !important;
+  border-radius: 6px !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.hdr-btn {
+  background: rgba(30, 41, 59, 0.7) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  color: #f8fafc !important;
+  font-weight: 600 !important;
+  font-size: 12.5px !important;
+  padding: 6px 14px !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2) !important;
+}
+
+.hdr-btn:hover {
+  background: rgba(59, 130, 246, 0.25) !important;
+  border-color: #3b82f6 !important;
+  color: #38bdf8 !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2) !important;
+}
+
+/* 4. Streamlined & Less Saturated Headers */
+.top-info-bar {
+  background: rgba(15, 23, 42, 0.95) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  padding: 6px 20px !important;
+  font-size: 12px !important;
+  color: #94a3b8 !important;
+  display: flex !important;
+  gap: 24px !important;
+  align-items: center !important;
+}
+
+.top-info-bar span strong {
+  color: #38bdf8 !important;
+  font-weight: 600 !important;
+}
+
+.header-container {
+  background: rgba(10, 17, 40, 0.92) !important;
+  backdrop-filter: blur(16px) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  padding: 8px 16px !important;
+}
+
+.hdr {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+}
+
+.logo {
+  font-weight: 900 !important;
+  background: linear-gradient(135deg, #38bdf8, #818cf8) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  font-size: 18px !important;
+  line-height: 1.1 !important;
+}
+
+/* Navigation Tabs Header */
+.tabs {
+  display: flex !important;
+  gap: 4px !important;
+  background: rgba(15, 23, 42, 0.6) !important;
+  padding: 4px !important;
+  border-radius: 8px !important;
+  border: 1px solid rgba(255, 255, 255, 0.05) !important;
+  overflow-x: auto !important;
+}
+
+.tab {
+  background: transparent !important;
+  color: #94a3b8 !important;
+  border: none !important;
+  padding: 6px 14px !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  cursor: pointer !important;
+  white-space: nowrap !important;
+}
+
+.tab:hover {
+  color: #f8fafc !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+}
+
+.tab.a {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8) !important;
+  color: #ffffff !important;
+  font-weight: 600 !important;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.4) !important;
+}
+
+/* Card and Panel polish */
+.dp, .c, fieldset {
+  background: rgba(30, 41, 59, 0.35) !important;
+  border: 1px solid rgba(255, 255, 255, 0.07) !important;
+  border-radius: 10px !important;
+  padding: 14px !important;
+}
+
+.dpt {
+  font-weight: 700 !important;
+  letter-spacing: -0.01em !important;
+  border-radius: 6px !important;
+  padding: 6px 12px !important;
+}

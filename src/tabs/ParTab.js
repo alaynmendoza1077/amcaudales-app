@@ -28,6 +28,13 @@ function EF(p){
   );
 }
 
+function getConsumoFromAltura(alt) {
+  var a = parseFloat(alt) || 0;
+  if (a > 2000) return 120;
+  if (a >= 1000) return 130;
+  return 140;
+}
+
 function ParTab(props){
   var P=props.P,sP=props.sP,R=props.R;
   var u=function(k,v){sP(function(p){
@@ -42,8 +49,34 @@ function ParTab(props){
               n.porcProfundidad = 0.93;
           }
       }
+      if (k === "alturaSNM") {
+          n.consumo = getConsumoFromAltura(v);
+      }
       return n;
   });};
+
+  useEffect(() => {
+    var tramos = (R && R.length > 0) ? R : (props.T || []);
+    if (tramos && tramos.length > 0) {
+      var maxRas = 0;
+      tramos.forEach(function(r) {
+        if (!r || r.sep) return;
+        var crDE = parseFloat(r.cotaRasante !== undefined ? r.cotaRasante : (r.crDE || r.cotaRasanteDE || r.cota_terreno || 0));
+        var crA = parseFloat(r.cotaRasanteA !== undefined ? r.cotaRasanteA : (r.crA || r.cota_terreno || 0));
+        if (!isNaN(crDE) && crDE > maxRas) maxRas = crDE;
+        if (!isNaN(crA) && crA > maxRas) maxRas = crA;
+      });
+      if (maxRas > 0) {
+        var altCalc = Math.round(maxRas);
+        var consCalc = getConsumoFromAltura(altCalc);
+        sP(function(prev) {
+          if (prev.alturaSNM === altCalc && prev.consumo === consCalc) return prev;
+          return Object.assign({}, prev, { alturaSNM: altCalc, consumo: consCalc });
+        });
+      }
+    }
+  }, [R, props.T, sP]);
+
   var uGroup=function(keys,k,v){sP(function(p){
     var n=Object.assign({},p);var diff=v-(p[k]||0);n[k]=v;
     var others=keys.filter(function(x){return x!==k;});

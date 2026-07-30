@@ -68,7 +68,7 @@ var DP={
   proyecto:"CONSTRUCCION SISTEMA DE ALCANTARILLADO",municipio:"BUCARAMANGA",barrio:"",
   disenador:"",cedula:"",fecha:new Date().toISOString().split("T")[0],
   estacion:"LGR",tipoAlc:"C",porcPatios:10,alturaSNM:1015,
-  densidad:600,habVivienda:4,pobDirecta:0,pobIndirecta:0,consumo:140,coefRetorno:.85,
+  densidad:600,habVivienda:4,pobDirecta:0,pobIndirecta:0,consumo:130,coefRetorno:.85,
   relCapacidad:.90,porcProfundidad:.85,velMaxima:5.0,fuerzaTractMin:1.0,
   limFroudeSub:.9,limFroudeSup:1.1,profMin:0.80,profMax:5.0,
   porcExcTierra:.55,porcExcGranular:.30,porcExcRoca:.15,

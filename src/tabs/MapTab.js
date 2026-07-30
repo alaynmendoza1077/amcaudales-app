@@ -1081,7 +1081,9 @@ function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, se
               },
               onEachFeature: function(feature, layer) {
                   if (feature.properties) {
-                      layer.bindTooltip("Densidad: " + (feature.properties.DENSIDAD || feature.properties.D2024 || "N/A"));
+                      let props = feature.properties;
+                      let rows = Object.keys(props).map(k => `<b>${k}:</b> ${props[k]}`).join('<br/>');
+                      layer.bindTooltip(`<div style="font-size:11px; max-width:260px; word-break:break-word;"><b>Capa Densidades:</b><br/>${rows}</div>`, { permanent: false, sticky: true });
                   }
               }
           });
@@ -1096,7 +1098,13 @@ function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, se
               if(!lin) return;
               let parts = lin.split(';');
               let wkt = parts[0];
-              let nom = parts[3];
+              let props = {};
+              if (parts[1]) props["ID"] = parts[1];
+              if (parts[2]) props["CODIGO"] = parts[2];
+              if (parts[3]) props["ESTACION"] = parts[3];
+              for (let i = 4; i < parts.length; i++) {
+                  if (parts[i] !== undefined && parts[i] !== "") props[`ATRIB_${i}`] = parts[i];
+              }
               let coordsMatch = wkt.match(/\(\(\((.*)\)\)\)/);
               if (coordsMatch) {
                   let points = coordsMatch[1].split(',').map(p => {
@@ -1107,7 +1115,7 @@ function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, se
                   });
                   features.push({
                       type: "Feature",
-                      properties: { NOM_EST: nom },
+                      properties: props,
                       geometry: { type: "Polygon", coordinates: [points] }
                   });
               }
@@ -1121,7 +1129,9 @@ function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, se
                   },
                   onEachFeature: function(feature, layer) {
                       if (feature.properties) {
-                          layer.bindTooltip("Estación: " + (feature.properties.NOM_EST || "N/A"));
+                          let props = feature.properties;
+                          let rows = Object.keys(props).map(k => `<b>${k}:</b> ${props[k]}`).join('<br/>');
+                          layer.bindTooltip(`<div style="font-size:11px; max-width:260px; word-break:break-word;"><b>Capa Thiessen (IDF):</b><br/>${rows}</div>`, { permanent: false, sticky: true });
                       }
                   }
               });
