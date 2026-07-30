@@ -298,6 +298,14 @@ export function AuthProvider({ children }) {
     setCloudProjects([]);
   };
 
+  const parsePayload = (payload) => {
+    if (!payload) return null;
+    if (typeof payload === 'string') {
+      try { return JSON.parse(payload); } catch(e) { return null; }
+    }
+    return payload;
+  };
+
   const saveProjectToCloud = async (projectDataPayload, title = 'Proyecto AMC', existingProjectId = null) => {
     const effectiveUser = user || { id: 'usr_guest', email: 'invitado@amcaudales.com' };
     const timestamp = new Date().toISOString();
@@ -316,12 +324,14 @@ export function AuthProvider({ children }) {
           })
           .select();
 
-        if (!error && data) {
+        if (error) {
+          console.error('Error Supabase upsert projects:', error);
+        } else if (data && data.length > 0) {
           await fetchUserProjects(effectiveUser.id);
           return data[0];
         }
       } catch (e) {
-        console.warn('Fallback a guardado local:', e);
+        console.warn('Fallback a guardado local por excepcion:', e);
       }
     }
 
@@ -345,7 +355,7 @@ export function AuthProvider({ children }) {
 
     if (projectId === 'proj_active_draft') {
       const rawCurrent = localStorage.getItem('AMC_current_project_state');
-      if (rawCurrent) return JSON.parse(rawCurrent);
+      if (rawCurrent) return parsePayload(rawCurrent);
     }
 
     if (isCloudConfigured && supabase) {
@@ -356,8 +366,13 @@ export function AuthProvider({ children }) {
           .eq('id', projectId)
           .single();
 
-        if (!error && data) return data.project_data;
-      } catch (e) {}
+        if (!error && data) {
+          const resPayload = parsePayload(data.project_data || data);
+          if (resPayload) return resPayload;
+        }
+      } catch (e) {
+        console.warn('Error fetching cloud project, searching local:', e);
+      }
     }
 
     const localKeys = [
@@ -374,7 +389,10 @@ export function AuthProvider({ children }) {
           const list = JSON.parse(raw);
           if (Array.isArray(list)) {
             const found = list.find(p => p.id === projectId);
-            if (found) return found.project_data;
+            if (found) {
+              const resPayload = parsePayload(found.project_data || found);
+              if (resPayload) return resPayload;
+            }
           }
         } catch(e){}
       }
