@@ -104,6 +104,11 @@ function AppContent() {
   const [blockedFeatureName, setBlockedFeatureName] = useState('');
   const [showLoginPortal, setShowLoginPortal] = useState(false);
 
+  React.useEffect(() => {
+    setActiveModule('home');
+    setInitialData(null);
+  }, [user?.id]);
+
   const handleSetModule = (mod, data = null) => {
     if ((mod === 'presupuesto') && userPlan === 'free') {
       setBlockedFeatureName('Cantidades y Presupuestos de Obra');

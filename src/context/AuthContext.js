@@ -13,25 +13,23 @@ export function AuthProvider({ children }) {
   const [cloudProjects, setCloudProjects] = useState([]);
 
   useEffect(() => {
-    const savedUser = localStorage.getItem('amcaudales_user_session');
-    if (savedUser) {
-      try {
-        const parsed = JSON.parse(savedUser);
-        setUser(parsed);
-        fetchLocalCloudProjects(parsed.id);
-        setLoading(false);
-        return;
-      } catch (e) {
-        localStorage.removeItem('amcaudales_user_session');
-      }
-    }
-
     if (isCloudConfigured && supabase) {
       supabase.auth.getSession().then(({ data: { session } }) => {
-        setSession(session);
         if (session?.user) {
+          setSession(session);
           setUser(session.user);
           fetchUserProjects(session.user.id);
+        } else {
+          const savedUser = localStorage.getItem('amcaudales_user_session');
+          if (savedUser) {
+            try {
+              const parsed = JSON.parse(savedUser);
+              setUser(parsed);
+              fetchLocalCloudProjects(parsed.id);
+            } catch (e) {
+              localStorage.removeItem('amcaudales_user_session');
+            }
+          }
         }
         setLoading(false);
       });
@@ -41,12 +39,25 @@ export function AuthProvider({ children }) {
         if (session?.user) {
           setUser(session.user);
           fetchUserProjects(session.user.id);
+        } else if (_event === 'SIGNED_OUT') {
+          setUser(null);
+          setCloudProjects([]);
         }
         setLoading(false);
       });
 
       return () => subscription.unsubscribe();
     } else {
+      const savedUser = localStorage.getItem('amcaudales_user_session');
+      if (savedUser) {
+        try {
+          const parsed = JSON.parse(savedUser);
+          setUser(parsed);
+          fetchLocalCloudProjects(parsed.id);
+        } catch (e) {
+          localStorage.removeItem('amcaudales_user_session');
+        }
+      }
       setLoading(false);
     }
   }, []);
