@@ -1082,13 +1082,28 @@ function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, se
               onEachFeature: function(feature, layer) {
                   if (feature.properties) {
                       let props = feature.properties;
-                      let findVal = (patterns) => {
-                          let key = Object.keys(props).find(k => patterns.some(p => k.toLowerCase().includes(p)));
-                          return key && props[key] !== undefined && props[key] !== "" ? props[key] : 'N/A';
-                      };
-                      let barrio = findVal(['barrio']);
-                      let municipio = findVal(['muni', 'nom_mun', 'nomb_mun']);
-                      let ddef2 = findVal(['ddef2', 'd2024', 'densidad', 'ddef']);
+                      
+                      // 1. Barrio (texto, ej. Floresta / Campohermoso)
+                      let barrioRaw = props.BARRIO || props.Barrios || props.NOM_BARRIO || props.NOMBRE_BARRIO || props.NOMB_BARR || 'N/A';
+                      let barrio = String(barrioRaw).trim();
+                      if (barrio !== 'N/A' && barrio === barrio.toUpperCase()) {
+                          barrio = barrio.charAt(0) + barrio.slice(1).toLowerCase();
+                      }
+
+                      // 2. Municipio (texto, ej. Bucaramanga, Floridablanca)
+                      let munRaw = String(props.MUNICIPIO || props.NOM_MUN || props.MUN || props.CIUDAD || '').trim();
+                      let municipio = 'Bucaramanga';
+                      let munUpper = munRaw.toUpperCase();
+                      if (munUpper.startsWith('BU')) municipio = 'Bucaramanga';
+                      else if (munUpper.startsWith('FL')) municipio = 'Floridablanca';
+                      else if (munUpper.startsWith('GI')) municipio = 'Girón';
+                      else if (munUpper.startsWith('PI')) municipio = 'Piedecuesta';
+                      else if (munRaw.length > 3 && !/\d/.test(munRaw)) municipio = munRaw;
+
+                      // 3. DDEF2 (numérico, ej. 420, 800)
+                      let ddefVal = props.DDEF2 != null && props.DDEF2 !== 0 ? props.DDEF2 : (props.D2024 != null ? props.D2024 : (props.DDEF != null ? props.DDEF : props.D2023));
+                      let ddef2 = (ddefVal != null && !isNaN(parseFloat(ddefVal))) ? Math.round(parseFloat(ddefVal)) : 0;
+
                       layer.bindTooltip(`<div style="font-size:11px; max-width:260px; word-break:break-word;"><b>Capa Densidades:</b><br/><b>Barrio:</b> ${barrio}<br/><b>Municipio:</b> ${municipio}<br/><b>DDEF2:</b> ${ddef2}</div>`, { permanent: false, sticky: true });
                   }
               }
