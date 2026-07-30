@@ -179,8 +179,8 @@ export function AuthProvider({ children }) {
       if (data?.user) {
         setUser(data.user);
         setSession(data.session);
-        setUserPlan('free');
-        localStorage.setItem('amcaudales_user_plan', 'free');
+        setUserPlan('pro');
+        localStorage.setItem('amcaudales_user_plan', 'pro');
         localStorage.removeItem('amcaudales_user_session');
         fetchUserProjects(data.user.id);
         return data;
@@ -194,8 +194,8 @@ export function AuthProvider({ children }) {
     };
     localStorage.setItem('amcaudales_user_session', JSON.stringify(newUser));
     setUser(newUser);
-    setUserPlan('free');
-    localStorage.setItem('amcaudales_user_plan', 'free');
+    setUserPlan('pro');
+    localStorage.setItem('amcaudales_user_plan', 'pro');
     fetchLocalCloudProjects(newUser.id);
     return { user: newUser };
   };
@@ -218,8 +218,8 @@ export function AuthProvider({ children }) {
         setUser(data.user);
         setSession(data.session);
         localStorage.removeItem('amcaudales_user_session');
-        const storedPlan = localStorage.getItem('amcaudales_user_plan') || 'free';
-        setUserPlan(storedPlan);
+        setUserPlan('pro');
+        localStorage.setItem('amcaudales_user_plan', 'pro');
         fetchUserProjects(data.user.id);
         return data;
       }

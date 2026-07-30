@@ -94,7 +94,13 @@ export default function ReposicionModule({ onBack, initialData }){
   var sSelMap=useState([]);var selMap=sSelMap[0],setSelMap=sSelMap[1];
   var sAutoAreas=useState([]);var autoAreasPoly=sAutoAreas[0],setAutoAreasPoly=sAutoAreas[1];
   var sOutfalls=useState({});var outfalls=sOutfalls[0],setOutfalls=sOutfalls[1];
-  var sFilter=useState(false);var filterSel=sFilter[0],setFilterSel=sFilter[1];
+  useEffect(() => {
+    if (P && ((T && T.length > 0) || P.proyecto)) {
+      try {
+        localStorage.setItem('AMC_current_project_state', JSON.stringify({ P, T, R, inpData, urbanismoData, estSepData, timestamp: new Date().toISOString() }));
+      } catch(e){}
+    }
+  }, [P, T, R, inpData, urbanismoData, estSepData]);
 
   useEffect(function(){
     // Solo inicializar sumLat/sumTrans si NO hay datos AMC que cargar
