@@ -127,33 +127,78 @@ export function AuthProvider({ children }) {
   };
 
   const fetchUserProjects = async (userId) => {
-    try {
-      const { data, error } = await supabase
-        .from('projects')
-        .select('id, title, updated_at, created_at')
-        .eq('user_id', userId)
-        .order('updated_at', { ascending: false });
+    let cloudList = [];
+    if (isCloudConfigured && supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('projects')
+          .select('id, title, updated_at, created_at')
+          .eq('user_id', userId)
+          .order('updated_at', { ascending: false });
 
-      if (error) throw error;
-      setCloudProjects(data || []);
-    } catch (err) {
-      console.warn('Error al cargar proyectos de la nube:', err.message);
+        if (!error && data) {
+          cloudList = data;
+        }
+      } catch (err) {
+        console.warn('Error al cargar proyectos de la nube:', err.message);
+      }
     }
+
+    // Escaner de recuperación para rescatar proyectos locales guardados previamente (invitado/demo/borrador)
+    const localKeys = [
+      `amcaudales_projects_${userId}`,
+      'amcaudales_projects_usr_guest',
+      'amcaudales_projects_usr_active',
+      'amcaudales_projects_usr_super_admin'
+    ];
+
+    let recoveredLocalProjects = [];
+    localKeys.forEach(k => {
+      try {
+        const raw = localStorage.getItem(k);
+        if (raw) {
+          const list = JSON.parse(raw);
+          if (Array.isArray(list)) {
+            list.forEach(p => {
+              if (p && p.id && !cloudList.some(cp => cp.id === p.id) && !recoveredLocalProjects.some(rp => rp.id === p.id)) {
+                recoveredLocalProjects.push({
+                  id: p.id,
+                  title: p.title ? `${p.title} (Local)` : 'Proyecto Local Recuperado',
+                  updated_at: p.updated_at || new Date().toISOString(),
+                  isLocalRecovered: true
+                });
+              }
+            });
+          }
+        }
+      } catch(e){}
+    });
+
+    // Verificar si hay un borrador en vivo en memoria (AMC_current_project_state)
+    try {
+      const rawCurrent = localStorage.getItem('AMC_current_project_state');
+      if (rawCurrent) {
+        const parsedCurrent = JSON.parse(rawCurrent);
+        if (parsedCurrent && (parsedCurrent.P || parsedCurrent.T)) {
+          const activeProjId = 'proj_active_draft';
+          if (!cloudList.some(cp => cp.id === activeProjId) && !recoveredLocalProjects.some(rp => rp.id === activeProjId)) {
+            recoveredLocalProjects.unshift({
+              id: activeProjId,
+              title: parsedCurrent.P?.proyecto ? `${parsedCurrent.P.proyecto} (Borrador Activo)` : 'Borrador de Trabajo previo',
+              updated_at: parsedCurrent.timestamp || new Date().toISOString(),
+              isLocalRecovered: true
+            });
+          }
+        }
+      }
+    } catch(e){}
+
+    const combinedList = [...cloudList, ...recoveredLocalProjects];
+    setCloudProjects(combinedList);
   };
 
   const fetchLocalCloudProjects = (userId) => {
-    const key = `amcaudales_projects_${userId}`;
-    const raw = localStorage.getItem(key);
-    if (raw) {
-      try {
-        const list = JSON.parse(raw);
-        setCloudProjects(list.map(p => ({ id: p.id, title: p.title, updated_at: p.updated_at })));
-      } catch (e) {
-        setCloudProjects([]);
-      }
-    } else {
-      setCloudProjects([]);
-    }
+    fetchUserProjects(userId);
   };
 
   const register = async (email, password, fullName, company) => {
@@ -293,6 +338,11 @@ export function AuthProvider({ children }) {
   const loadProjectFromCloud = async (projectId) => {
     const effectiveUser = user || { id: 'usr_guest' };
 
+    if (projectId === 'proj_active_draft') {
+      const rawCurrent = localStorage.getItem('AMC_current_project_state');
+      if (rawCurrent) return JSON.parse(rawCurrent);
+    }
+
     if (isCloudConfigured && supabase) {
       try {
         const { data, error } = await supabase
@@ -305,13 +355,27 @@ export function AuthProvider({ children }) {
       } catch (e) {}
     }
 
-    const key = `amcaudales_projects_${effectiveUser.id}`;
-    const raw = localStorage.getItem(key);
-    if (!raw) throw new Error('Proyecto no encontrado.');
-    const list = JSON.parse(raw);
-    const found = list.find(p => p.id === projectId);
-    if (!found) throw new Error('Proyecto no encontrado.');
-    return found.project_data;
+    const localKeys = [
+      `amcaudales_projects_${effectiveUser.id}`,
+      'amcaudales_projects_usr_guest',
+      'amcaudales_projects_usr_active',
+      'amcaudales_projects_usr_super_admin'
+    ];
+
+    for (let key of localKeys) {
+      const raw = localStorage.getItem(key);
+      if (raw) {
+        try {
+          const list = JSON.parse(raw);
+          if (Array.isArray(list)) {
+            const found = list.find(p => p.id === projectId);
+            if (found) return found.project_data;
+          }
+        } catch(e){}
+      }
+    }
+
+    throw new Error('Proyecto no encontrado.');
   };
 
   return (
