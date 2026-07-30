@@ -1453,11 +1453,10 @@ export function exportPlantaLISP(R, P, T, inpData) {
               if (len > maxPozoLen) maxPozoLen = len;
           }
       });
-      // Table dimensioning
-      let col1 = Math.max(15.0 * fEscala, (maxPozoLen * 1.5 + 4.0) * fEscala); // Pozo width
-      let col2 = 25.0 * fEscala; // Este width
-      let col3 = 25.0 * fEscala; // Norte width
-      let rowH = 4.0 * fEscala;
+      // Table       let col1 = Math.max(25.0 * fEscala, (maxPozoLen * 2.2 + 6.0) * fEscala); // Pozo width
+      let col2 = 28.0 * fEscala; // Este width
+      let col3 = 28.0 * fEscala; // Norte width
+      let rowH = 4.5 * fEscala;
       let totalW = col1 + col2 + col3;
       
       let tU = g_eMaxU - (totalW / fEscala) - (typeof step !== 'undefined' ? step * 0.1 : 10.0);
@@ -1541,10 +1540,10 @@ export function exportPlantaLISP(R, P, T, inpData) {
           if (len > maxConvLen) maxConvLen = len;
       });
       
-      curY -= rowH * 2;
+      curY -= rowH * 3.5;
       let convStartY = curY;
-      // Convenciones dimensioning dynamically (accounting for textX padding)
-      let convW = Math.max(55 * fEscala, (maxConvLen * 1.5 + 35.0) * fEscala);
+      // Convenciones dimensioning dynamically
+      let convW = Math.max(totalW, (maxConvLen * 1.8 + 35.0) * fEscala);) * fEscala);
       
       lines.push(`  (SETVAR "CECOLOR" "150")`);
       lines.push(`  (COMMAND "_SOLID" ${rPt(tableStartX, curY)} ${rPt(tableStartX + convW, curY)} ${rPt(tableStartX, curY - rowH*1.5)} ${rPt(tableStartX + convW, curY - rowH*1.5)} "" "")`);

@@ -1082,8 +1082,14 @@ function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, se
               onEachFeature: function(feature, layer) {
                   if (feature.properties) {
                       let props = feature.properties;
-                      let rows = Object.keys(props).map(k => `<b>${k}:</b> ${props[k]}`).join('<br/>');
-                      layer.bindTooltip(`<div style="font-size:11px; max-width:260px; word-break:break-word;"><b>Capa Densidades:</b><br/>${rows}</div>`, { permanent: false, sticky: true });
+                      let findVal = (patterns) => {
+                          let key = Object.keys(props).find(k => patterns.some(p => k.toLowerCase().includes(p)));
+                          return key && props[key] !== undefined && props[key] !== "" ? props[key] : 'N/A';
+                      };
+                      let barrio = findVal(['barrio']);
+                      let municipio = findVal(['muni', 'nom_mun', 'nomb_mun']);
+                      let ddef2 = findVal(['ddef2', 'd2024', 'densidad', 'ddef']);
+                      layer.bindTooltip(`<div style="font-size:11px; max-width:260px; word-break:break-word;"><b>Capa Densidades:</b><br/><b>Barrio:</b> ${barrio}<br/><b>Municipio:</b> ${municipio}<br/><b>DDEF2:</b> ${ddef2}</div>`, { permanent: false, sticky: true });
                   }
               }
           });
