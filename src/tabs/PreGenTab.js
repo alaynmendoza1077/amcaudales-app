@@ -93,7 +93,7 @@ function PreGenTab(props){
   var profProm=P.profProm!==undefined?P.profProm:calcProfProm;
   var repP=dN.reduce(function(s,r){return s+(r.repP||0);},0);
   var tLe=dN.reduce(function(s,r){return s+(r.Le||0);},0);
-  var ep2=calcPozosCompleto(R,T);var nPN=ep2.pz.length;
+  var ep2=calcPozosCompleto(R,T,P);var nPN=ep2.pz.length;
   
   var caidasCount = {
     "4.05.01.01": 0, "4.05.01.02": 0, "4.05.01.03": 0, "4.05.01.04": 0,
