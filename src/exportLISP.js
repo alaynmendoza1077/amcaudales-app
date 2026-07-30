@@ -462,6 +462,18 @@ export function exportPerfilesLISP(R, P, T) {
     }
   }
 
+  // Switch to Layout and generate Paper Space viewports for Perfiles
+  lines.push(`  (COMMAND "_TILEMODE" "0")`);
+  lines.push(`  (COMMAND "_PSPACE")`);
+  lines.push(`  (vl-load-com)`);
+  lines.push(`  (vlax-for ent (vla-get-PaperSpace (vla-get-ActiveDocument (vlax-get-acad-object))) (if (= (vla-get-ObjectName ent) "AcDbViewport") (vl-catch-all-apply 'vla-delete (list ent))))`);
+  lines.push(`  (COMMAND "_MVIEW" (LIST 39.0 46.0 0.0) (LIST 886.0 533.0 0.0))`);
+  lines.push(`  (COMMAND "_MSPACE")`);
+  lines.push(`  (SETVAR "GRIDMODE" 0)`);
+  lines.push(`  (COMMAND "_ZOOM" "_E")`);
+  lines.push(`  (COMMAND "_PSPACE")`);
+  lines.push(`  (COMMAND "_ZOOM" "_E")`);
+
   lines.push(``);
   lines.push(`  (SETVAR "OSMODE" OLD_OSMODE)`);
   lines.push(`  (PRINC "\nPERFILES OK - ${tramosAll.length} tramos - AMCAUDALES")`);
@@ -652,11 +664,19 @@ export function exportPlantaLISP(R, P, T, inpData) {
   lines.push(`    (princ))`);
   lines.push("  (GRAPHSCR)");
   
+  lines.push("  (SETVAR \"LTSCALE\" 1.0)");
+  lines.push("  (SETVAR \"PSLTSCALE\" 0)");
+  lines.push("  (SETVAR \"MSLTSCALE\" 0)");
+
   lines.push("  (IF (NOT (TBLSEARCH \"STYLE\" \"COTAS\")) (COMMAND \"_-STYLE\" \"COTAS\" \"romans.shx\" \"0.0\" \"1.0\" \"0.0\" \"_N\" \"_N\" \"_N\"))");
   lines.push("  (IF (NOT (TBLSEARCH \"STYLE\" \"POZOS\")) (COMMAND \"_-STYLE\" \"POZOS\" \"romanc.shx\" \"0.0\" \"1.0\" \"0.0\" \"_N\" \"_N\" \"_N\"))");
   lines.push("  (IF (NOT (TBLSEARCH \"STYLE\" \"TEXTO_GENERAL\")) (COMMAND \"_-STYLE\" \"TEXTO_GENERAL\" \"romans.shx\" \"0.0\" \"1.0\" \"0.0\" \"_N\" \"_N\" \"_N\"))");
   lines.push("  (IF (NOT (TBLSEARCH \"STYLE\" \"TEXTO-AREAS\")) (COMMAND \"_-STYLE\" \"TEXTO-AREAS\" \"romans.shx\" \"0.0\" \"1.0\" \"0.0\" \"_N\" \"_N\" \"_N\"))");
   lines.push("  (IF (NOT (TBLSEARCH \"STYLE\" \"COORDENADAS\")) (COMMAND \"_-STYLE\" \"COORDENADAS\" \"romanc.shx\" \"0.0\" \"1.0\" \"0.0\" \"_N\" \"_N\" \"_N\"))");
+
+  lines.push(`  (if (not (tblsearch "LTYPE" "DASHED")) (vl-catch-all-apply 'vla-load (list (vla-get-Linetypes (vla-get-ActiveDocument (vlax-get-acad-object))) "DASHED" "acad.lin")))`);
+  lines.push(`  (if (not (tblsearch "LTYPE" "HIDDEN")) (vl-catch-all-apply 'vla-load (list (vla-get-Linetypes (vla-get-ActiveDocument (vlax-get-acad-object))) "HIDDEN" "acad.lin")))`);
+  lines.push(`  (if (not (tblsearch "LTYPE" "DASHDOT")) (vl-catch-all-apply 'vla-load (list (vla-get-Linetypes (vla-get-ActiveDocument (vlax-get-acad-object))) "DASHDOT" "acad.lin")))`);
 
   const writeLayerDef = (lyName, color, ltype) => {
     lines.push(`  (COMMAND "_LAYER" "_Make" "${lyName}" "_Color" "${color}" "" "")`);
@@ -670,19 +690,6 @@ export function exportPlantaLISP(R, P, T, inpData) {
   const f2 = v => parseFloat(v || 0).toFixed(2);
   const pt = (x, y) => `(LIST ${f2(x)} ${f2(y)} 0.0)`;
 
-  lines.push(`  (setq tempLinPath (strcat (getenv "TEMP") "\\\\amcaudales.lin"))`);
-  lines.push(`  (setq fTempLin (open tempLinPath "w"))`);
-  lines.push(`  (write-line "*AM_DASHED,AM Dashed __ __ __ __ __ __ __ __ __ __ __" fTempLin)`);
-  lines.push(`  (write-line "A, ${f2(3.0 * fEscala)}, ${f2(-1.5 * fEscala)}" fTempLin)`);
-  lines.push(`  (write-line "*AM_DASHDOT,AM Dash dot __ . __ . __ . __ . __ . __" fTempLin)`);
-  lines.push(`  (write-line "A, ${f2(3.0 * fEscala)}, ${f2(-1.0 * fEscala)}, 0, ${f2(-1.0 * fEscala)}" fTempLin)`);
-  lines.push(`  (write-line "*AM_DASHDOTDOT,AM Dash dot dot __ . . __ . . __ . . __" fTempLin)`);
-  lines.push(`  (write-line "A, ${f2(3.0 * fEscala)}, ${f2(-1.0 * fEscala)}, 0, ${f2(-1.0 * fEscala)}, 0, ${f2(-1.0 * fEscala)}" fTempLin)`);
-  lines.push(`  (close fTempLin)`);
-  lines.push(`  (vl-catch-all-apply 'vla-load (list (vla-get-Linetypes (vla-get-ActiveDocument (vlax-get-acad-object))) "AM_DASHED" tempLinPath))`);
-  lines.push(`  (vl-catch-all-apply 'vla-load (list (vla-get-Linetypes (vla-get-ActiveDocument (vlax-get-acad-object))) "AM_DASHDOT" tempLinPath))`);
-  lines.push(`  (vl-catch-all-apply 'vla-load (list (vla-get-Linetypes (vla-get-ActiveDocument (vlax-get-acad-object))) "AM_DASHDOTDOT" tempLinPath))`);
-
   writeLayerDef("POZOE", 2, "Continuous");
   writeLayerDef("POZOP", 4, "Continuous");
   writeLayerDef("NOMENCLATURA", 2, "Continuous");
@@ -691,13 +698,13 @@ export function exportPlantaLISP(R, P, T, inpData) {
 
   const alcType = P.tipoAlc || "S";
   if (alcType === "S") {
-    writeLayerDef("ALCANTARILLADO SANITARIO PROYECTADO", 1, "AM_DASHED");
+    writeLayerDef("ALCANTARILLADO SANITARIO PROYECTADO", 1, "DASHED");
     writeLayerDef("ALCANTARILLADO SANITARIO EXISTENTE", 3, "Continuous");
   } else if (alcType === "P") {
-    writeLayerDef("ALCANTARILLADO PLUVIAL PROYECTADO", 1, "AM_DASHED");
-    writeLayerDef("ALCANTARILLADO PLUVIAL EXISTENTE", 3, "AM_DASHDOTDOT");
+    writeLayerDef("ALCANTARILLADO PLUVIAL PROYECTADO", 1, "DASHED");
+    writeLayerDef("ALCANTARILLADO PLUVIAL EXISTENTE", 3, "DASHDOT");
   } else {
-    writeLayerDef("ALCANTARILLADO COMBINADO PROYECTADO", 1, "AM_DASHED");
+    writeLayerDef("ALCANTARILLADO COMBINADO PROYECTADO", 1, "DASHED");
     writeLayerDef("ALCANTARILLADO COMBINADO EXISTENTE", 3, "Continuous");
   }
 
@@ -1631,22 +1638,6 @@ export function exportPlantaLISP(R, P, T, inpData) {
   lines.push(`  (if (and zpWCS1 zpWCS3) (COMMAND "_ZOOM" "_W" (trans zpWCS1 0 1) (trans zpWCS3 0 1)))`);
   
   lines.push(`  (COMMAND "_PSPACE")`);
-  
-  lines.push(`  ;;; AJUSTAR LIENZO DEL LAYOUT (TAMAO PAPEL)`);
-  lines.push(`  (vl-load-com)`);
-  lines.push(`  (if (and (setq acadObj (vlax-get-acad-object)) (setq doc (vla-get-ActiveDocument acadObj)))`);
-  lines.push(`    (progn`);
-  lines.push(`      (setq layout (vla-get-ActiveLayout doc))`);
-  lines.push(`      (vla-put-ConfigName layout "DWG To PDF.pc3")`);
-  lines.push(`      (vl-catch-all-apply 'vla-put-CanonicalMediaName (list layout "ISO_full_bleed_A1_(841.00_x_594.00_MM)"))`);
-  lines.push(`      (vl-catch-all-apply 'vla-put-CanonicalMediaName (list layout "ISO_A1_(841.00_x_594.00_MM)"))`);
-  lines.push(`      (vla-put-PlotType layout 1)`);
-  lines.push(`      (vla-put-PlotRotation layout 0)`);
-  lines.push(`      (vla-put-CenterPlot layout :vlax-true)`);
-  lines.push(`      (vla-put-StandardScale layout 0)`);
-  lines.push(`      (vla-RefreshPlotDeviceInfo layout)`);
-  lines.push(`    )`);
-  lines.push(`  )`);
   lines.push(`  (COMMAND "_ZOOM" "_E")`);
   lines.push(`  (SETVAR "GRIDMODE" 0)`);
 

@@ -193,15 +193,15 @@ function DatTab(props){
     </div>
     
     {T.length>0?
-      <div style={{display:"flex", gap:15, padding:"10px 15px", background:"#f8fafc", border:"1px solid #e2e8f0", borderRadius:8, marginBottom:10, alignItems:"center"}}>
-        <span style={{fontSize:12, fontWeight:"bold", color:"#475569"}}>Filtros Visuales:</span>
-        <label style={{fontSize:12, display:"flex", alignItems:"center", gap:5, cursor:"pointer"}}>
+      <div style={{display:"flex", gap:15, padding:"10px 15px", background:"rgba(15, 23, 42, 0.85)", border:"1px solid rgba(59, 130, 246, 0.35)", borderRadius:8, marginBottom:10, alignItems:"center", color:"#cbd5e1"}}>
+        <span style={{fontSize:12, fontWeight:"bold", color:"#38bdf8"}}>Filtros Visuales:</span>
+        <label style={{fontSize:12, display:"flex", alignItems:"center", gap:5, cursor:"pointer", color:"#cbd5e1"}}>
           <input type="checkbox" checked={filterSel} onChange={function(e){setFilterSel(e.target.checked);}} />
           Mostrar solo seleccionados en mapa
         </label>
-        <label style={{fontSize:12, display:"flex", alignItems:"center", gap:5}}>
+        <label style={{fontSize:12, display:"flex", alignItems:"center", gap:5, color:"#cbd5e1"}}>
           Reponer:
-          <select value={filterRep} onChange={function(e){setFilterRep(e.target.value);}} style={{fontSize:11, padding:2, borderRadius:4}}>
+          <select value={filterRep} onChange={function(e){setFilterRep(e.target.value);}} style={{fontSize:11, padding:"2px 6px", borderRadius:4, background:"rgba(15, 23, 42, 0.95)", color:"#7dd3fc", border:"1px solid rgba(59, 130, 246, 0.35)"}}>
             <option value="">Todos</option>
             <option value="S">Sí (S)</option>
             <option value="N">No (N)</option>
