@@ -238,7 +238,7 @@ export default function CalcTab(props){
       <TH className="gh">L(m)</TH><TH className="gh">P(%)</TH><TH>Qsan</TH><TH>Qplu</TH><TH>Qd</TH><TH>n</TH><TH style={{color:P.formulaQo==="M"?"#475569":""}}>Qo(DW)</TH><TH style={{color:P.formulaQo==="M"?"":"#475569"}}>Qo(M)</TH><TH>Q/Qo%</TH><TH>Y/Do%</TH><TH>V/Vo</TH><TH>Y(mm)</TH><TH>V</TH><TH>Ft</TH><TH>Fr</TH><TH title="Diámetro de Boquilla (mm) para reducir Hw en diseño">Boq(mm)</TH><TH title="Longitud de Boquilla en metros (6 * Diámetro)">L.Boq</TH><TH>Hw</TH><TH>vV</TH><TH>vFt</TH><TH>vQ</TH>
     </tr></thead><tbody>
       {R.map(function(r,ri){
-      var h=selMap&&selMap.some(function(sm){return sm&&sm.de===r.de&&sm.a===r.a;});
+      var h=isSel(r.de, r.a);
       if(filterSel && (!h || r.sep)) return null;
       if(r.sep)return <SepRow key={r.id} cols={26}/>;
       /* >>> ADICIÓN v36.2: lógica color D.Prop <<< */
