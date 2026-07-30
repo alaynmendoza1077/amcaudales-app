@@ -18,6 +18,8 @@ export function AuthProvider({ children }) {
         if (session?.user) {
           setSession(session);
           setUser(session.user);
+          setUserPlan('pro');
+          localStorage.setItem('amcaudales_user_plan', 'pro');
           fetchUserProjects(session.user.id);
         } else {
           const savedUser = localStorage.getItem('amcaudales_user_session');
@@ -38,6 +40,8 @@ export function AuthProvider({ children }) {
         setSession(session);
         if (session?.user) {
           setUser(session.user);
+          setUserPlan('pro');
+          localStorage.setItem('amcaudales_user_plan', 'pro');
           fetchUserProjects(session.user.id);
         } else if (_event === 'SIGNED_OUT') {
           setUser(null);
