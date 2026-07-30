@@ -27,8 +27,12 @@ export default function NavbarUserHeader({ onSaveCloud, onLoadCloud }) {
         </div>
 
         <div style={actionsSectionStyle}>
-          {/* Badge del Plan (Pro vs Free) */}
-          {userPlan === 'pro' ? (
+          {/* Badge del Plan (Pro vs Free vs Admin) */}
+          {user?.id === 'usr_super_admin' || user?.email === 'admin@amcaudales.com' ? (
+            <span style={adminBadgeStyle} title="Modo Super Administrador Master">
+              👑 Super Admin
+            </span>
+          ) : userPlan === 'pro' ? (
             <span style={proBadgeStyle} title="Tienes acceso ilimitado a todas las herramientas Pro">
               👑 Plan Pro Activo
             </span>
@@ -36,26 +40,20 @@ export default function NavbarUserHeader({ onSaveCloud, onLoadCloud }) {
             <button
               onClick={() => setShowUpgradeModal(true)}
               style={freeBadgeStyle}
-              title="Haz clic para actualizar a Plan Pro y desbloquear Presupuestos, Excel y AutoCAD"
+              title="Haz clic para actualizar a Plan Pro y desbloquear proyectos ilimitados"
             >
-              ⚡ Plan Gratis • Actualizar 👑
+              ⚡ 1er Proyecto Gratis • Pasar a Pro 👑
             </button>
           )}
 
-          {!isCloudConfigured && (
-            <span style={offlineBadgeStyle} title="Conecta Supabase para guardar en base de datos PostgreSQL real">
-              Mode: Session Local
-            </span>
-          )}
-
-          {user && !user.isGuest && user.email !== 'Usuario Invitado' ? (
+          {user && !user.isGuest && user.email !== 'invitado@amcaudales.com' ? (
             <div style={userControlStyle}>
               <button
                 onClick={() => setShowProjectsModal(true)}
                 style={cloudProjectsBtnStyle}
-                title="Ver tus proyectos alojados en la Nube de Supabase"
+                title="Ver tus proyectos alojados en la Nube"
               >
-                ☁️ Mis Proyectos
+                📂 Mis Proyectos
               </button>
 
               <div style={userAvatarStyle}>
@@ -68,7 +66,7 @@ export default function NavbarUserHeader({ onSaveCloud, onLoadCloud }) {
               </div>
 
               <button onClick={handleLogout} style={logoutBtnStyle} title="Cerrar Sesión e Iniciar Sesión con Otra Cuenta">
-                🚪 Salir
+                🚪 Cerrar Sesión
               </button>
             </div>
           ) : (
@@ -76,9 +74,9 @@ export default function NavbarUserHeader({ onSaveCloud, onLoadCloud }) {
               <button
                 onClick={() => setShowProjectsModal(true)}
                 style={cloudProjectsBtnStyle}
-                title="Ver proyectos alojados en la nube"
+                title="Ver proyectos en la nube"
               >
-                ☁️ Mis Proyectos
+                📂 Mis Proyectos
               </button>
               
               <div 
@@ -86,26 +84,13 @@ export default function NavbarUserHeader({ onSaveCloud, onLoadCloud }) {
                 style={{ ...userAvatarStyle, cursor: 'pointer', background: 'rgba(255, 255, 255, 0.05)', border: '1px solid #334155' }}
                 title="Haz clic para iniciar sesión con tu cuenta"
               >
-                <span style={userInitialStyle}>U</span>
-                <span style={userNameStyle}>Usuario Invitado</span>
+                <span style={userInitialStyle}>👤</span>
+                <span style={userNameStyle}>Invitado</span>
               </div>
 
               <button
                 onClick={() => setShowAuthModal(true)}
-                style={{
-                  backgroundColor: '#3b82f6',
-                  color: '#ffffff',
-                  fontWeight: 'bold',
-                  padding: '8px 16px',
-                  borderRadius: '8px',
-                  border: 'none',
-                  cursor: 'pointer',
-                  fontSize: '0.85rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  boxShadow: '0 4px 6px -1px rgba(59, 130, 246, 0.4)'
-                }}
+                style={loginBtnStyle}
               >
                 🔑 Iniciar Sesión / Registrarse
               </button>
@@ -196,6 +181,16 @@ const proBadgeStyle = {
   background: 'rgba(16, 185, 129, 0.15)',
   border: '1px solid #10b981',
   color: '#10b981',
+  padding: '4px 10px',
+  borderRadius: '20px',
+  fontSize: '0.78rem',
+  fontWeight: '700'
+};
+
+const adminBadgeStyle = {
+  background: 'rgba(168, 85, 247, 0.2)',
+  border: '1px solid #a855f7',
+  color: '#c084fc',
   padding: '4px 10px',
   borderRadius: '20px',
   fontSize: '0.78rem',
