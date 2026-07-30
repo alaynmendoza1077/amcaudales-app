@@ -6,8 +6,9 @@ import Manhole from '../components/Schematics/Manhole';
 
 function PozTab(props){
   var P=props.P||{};
-  var dR=props.R.filter(function(r){return !r.sep;});var T=props.T||[];
-  if(!dR.length)return <div className="c"><p>Sin datos</p></div>;
+  var R=props.R||[];
+  var dR=R.filter(function(r){return r && !r.sep;});var T=props.T||[];
+  if(!dR.length)return <div className="c"><p style={{color:"#94a3b8"}}>Sin datos calculados. Cargue una red para ver los Pozos.</p></div>;
   var DI=1.2;var ESP=0.25;
   var pozData=calcPozosCompleto(props.R,T,P);
   var pz=pozData.pz;

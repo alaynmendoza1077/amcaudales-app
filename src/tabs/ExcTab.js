@@ -8,10 +8,10 @@ function drawBar(val, tot, color) {
 }
 
 function ExcTab(props){
-  var R=props.R,P=props.P,sumLat=props.sumLat,sumTrans=props.sumTrans;
-  var allR=R.filter(function(r){return !r.sep;});
+  var R=props.R||[],P=props.P||{},sumLat=props.sumLat,sumTrans=props.sumTrans;
+  var allR=(R||[]).filter(function(r){return r && !r.sep;});
   var dR=allR.filter(function(r){return r.reponer==="S";});
-  if(!dR.length) return <div className="c"><p>Sin datos</p></div>;
+  if(!dR.length) return <div className="c"><p style={{color:"#94a3b8"}}>Sin datos de excavación calculados. Cargue una red primero.</p></div>;
   var tE=0,t025=0,t2550=0,t50p=0,tRot=0,tRep=0,tLe=0,lt=0,rArenaTot=0,rComunTot=0;
   dR.forEach(function(r){tE+=r.volE||0;t025+=r.v025||0;t2550+=r.v2550||0;t50p+=r.v50p||0;tRot+=r.rotP||0;tRep+=r.repP||0;tLe+=r.Le||0;lt+=r.L||0;rArenaTot+=r.rArena||0;rComunTot+=r.rComun||0;});
   var ep=calcPozosCompleto(R,props.T||[]);

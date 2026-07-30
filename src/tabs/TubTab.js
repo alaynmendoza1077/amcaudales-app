@@ -3,9 +3,9 @@ import {K, TH} from '../ui';
 import {agruparTuberias} from '../calcHelpers';
 
 function TubTab(props){
-  var R=props.R,sumLat=props.sumLat,sumTrans=props.sumTrans,P=props.P;
-  var dR=R.filter(function(r){return !r.sep;});
-  if(!dR.length)return <div className="c"><p style={{color:"#7088A8"}}>Cargue datos primero</p></div>;
+  var R=props.R||[],sumLat=props.sumLat,sumTrans=props.sumTrans,P=props.P||{};
+  var dR=(R||[]).filter(function(r){return r && !r.sep;});
+  if(!dR.length)return <div className="c"><p style={{color:"#94a3b8"}}>Sin datos calculados. Cargue una red primero.</p></div>;
   var grupos=agruparTuberias(R,sumLat,sumTrans,P);
   var totRed=0,totSum=0,totAcom=0;
   grupos.forEach(function(g){totRed+=g.red;totSum+=g.sum;totAcom+=g.acom;});

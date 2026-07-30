@@ -8,9 +8,9 @@ import {parsePtoBase} from '../parsers';
 import PTOBASE_DATA from '../ptoBaseData';
 
 function PreTab(props){
-  var R=props.R,P=props.P,T=props.T||[],sumLat=props.sumLat,sumTrans=props.sumTrans;
+  var R=props.R||[],P=props.P||{},T=props.T||[],sumLat=props.sumLat,sumTrans=props.sumTrans;
   var pbItems=props.pbItems,setPbItems=props.setPbItems,isExport=props.isExport;
-  var dR=R.filter(function(r){return !r.sep;});
+  var dR=(R||[]).filter(function(r){return r && !r.sep;});
   var dN=dR.filter(function(r){return r.reponer==="S";});
   var sFilt=useState("used");var filt=sFilt[0],setFilt=sFilt[1];
   var sSearch=useState("");var search=sSearch[0],setSearch=sSearch[1];

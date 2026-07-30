@@ -10,7 +10,7 @@ import CalculoSumiderosTab from './CalculoSumiderosTab';
 
 
 export default function CalcTab(props){
-  var R=props.R,P=props.P,T=props.T,sT=props.sT,sub=props.sub,setSub=props.setSub;
+  var R=props.R||[],P=props.P||{},T=props.T||[],sT=props.sT||(function(){}),sub=props.sub||"san",setSub=props.setSub||(function(){});
   var alivData=props.alivData||[],setAlivData=props.setAlivData||(function(){});
   var sumLat=props.sumLat||[],sumTrans=props.sumTrans||[];
   var setSumLat=props.setSumLat||(function(){});
@@ -21,7 +21,7 @@ export default function CalcTab(props){
   var perfilZoom=props.perfilZoom,setPerfilZoom=props.setPerfilZoom;
   var selMap=props.selMap;
   var filterSel=props.filterSel;
-  var dR=R.filter(function(r){return !r.sep;});
+  var dR=(R||[]).filter(function(r){return r && !r.sep;});
   var updSmart=function(id,k,vStr){
     sT(function(oldT){
       var n=oldT.slice();
