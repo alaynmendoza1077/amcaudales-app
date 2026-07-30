@@ -21,6 +21,9 @@ export default function CalcTab(props){
   var perfilZoom=props.perfilZoom,setPerfilZoom=props.setPerfilZoom;
   var selMap=props.selMap;
   var filterSel=props.filterSel;
+  var isSel=function(de,a){
+    return Array.isArray(selMap) && selMap.some(function(sm){return sm && sm.de===de && sm.a===a;});
+  };
   var dR=(R||[]).filter(function(r){return r && !r.sep;});
   var updSmart=function(id,k,vStr){
     sT(function(oldT){
@@ -189,7 +192,7 @@ export default function CalcTab(props){
     {(sub==="san" || props.isExport)?<div className={"c" + (props.isExport?" print-page-break":"")}><div className="ct">Caudal Sanitario</div><div style={{overflowX:"auto",maxHeight:"60vh",overflowY:"auto"}}><table><thead><tr>
       <TH>#</TH><TH>DE</TH><TH className="col-sep">A</TH><TH>Dens</TH><TH>Cons</TH><TH>A.Res (P|Ac)</TH><TH>A.Com (P|Ac)</TH><TH>A.Ind (P|Ac)</TH><TH className="col-sep">A.Inst (P|Ac)</TH><TH>Pob</TH><TH>Qmed</TH><TH>F</TH><TH className="col-sep">Qmax</TH><TH>Qi</TH><TH className="col-sep">Qe</TH><TH className="hl-san-hdr">Qsan</TH>
     </tr></thead><tbody>
-      {R.map(function(r){var h=selMap&&selMap.some(function(sm){return sm&&sm.de===r.de&&sm.a===r.a;}); if(filterSel && (!h || r.sep)) return null; if(r.sep)return <SepRow key={r.id} cols={16}/>; return <tr key={r.id} className={h?"hl-row":""}><td>{r.id}</td><td style={{textAlign:"left",fontSize:13}}>{r.de}</td><td className="col-sep" style={{textAlign:"left",fontSize:13}}>{r.a}</td><td>{r.den}</td><td>{r.con}</td>
+      {R.map(function(r){var h=isSel(r.de, r.a); if(filterSel && (!h || r.sep)) return null; if(r.sep)return <SepRow key={r.id} cols={16}/>; return <tr key={r.id} className={h?"hl-row":""}><td>{r.id}</td><td style={{textAlign:"left",fontSize:13}}>{r.de}</td><td className="col-sep" style={{textAlign:"left",fontSize:13}}>{r.a}</td><td>{r.den}</td><td>{r.con}</td>
       <td style={{whiteSpace:"nowrap"}}><input className="ec" type="text" value={r.aR_p!=null?r.aR_p:""} onChange={function(e){updArea(r.id,"aR_prop",e.target.value);}} style={{width:48,fontSize:10,padding:2,display:"inline-block"}}/> <span style={{fontSize:10,color:"#7088A8",marginLeft:4,display:"inline-block",width:40,textAlign:"left"}}>{fN(r.aR,3)}</span></td>
       <td style={{whiteSpace:"nowrap"}}><input className="ec" type="text" value={r.aC_p!=null?r.aC_p:""} onChange={function(e){updArea(r.id,"aC_prop",e.target.value);}} style={{width:48,fontSize:10,padding:2,display:"inline-block"}}/> <span style={{fontSize:10,color:"#7088A8",marginLeft:4,display:"inline-block",width:40,textAlign:"left"}}>{fN(r.aC,3)}</span></td>
       <td style={{whiteSpace:"nowrap"}}><input className="ec" type="text" value={r.aI_p!=null?r.aI_p:""} onChange={function(e){updArea(r.id,"aI_prop",e.target.value);}} style={{width:48,fontSize:10,padding:2,display:"inline-block"}}/> <span style={{fontSize:10,color:"#7088A8",marginLeft:4,display:"inline-block",width:40,textAlign:"left"}}>{fN(r.aI,3)}</span></td>
@@ -199,7 +202,7 @@ export default function CalcTab(props){
     {(sub==="plu" || props.isExport)?<div className={"c" + (props.isExport?" print-page-break":"")}><div className="ct">Caudal Pluvial - Estación: {IDF[P.estacion]?.name || P.estacion || "BUC"}</div><div style={{overflowX:"auto",maxHeight:"60vh",overflowY:"auto"}}><table><thead><tr>
       <TH>#</TH><TH>DE</TH><TH className="col-sep">A</TH><TH>A.Res (P|Ac)</TH><TH>A.Via (P|Ac)</TH><TH>A.Rec (P|Ac)</TH><TH className="col-sep">A.Tot</TH><TH>C</TH><TH>Tc</TH><TH>Tr</TH><TH className="col-sep">I</TH><TH className="hl-plu-hdr">Qpluv</TH>
     </tr></thead><tbody>
-      {R.map(function(r){var h=selMap&&selMap.some(function(sm){return sm&&sm.de===r.de&&sm.a===r.a;}); if(filterSel && (!h || r.sep)) return null; if(r.sep)return <SepRow key={r.id} cols={12}/>; return <tr key={r.id} className={h?"hl-row":""}><td>{r.id}</td><td style={{textAlign:"left",fontSize:13}}>{r.de}</td><td className="col-sep" style={{textAlign:"left",fontSize:13}}>{r.a}</td>
+      {R.map(function(r){var h=isSel(r.de, r.a); if(filterSel && (!h || r.sep)) return null; if(r.sep)return <SepRow key={r.id} cols={12}/>; return <tr key={r.id} className={h?"hl-row":""}><td>{r.id}</td><td style={{textAlign:"left",fontSize:13}}>{r.de}</td><td className="col-sep" style={{textAlign:"left",fontSize:13}}>{r.a}</td>
       <td style={{whiteSpace:"nowrap"}}><input className="ec" type="text" value={r.aR_p!=null?r.aR_p:""} onChange={function(e){updArea(r.id,"aR_prop",e.target.value);}} style={{width:48,fontSize:10,padding:2,display:"inline-block"}}/> <span style={{fontSize:10,color:"#7088A8",marginLeft:4,display:"inline-block",width:40,textAlign:"left"}}>{fN(r.aR,3)}</span></td>
       <td style={{whiteSpace:"nowrap"}}><input className="ec" type="text" value={r.aV_p!=null?r.aV_p:""} onChange={function(e){updArea(r.id,"aV_prop",e.target.value);}} style={{width:48,fontSize:10,padding:2,display:"inline-block"}}/> <span style={{fontSize:10,color:"#7088A8",marginLeft:4,display:"inline-block",width:40,textAlign:"left"}}>{fN(r.aV,3)}</span></td>
       <td style={{whiteSpace:"nowrap"}}><input className="ec" type="text" value={r.aRe_p!=null?r.aRe_p:""} onChange={function(e){updArea(r.id,"aRe_prop",e.target.value);}} style={{width:48,fontSize:10,padding:2,display:"inline-block"}}/> <span style={{fontSize:10,color:"#7088A8",marginLeft:4,display:"inline-block",width:40,textAlign:"left"}}>{fN(r.aRe,3)}</span></td>
@@ -211,13 +214,12 @@ export default function CalcTab(props){
         <TH>#</TH><TH>DE</TH><TH className="col-sep">A</TH><TH className="hl-san-hdr">Qsan</TH><TH className="col-sep hl-plu-hdr">Qpluv</TH><TH>Aliv</TH><TH>QMD</TH><TH className="col-sep">5xQMD</TH><TH className="hl-hid-hdr">Qd.Aliv</TH>
       </tr></thead><tbody>
         {dR.map(function(r,ri){
-          var h=selMap&&selMap.some(function(sm){return sm&&sm.de===r.de&&sm.a===r.a;});
+          var h=isSel(r.de, r.a);
           if(filterSel && !h) return null;
           var al=alivData[ri]||{aliviar:"N",qmd:0,f5:0};
           var qmd=al.qmd>0?+al.qmd.toFixed(2):+(r.Qmed||r.Qsan/3.5||0).toFixed(2);
           var f5=al.f5>0?+al.f5.toFixed(2):+(qmd*5).toFixed(2);
           var qdA=al.aliviar==="S"?+Math.max(0,r.Qpluv-f5).toFixed(2):r.Qd;
-          var h=selMap&&selMap.some(function(sm){return sm&&sm.de===r.de&&sm.a===r.a;});
       return <tr key={r.id} className={h?"hl-row":""}><td>{r.id}</td><td style={{textAlign:"left",fontSize:12}}>{r.de}</td><td className="col-sep" style={{textAlign:"left",fontSize:12}}>{r.a}</td>
             <td className="hl-main">{fN(r.Qsan,2)}</td><td className="col-sep hl-plu-cell">{fN(r.Qpluv,2)}</td>
             <td><select className="es" value={al.aliviar||"N"} onChange={function(e){var n=alivData.slice();while(n.length<=ri)n.push({aliviar:"N",qmd:0,f5:0});n[ri]=Object.assign({},n[ri],{aliviar:e.target.value});setAlivData(n);}}><option>N</option><option>S</option></select></td>
@@ -281,7 +283,7 @@ export default function CalcTab(props){
     {(sub==="prof" || props.isExport)?function(){var cfAMap={};dR.forEach(function(r){if(!cfAMap[r.a])cfAMap[r.a]=[];cfAMap[r.a].push(r.cfA);});var contMap={};dR.forEach(function(r){var prev=cfAMap[r.de];contMap[r.id]=prev?Math.abs(Math.min.apply(null,prev)-r.cfDE)<0.01:"--";});return <div className={"c" + (props.isExport?" print-page-break":"")}><div className="ct">Cotas y Profundidades</div><div style={{overflowX:"auto",maxHeight:"60vh",overflowY:"auto"}}><table><thead><tr>
       <TH>#</TH><TH>DE</TH><TH>A</TH><TH>CRas.DE</TH><TH>CRas.A</TH><TH className="gh">CFon.DE</TH><TH className="gh">CFon.A</TH><TH>Prof.E</TH><TH>Prof.S</TH><TH>S%</TH><TH>Caida</TH><TH>TrRec</TH><TH>Fr</TH><TH>Flujo</TH><TH>Cont.</TH>
     </tr></thead><tbody>
-      {R.map(function(r,ri){var h=selMap&&selMap.some(function(sm){return sm&&sm.de===r.de&&sm.a===r.a;}); if(filterSel && (!h || r.sep)) return null; if(r.sep)return <SepRow key={r.id} cols={15}/>; var tItem = T[r.id - 1] || {}; return <tr key={r.id} className={h?"hl-row":""}><td>{r.id}</td>
+      {R.map(function(r,ri){var h=isSel(r.de, r.a); if(filterSel && (!h || r.sep)) return null; if(r.sep)return <SepRow key={r.id} cols={15}/>; var tItem = T[r.id - 1] || {}; return <tr key={r.id} className={h?"hl-row":""}><td>{r.id}</td>
         <td style={{textAlign:"left",fontSize:13}}>{r.de}</td><td style={{textAlign:"left",fontSize:13}}>{r.a}</td>
         <td>{r.crDE}</td><td>{r.crA}</td>
         <td><input className="ec" type="text" value={(tItem.cotaFondoDE != null && tItem.cotaFondoDE !== "" ? tItem.cotaFondoDE : (tItem.cotaFondo != null && tItem.cotaFondo !== "" ? tItem.cotaFondo : (r.cfDE || "")))} onChange={function(e){updSmart(r.id,"cotaFondoDE",e.target.value.replace(",","."));}} style={{width:75,fontSize:12,padding:3}}/></td>
@@ -308,13 +310,13 @@ export default function CalcTab(props){
           var origRi = R.findIndex(function(or){return or.id===r.id;});
           var currentNom = (origRi >= 0 && T[origRi] && T[origRi].diametroCom) ? T[origRi].diametroCom : r.nom;
           var isDiff = r.nomProp&&r.nomProp!==currentNom&&r.reponer==="S";
-          var h=selMap&&selMap.some(function(sm){return sm&&sm.de===r.de&&sm.a===r.a;});
+          var h=isSel(r.de, r.a);
           if(filterSel && !h) return false;
           return isDiff;
         }).map(function(r){
           var origRi = R.findIndex(function(or){return or.id===r.id;});
           var currentNom = (origRi >= 0 && T[origRi] && T[origRi].diametroCom) ? T[origRi].diametroCom : r.nom;
-          var h=selMap&&selMap.some(function(sm){return sm&&sm.de===r.de&&sm.a===r.a;});
+          var h=isSel(r.de, r.a);
       return <tr key={r.id} className={h?"hl-row":""}><td>{r.id}</td><td style={{textAlign:"left",fontSize:12}}>{r.de}</td><td style={{textAlign:"left",fontSize:12}}>{r.a}</td>
             <td style={{color:"#DC3545"}}>{currentNom}</td>
             <td style={{color:"#28A745",fontWeight:700}}>{r.nomProp}</td>
