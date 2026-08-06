@@ -1766,8 +1766,15 @@ function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, se
         setInpData(updatedInpData);
     }
 
-    if (sT) sT(topoSort(processed));
-    if(setTab) setTab("calc");
+    if (sT) {
+      let rawSorted = topoSort(processed);
+      let cleanSorted = Array.isArray(rawSorted)
+        ? rawSorted.filter(t => t && !t.sep && t.de && String(t.de).trim() !== "" && String(t.de).trim() !== "0")
+        : processed;
+      cleanSorted.forEach((t, idx) => { t.id = idx + 1; });
+      sT(cleanSorted);
+    }
+    if (setTab) setTab("calc");
     alert("¡Red y Áreas Inyectadas a AMCaudales!");
 };
 

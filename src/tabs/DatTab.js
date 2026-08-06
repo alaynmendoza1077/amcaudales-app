@@ -262,7 +262,8 @@ function DatTab(props){
       <TH style={{position:"sticky", top:0, zIndex:20, background:"rgba(15, 23, 42, 1)"}}></TH>
       <TH style={{position:"sticky", top:0, zIndex:20, background:"rgba(15, 23, 42, 1)"}}>Validaciones</TH>
     </tr></thead><tbody>{T.map(function(t,i){
-      var h=selMap&&selMap.some(function(sm){return sm&&String(sm.de).trim().toLowerCase()===String(t.de).trim().toLowerCase()&&String(sm.a).trim().toLowerCase()===String(t.a).trim().toLowerCase();});
+      if(!t || t.sep) return null;
+      var h=selMap&&selMap.some(function(sm){return sm&&sm.de&&sm.a&&t.de&&t.a&&String(sm.de).trim().toLowerCase()===String(t.de).trim().toLowerCase()&&String(sm.a).trim().toLowerCase()===String(t.a).trim().toLowerCase();});
       if(filterSel && !h) return null;
       if(filterRep && t.reponer !== filterRep) return null;
       

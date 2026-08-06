@@ -169,7 +169,8 @@ function runCalc(T,P){
   for(var vi=0;vi<validT.length;vi++){
     var t=validT[vi];
     // mc: código de material. 1=PVC(n=.010), 2=GRES(.014), 4=PEAD(.010), 3=CONCRETO(.013)
-    var mat=t.material||"PVC";var mc=mat.includes("PVC")?1:mat.includes("GRES")?2:mat.includes("PEAD")?4:3;
+    var mat = (t && typeof t.material === 'string') ? t.material.toUpperCase() : "PVC";
+    var mc = mat.includes("PVC") ? 1 : mat.includes("GRES") ? 2 : mat.includes("PEAD") ? 4 : 3;
     var D=gDi(t.diametroCom||"315 mm", mat);var De=gDe(t.diametroCom||"315 mm", mat);
     /* Material de diseño forzado a PVC para auto-dimensionamiento (v36.6)
      * ks=1.5e-6 (rugosidad PVC liso), n=0.010. Diseño conservador al material más liso. */
