@@ -8,6 +8,7 @@ import {fm, Glossary} from '../ui';
 import {exportMAESTRA} from '../exportMAESTRA';
 import {exportPDF} from '../exportPDF';
 import {exportAllReports} from '../exportAllReports';
+import PTOBASE_DATA from '../ptoBaseData';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import DashTab from '../tabs/DashTab';
@@ -92,6 +93,7 @@ export default function ReposicionModule({ onBack, initialData }){
   var sFS=useState('menu');var flowStage=sFS[0],setFlowStage=sFS[1];
   var sInp=useState(null);var inpData=sInp[0],setInpData=sInp[1];
   var sSelMap=useState([]);var selMap=sSelMap[0],setSelMap=sSelMap[1];
+  var sFilterSel=useState(false);var filterSel=sFilterSel[0],setFilterSel=sFilterSel[1];
   var sAutoAreas=useState([]);var autoAreasPoly=sAutoAreas[0],setAutoAreasPoly=sAutoAreas[1];
   var sOutfalls=useState({});var outfalls=sOutfalls[0],setOutfalls=sOutfalls[1];
   useEffect(() => {
@@ -417,8 +419,15 @@ export default function ReposicionModule({ onBack, initialData }){
       });
     }
       setR(results);
+      import('../tabs/ProjectConsolidatorTab').then(({ recalcPbItems }) => {
+        setPbItems(prevPb => {
+          var basePb = (prevPb && prevPb.length > 0) ? prevPb : (PTOBASE_DATA || []).map(it => ({ c: it.c, d: it.d, u: it.u, p: it.p, lv: it.lv, q: 0, auto: 0 }));
+          var data = { v: "v36", P: P, T: T, sumLat: sumLat, sumTrans: sumTrans, pbItems: basePb, alivData: alivData, sumData: sumData, estSepData: estSepData, urbanismoData: urbanismoData, inpData: inpData, flowStage: flowStage, tab: tab, autoAreasPoly: autoAreasPoly, selMap: selMap, outfalls: outfalls, filterSel: filterSel, R: results };
+          return recalcPbItems(data);
+        });
+      });
     }, 10);
-  },[T, P, alivData, estSepData]);
+  },[T, P, alivData, estSepData, urbanismoData, sumLat, sumTrans]);
 
   var handleSaveAMC=function(){
     var suggestedName = (P.proyecto || P.barrio || "CONSTRUCCION_SISTEMA_DE_ALCANTARILLADO").replace(/\s+/g,"_");
@@ -817,6 +826,10 @@ const handleBack = () => {
               <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
               <span style={{marginLeft: 6, fontSize: '12px'}}>Abrir .AMC</span>
             </button>
+            <button className="hdr-btn" onClick={() => setTab("importGis")} title="Importar archivos GIS (.geojson / .shp / .inp)" style={{ height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 12px', background: 'rgba(139, 92, 246, 0.15)', border: '1px solid #8b5cf6', color: '#c4b5fd', fontWeight: 'bold' }}>
+              <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/></svg>
+              <span style={{marginLeft: 6, fontSize: '12px'}}>Importar GIS 🌐</span>
+            </button>
             <button className="hdr-btn" onClick={() => setShowCloudProjectsModal(true)} title="Abrir Proyecto alojado en la Nube de Supabase" style={{ height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 12px', background: 'rgba(59, 130, 246, 0.15)', border: '1px solid #3b82f6', color: '#60a5fa' }}>
               <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M3 15a4 4 0 004 4h9a5 5 0 001-9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
               <span style={{marginLeft: 6, fontSize: '12px'}}>Abrir Nube</span>
@@ -998,7 +1011,10 @@ const handleBack = () => {
         </div>
 )}
         <div className="tabs">
-        {visibleTabs.map(function(t){return <button key={t.id} className={"tab"+(tab===t.id?" a":"")} onClick={function(){setTab(t.id);}}>{t.l}</button>;})}
+        {visibleTabs.map(function(t){
+          var isDat = t.id === "dat";
+          return <button key={t.id} className={"tab"+(tab===t.id?" a":"")} style={isDat ? { border: '2px solid #f59e0b', color: '#fcd34d', fontWeight: 'bold', boxShadow: '0 0 8px rgba(245, 158, 11, 0.4)' } : {}} onClick={function(){setTab(t.id);}}>{t.l}</button>;
+        })}
       </div>
     </div>
     <div className="cnt">

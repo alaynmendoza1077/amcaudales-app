@@ -367,13 +367,25 @@ function buildTramos(inp){
     var isInch=dStr.indexOf('"')>=0||dStr.indexOf("pulg")>=0;
     var dRaw=dStr.replace(/[^0-9.]/g,"");var dMM=+dRaw;
     if(isInch||dMM<50)dMM=Math.round(dMM*25.4);if(dMM<100)dMM=315;
-    var nomArr=[110,160,200,250,315,355,400,450,500,600,700,750,850,900,1000];
-    var closest=nomArr.reduce(function(prev,curr){return Math.abs(curr-dMM)<Math.abs(prev-dMM)?curr:prev;});
-    var dNom=closest+" mm";var dOrig=dStr;
-    var matRaw=String(t.MATERIAL||"PVC").toUpperCase();
-    var matOrig=matRaw.includes("PVC")?"PVC":matRaw.includes("PEAD")?"PEAD":matRaw.includes("GRES")?"GRES":"CONCRETO";
-    var nMann=t.nManning||0;
-    var mat = nMann >= 0.013 ? "GRES" : "PVC";
+    var matRaw = String(t.MATERIAL || t.material || t.Mat || t.MAT || "PVC").toUpperCase();
+    var mat = "PVC";
+    if (matRaw.includes("CONCRETO")) mat = "CONCRETO";
+    else if (matRaw.includes("GRES")) mat = "GRES";
+    else if (matRaw.includes("PEAD") || matRaw.includes("HDPE")) mat = "PEAD";
+    else if (matRaw.includes("PVC")) mat = "PVC";
+    else if (nMann >= 0.013) mat = "CONCRETO";
+    var matOrig = mat;
+
+    var dNom = dStr;
+    if (mat === "GRES" || mat === "CONCRETO") {
+      let inchVal = Math.round(dMM / 25.4);
+      if (inchVal < 4) inchVal = 8;
+      dNom = inchVal + '"';
+    } else {
+      var nomArr=[110,160,200,250,315,355,400,450,500,600,700,750,850,900,1000];
+      var closest=nomArr.reduce(function(prev,curr){return Math.abs(curr-dMM)<Math.abs(prev-dMM)?curr:prev;});
+      dNom = closest + " mm";
+    }
     var repRaw=String(t.Reponer||"S").toUpperCase();
     var reponer=repRaw==="N"?"N":"S";
     var tipoViaRaw=String(t.TipoVia||t["Tipo Via"]||"FX").toUpperCase();

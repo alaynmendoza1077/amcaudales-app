@@ -1766,7 +1766,7 @@ function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, se
         setInpData(updatedInpData);
     }
 
-    setT(topoSort(processed));
+    if (sT) sT(topoSort(processed));
     if(setTab) setTab("calc");
     alert("¡Red y Áreas Inyectadas a AMCaudales!");
 };
@@ -1838,10 +1838,10 @@ const handleExportPolygonVertices = () => {
 
       <div style={{ 
           width: '320px', 
-          backgroundColor: 'rgba(255, 255, 255, 0.95)', 
-          backdropFilter: 'blur(10px)', 
-          boxShadow: '-4px 0 15px rgba(0,0,0,0.05)', 
-          borderLeft: '1px solid #e5e7eb', 
+          backgroundColor: 'rgba(15, 23, 42, 0.96)', 
+          backdropFilter: 'blur(12px)', 
+          boxShadow: '-4px 0 20px rgba(0,0,0,0.5)', 
+          borderLeft: '1px solid rgba(59, 130, 246, 0.3)', 
           padding: '24px', 
           display: 'flex', 
           flexDirection: 'column', 
@@ -1849,54 +1849,54 @@ const handleExportPolygonVertices = () => {
           overflowY: 'auto', 
           zIndex: 10 
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
-            <h2 style={{ fontSize: '18px', fontWeight: 'bold', color: '#1f2937', letterSpacing: '-0.025em', margin: 0 }}>Visor Catastral</h2>
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '4px' }}>
+            <h2 style={{ fontSize: '18px', fontWeight: '800', color: '#38bdf8', letterSpacing: '-0.025em', margin: 0 }}>Visor Catastral</h2>
         </div>
 
-        <div style={{ backgroundColor: '#ffffff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '12px', boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)', marginBottom: '8px' }}>
+        <div style={{ backgroundColor: 'rgba(30, 41, 59, 0.8)', border: '1px solid rgba(59, 130, 246, 0.3)', borderRadius: '12px', padding: '12px', marginBottom: '4px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#4b5563', textTransform: 'uppercase' }}>Sistema de Coordenadas</span>
+                <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#fcd34d', textTransform: 'uppercase' }}>Sistema de Coordenadas</span>
             </div>
             <select 
                 value={epsgCode} 
                 onChange={handleEpsgChange} 
-                style={{ width: '100%', padding: '6px', fontSize: '12px', borderRadius: '6px', border: '1px solid #e5e7eb' }}
+                style={{ width: '100%', padding: '7px', fontSize: '12px', borderRadius: '6px', backgroundColor: 'rgba(15, 23, 42, 0.95)', color: '#f8fafc', border: '1px solid rgba(59, 130, 246, 0.45)', fontWeight: 'bold' }}
             >
                 <option value="EPSG:3116">EPSG:3116 (Bogotá)</option>
                 <option value="EPSG:9377">EPSG:9377 (Origen Nacional)</option>
                 <option value="EPSG:3857">EPSG:3857 (Web Mercator)</option>
             </select>
             <button onClick={() => setInpData(prev => ({...prev}))} style={{
-                marginTop: 8, background: '#10b981', color: 'white', border: 'none', padding: '6px 12px',
-                borderRadius: '4px', cursor: 'pointer', fontSize: 12, fontWeight: 'bold', width: '100%'
+                marginTop: 8, background: '#10b981', color: 'white', border: 'none', padding: '7px 12px',
+                borderRadius: '6px', cursor: 'pointer', fontSize: 12, fontWeight: 'bold', width: '100%', boxShadow: '0 2px 8px rgba(16, 185, 129, 0.3)'
             }}>
                 Procesar Coordenadas
             </button>
-            <div style={{ fontSize: '9px', color: '#6b7280', marginTop: '4px', textAlign: 'center', lineHeight: '1.2' }}>
+            <div style={{ fontSize: '9.5px', color: '#94a3b8', marginTop: '6px', textAlign: 'center', lineHeight: '1.2' }}>
                 Cambia el sistema si no ves la red importada en el mapa.
             </div>
         </div>
 
-        <div style={{ backgroundColor: '#ffffff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '12px', boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)' }}>
+        <div style={{ backgroundColor: 'rgba(30, 41, 59, 0.8)', border: '1px solid rgba(59, 130, 246, 0.3)', borderRadius: '12px', padding: '12px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#4b5563', textTransform: 'uppercase' }}>Rastreo Aguas Arriba</span>
-                <span style={{ color: traceMode ? '#10b981' : '#d1d5db' }}>●</span>
+                <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#fcd34d', textTransform: 'uppercase' }}>Rastreo Aguas Arriba</span>
+                <span style={{ color: traceMode ? '#10b981' : '#64748b' }}>●</span>
             </div>
             <button 
                 onClick={() => setTraceMode(!traceMode)} 
-                style={{ width: '100%', padding: '8px', fontSize: '12px', fontWeight: 'bold', color: traceMode ? '#047857' : '#4b5563', backgroundColor: traceMode ? '#d1fae5' : '#f3f4f6', border: '1px solid', borderColor: traceMode ? '#6ee7b7' : '#e5e7eb', borderRadius: '8px', cursor: 'pointer', transition: 'all 0.2s' }}>
+                style={{ width: '100%', padding: '8px', fontSize: '12px', fontWeight: 'bold', color: traceMode ? '#34d399' : '#e2e8f0', backgroundColor: traceMode ? 'rgba(16, 185, 129, 0.2)' : 'rgba(15, 23, 42, 0.8)', border: '1px solid', borderColor: traceMode ? '#10b981' : 'rgba(59, 130, 246, 0.3)', borderRadius: '8px', cursor: 'pointer', transition: 'all 0.2s' }}>
                 {traceMode ? 'Activado (Shift+Click opcional)' : 'Activar Rastreo'}
             </button>
-            <div style={{ fontSize: '9px', color: '#6b7280', marginTop: '6px', textAlign: 'center', lineHeight: '1.2' }}>
-                Con el rastreo apagado, presiona <b>Shift+Click</b> para rastrear manualmente.<br/>
-                Usa <b>Ctrl+Click</b> para sumar tramos a la selección.
+            <div style={{ fontSize: '9.5px', color: '#94a3b8', marginTop: '6px', textAlign: 'center', lineHeight: '1.3' }}>
+                Con el rastreo apagado, presiona <b style={{color:'#38bdf8'}}>Shift+Click</b> para rastrear.<br/>
+                Usa <b style={{color:'#38bdf8'}}>Ctrl+Click</b> para sumar tramos a la selección.
             </div>
         </div>
         
-        <div style={{ backgroundColor: 'rgba(239, 246, 255, 0.5)', padding: '16px', borderRadius: '12px', border: '1px solid #dbeafe', boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)' }}>
-          <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#4b5563', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Radio del Buffer (m)</label>
+        <div style={{ backgroundColor: 'rgba(30, 41, 59, 0.8)', padding: '14px', borderRadius: '12px', border: '1px solid rgba(59, 130, 246, 0.3)' }}>
+          <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#fcd34d', display: 'block', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Radio del Buffer (m)</label>
           <input type="number" id="radioBufferInput"
-                 style={{ width: '100%', backgroundColor: '#ffffff', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '8px', color: '#374151', outline: 'none' }} 
+                 style={{ width: '100%', backgroundColor: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(59, 130, 246, 0.45)', borderRadius: '6px', padding: '7px', color: '#fcd34d', fontWeight: 'bold', outline: 'none' }} 
                  value={radio} onChange={e => {
                    let v = Number(e.target.value);
                    setRadio(v);
@@ -1904,41 +1904,41 @@ const handleExportPolygonVertices = () => {
                  }} />
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '16px' }}>
-          <div style={{ backgroundColor: '#ffffff', padding: '16px', borderRadius: '12px', boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)', border: '1px solid #f3f4f6', display: 'flex', flexDirection: 'column' }}>
-            <span style={{ fontSize: '10px', fontWeight: 'bold', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '4px' }}>Área Tributaria</span>
-            <span style={{ fontSize: '20px', fontWeight: 'bold', color: '#059669' }}>{bufferArea.toFixed(4)} <span style={{ fontSize: '14px', fontWeight: '500', color: '#9ca3af' }}>Ha</span></span>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '12px' }}>
+          <div style={{ backgroundColor: 'rgba(30, 41, 59, 0.8)', padding: '12px', borderRadius: '12px', border: '1px solid rgba(59, 130, 246, 0.3)', display: 'flex', flexDirection: 'column' }}>
+            <span style={{ fontSize: '10px', fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '4px' }}>Área Tributaria</span>
+            <span style={{ fontSize: '18px', fontWeight: '800', color: '#34d399' }}>{bufferArea.toFixed(4)} <span style={{ fontSize: '12px', fontWeight: '600', color: '#94a3b8' }}>Ha</span></span>
           </div>
-          <div style={{ backgroundColor: '#ffffff', padding: '16px', borderRadius: '12px', boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)', border: '1px solid #f3f4f6', display: 'flex', flexDirection: 'column' }}>
-            <span style={{ fontSize: '10px', fontWeight: 'bold', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '4px' }}>T. Concentración</span>
-            <span style={{ fontSize: '20px', fontWeight: 'bold', color: '#ea580c' }}>{tcVal} <span style={{ fontSize: '14px', fontWeight: '500', color: '#9ca3af' }}>min</span></span>
+          <div style={{ backgroundColor: 'rgba(30, 41, 59, 0.8)', padding: '12px', borderRadius: '12px', border: '1px solid rgba(59, 130, 246, 0.3)', display: 'flex', flexDirection: 'column' }}>
+            <span style={{ fontSize: '10px', fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '4px' }}>T. Concentración</span>
+            <span style={{ fontSize: '18px', fontWeight: '800', color: '#fcd34d' }}>{tcVal} <span style={{ fontSize: '12px', fontWeight: '600', color: '#94a3b8' }}>min</span></span>
           </div>
         </div>
 
-        <div style={{ backgroundColor: '#ffffff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '12px', boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)' }}>
-            <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#4b5563', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              <span>Cartografía Base (.zip con SHP)</span>
-              <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: '4px', fontSize: '10px', textTransform: 'none', fontWeight: 'normal', color: '#6b7280' }}>
-                 <input type="checkbox" checked={verCartografia} onChange={e => setVerCartografia(e.target.checked)} /> Mostrar en Mapa
+        <div style={{ backgroundColor: 'rgba(30, 41, 59, 0.8)', border: '1px solid rgba(59, 130, 246, 0.3)', borderRadius: '12px', padding: '12px' }}>
+            <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#fcd34d', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              <span>Cartografía Base (.zip SHP)</span>
+              <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: '4px', fontSize: '10px', textTransform: 'none', fontWeight: 'normal', color: '#cbd5e1' }}>
+                 <input type="checkbox" checked={verCartografia} onChange={e => setVerCartografia(e.target.checked)} /> Mostrar
               </label>
             </label>
             <input 
               type="file" 
               accept=".zip,.geojson,.json,.js" 
               onChange={handleCargarCartografia}
-              style={{ width: '100%', fontSize: '10px' }}
+              style={{ width: '100%', fontSize: '10px', color: '#e2e8f0' }}
             />
             {cartografia.length > 0 && (
-                <div style={{ marginTop: '8px', fontSize: '11px', color: '#059669', fontWeight: 'bold' }}>
-                   ✓ {cartografia.length} polígonos base listos para cálculo.
+                <div style={{ marginTop: '8px', fontSize: '11px', color: '#34d399', fontWeight: 'bold' }}>
+                   ✓ {cartografia.length} polígonos base listos.
                 </div>
             )}
         </div>
         
-        <div style={{ backgroundColor: '#ffffff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '12px', boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)' }}>
-            <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#4b5563', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              <span>Capa de Referencia (.geojson)</span>
-              <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: '4px', fontSize: '10px', textTransform: 'none', fontWeight: 'normal', color: '#6b7280' }}>
+        <div style={{ backgroundColor: 'rgba(30, 41, 59, 0.8)', border: '1px solid rgba(59, 130, 246, 0.3)', borderRadius: '12px', padding: '12px' }}>
+            <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#fcd34d', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              <span>Capa Referencia (.geojson)</span>
+              <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: '4px', fontSize: '10px', textTransform: 'none', fontWeight: 'normal', color: '#cbd5e1' }}>
                  <input type="checkbox" checked={verRefFeatures} onChange={e => setVerRefFeatures(e.target.checked)} /> Mostrar
               </label>
             </label>
@@ -1946,19 +1946,44 @@ const handleExportPolygonVertices = () => {
               type="file" 
               accept=".geojson,.json" 
               onChange={handleLoadRefGeoJSON}
-              style={{ width: '100%', fontSize: '10px' }}
+              style={{ width: '100%', fontSize: '10px', color: '#e2e8f0' }}
             />
             {refFeatures.length > 0 && (
-                <div style={{ marginTop: '8px', fontSize: '11px', color: '#ea580c', fontWeight: 'bold' }}>
+                <div style={{ marginTop: '8px', fontSize: '11px', color: '#fcd34d', fontWeight: 'bold' }}>
                    ✓ {refFeatures.length} elementos de referencia listos.
                 </div>
             )}
         </div>
 
-        <div style={{ backgroundColor: '#ffffff', padding: '16px', borderRadius: '12px', boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)', border: '1px solid #f3f4f6', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block' }}>Tramos Elegidos</span>
-          <span style={{ fontSize: '20px', fontWeight: 'bold', color: '#1f2937', backgroundColor: '#f3f4f6', padding: '4px 12px', borderRadius: '8px' }}>{selTramos.length}</span>
+        <div style={{ backgroundColor: 'rgba(30, 41, 59, 0.8)', padding: '14px', borderRadius: '12px', border: '1px solid rgba(59, 130, 246, 0.3)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#fcd34d', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block' }}>Tramos Elegidos</span>
+          <span style={{ fontSize: '18px', fontWeight: '800', color: '#38bdf8', backgroundColor: 'rgba(15, 23, 42, 0.9)', padding: '4px 12px', borderRadius: '8px', border: '1px solid rgba(59, 130, 246, 0.4)' }}>{selTramos.length}</span>
         </div>
+
+        {selTramos.filter(Boolean).length > 0 && (() => {
+          let lastSel = selTramos.filter(Boolean).slice(-1)[0];
+          if (!lastSel) return null;
+          return (
+            <div style={{ backgroundColor: 'rgba(15, 23, 42, 0.95)', border: '1px solid #38bdf8', borderRadius: '12px', padding: '14px', boxShadow: '0 4px 15px rgba(0,0,0,0.5)' }}>
+              <div style={{ fontSize: '11px', fontWeight: '800', color: '#fcd34d', textTransform: 'uppercase', marginBottom: '8px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '4px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>📌 Atributos Tramo Seleccionado</span>
+                <span style={{ fontSize: '10px', color: '#38bdf8' }}>{selTramos.filter(Boolean).length} sel.</span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', fontSize: '11.5px', color: '#f8fafc' }}>
+                <div><b>Tramo:</b> <span style={{color: '#34d399', fontWeight: 'bold'}}>{lastSel.de} → {lastSel.a}</span></div>
+                <div><b>Longitud L:</b> <span style={{color: '#34d399', fontWeight: 'bold'}}>{(lastSel.longitud || lastSel.L || 0).toFixed(2)} m</span></div>
+                <div><b>Diámetro:</b> <span style={{color: '#fcd34d', fontWeight: 'bold'}}>{(lastSel.diametroCom || lastSel.diametro || 200)}</span></div>
+                <div><b>Material:</b> <span style={{color: '#38bdf8', fontWeight: 'bold'}}>{lastSel.material || 'PVC'}</span></div>
+                <div><b>Pendiente:</b> <span>{(lastSel.pendiente || lastSel.S || 0).toFixed(2)} %</span></div>
+                <div><b>Área Afer.:</b> <span style={{color: '#34d399', fontWeight: 'bold'}}>{(lastSel.areaParcial || lastSel.areaCalc || 0).toFixed(4)} Ha</span></div>
+                <div><b>C.Ras.DE:</b> <span>{(lastSel.cotaRasante || lastSel.crDE || 0).toFixed(2)} m</span></div>
+                <div><b>C.Ras.A:</b> <span>{(lastSel.cotaRasanteA || lastSel.crA || 0).toFixed(2)} m</span></div>
+                <div><b>C.Fon.DE:</b> <span>{(lastSel.cotaFondo || lastSel.cfDE || 0).toFixed(2)} m</span></div>
+                <div><b>C.Fon.A:</b> <span>{(lastSel.cotaFondoA || lastSel.cfA || lastSel.fondo_final || 0).toFixed(2)} m</span></div>
+              </div>
+            </div>
+          );
+        })()}
 
         <div style={{ display: 'flex', gap: '8px', marginTop: '16px', flexDirection: 'column' }}>
           {isCalculating && calcProgress.total > 0 && (
@@ -1985,7 +2010,7 @@ const handleExportPolygonVertices = () => {
                disabled={isCalculating}
                style={{ flex: 1, backgroundColor: isCalculating ? '#9ca3af' : '#8b5cf6', color: '#ffffff', fontWeight: 'bold', padding: '12px 8px', borderRadius: '12px', border: 'none', cursor: isCalculating ? 'not-allowed' : 'pointer', fontSize: '13px' }}
              >
-               {isCalculating ? `Procesando ${calcProgress.current}/${calcProgress.total}...` : "🧮 Autogenerar Áreas (Reto Voronoi)"}
+               {isCalculating ? `Procesando ${calcProgress.current}/${calcProgress.total}...` : "⚡ Autogenerar Áreas (Reto Voronoi)"}
             </button>
           </div>
           <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
@@ -2065,17 +2090,17 @@ const handleExportPolygonVertices = () => {
             </button>
           </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', marginTop: '4px', flexWrap: 'wrap' }}>
-              <div style={{ display: 'flex', alignItems: 'center' }}>
-                  <input type="checkbox" id="chk_vias" checked={incluirVias} onChange={e => setIncluirVias(e.target.checked)} />
-                  <label htmlFor="chk_vias" style={{ fontSize: '11px', color: '#4b5563', cursor: 'pointer', marginLeft: '4px' }}>Inyectar áreas vías separadas</label>
+              <div style={{ display: 'flex', alignItems: 'center', opacity: cartografia.length === 0 ? 0.5 : 1 }}>
+                  <input type="checkbox" id="chk_vias" checked={incluirVias} disabled={cartografia.length === 0} onChange={e => setIncluirVias(e.target.checked)} />
+                  <label htmlFor="chk_vias" style={{ fontSize: '11px', color: '#94a3b8', cursor: cartografia.length === 0 ? 'not-allowed' : 'pointer', marginLeft: '4px' }}>Inyectar áreas vías separadas</label>
               </div>
               <div style={{ display: 'flex', alignItems: 'center' }}>
                   <input type="checkbox" id="chk_ver_completa" checked={verAreaCompleta} onChange={e => setVerAreaCompleta(e.target.checked)} />
-                  <label htmlFor="chk_ver_completa" style={{ fontSize: '11px', color: '#4b5563', cursor: 'pointer', marginLeft: '4px' }}>Ver Área Completa</label>
+                  <label htmlFor="chk_ver_completa" style={{ fontSize: '11px', color: '#94a3b8', cursor: 'pointer', marginLeft: '4px' }}>Ver Área Completa</label>
               </div>
               <div style={{ display: 'flex', alignItems: 'center' }}>
                   <input type="checkbox" id="chk_ver_separada" checked={verAreaSeparada} onChange={e => setVerAreaSeparada(e.target.checked)} />
-                  <label htmlFor="chk_ver_separada" style={{ fontSize: '11px', color: '#4b5563', cursor: 'pointer', marginLeft: '4px' }}>Ver Vías/Predios</label>
+                  <label htmlFor="chk_ver_separada" style={{ fontSize: '11px', color: '#94a3b8', cursor: 'pointer', marginLeft: '4px' }}>Ver Vías/Predios</label>
               </div>
           </div>
       </div>

@@ -274,15 +274,20 @@ function DatTab(props){
         var tCfA=parseFloat(t.cotaFondoA);
         if(!isNaN(nCfDE)&&!isNaN(tCfA)&&nCfDE>tCfA)warns.push("Pozo "+t.a+": C.Fon.Salida > C.Fon.Llegada");
       }
+      var hasRowData = Boolean((t.de && String(t.de).trim() !== "" && String(t.de).trim() !== "0") || (t.a && String(t.a).trim() !== "" && String(t.a).trim() !== "0"));
+      var isMissing = function(v){ return hasRowData && (v === undefined || v === null || String(v).trim() === "" || String(v).trim() === "0" || Number(v) === 0); };
+      var cfDEVal = t.cotaFondoDE != null && t.cotaFondoDE !== "" ? t.cotaFondoDE : t.cotaFondo;
+      var cfAVal = t.cotaFondoA != null && t.cotaFondoA !== "" ? t.cotaFondoA : (t.cfA != null && t.cfA !== "" ? t.cfA : t.cotaFondoA);
+
       return <tr key={i} className={h?"hl-row":""}><td>{i+1}</td>
-      <td><input className="ec" type="text" value={t.de||""} onChange={function(e){upd(i,"de",e.target.value);}} style={{width:65,fontSize:11,padding:2}}/></td>
-      <td><input className="ec" type="text" value={t.a||""} onChange={function(e){upd(i,"a",e.target.value);}} style={{width:65,fontSize:11,padding:2}}/></td>
-      <td><input className="ec" type="text" value={t.longitud||""} onChange={function(e){updSmart(i,"longitud",e.target.value.replace(",","."));}} style={{width:45,fontSize:11,padding:2}}/></td>
-      <td><input className="ec" type="text" value={t.pendiente||""} onChange={function(e){updSmart(i,"pendiente",e.target.value.replace(",","."));}} style={{width:40,fontSize:11,padding:2}}/></td>
-      <td><input className="ec" type="text" value={t.cotaRasante||""} onChange={function(e){upd(i,"cotaRasante",e.target.value.replace(",","."));}} style={{width:55,fontSize:11,padding:2}}/></td>
-      <td><input className="ec" type="text" value={t.cotaRasanteA||""} onChange={function(e){upd(i,"cotaRasanteA",e.target.value.replace(",","."));}} style={{width:55,fontSize:11,padding:2}}/></td>
-      <td><input className="ec" type="text" value={t.cotaFondoDE != null && t.cotaFondoDE !== "" ? t.cotaFondoDE : (t.cotaFondo || "")} onChange={function(e){updSmart(i,"cotaFondoDE",e.target.value.replace(",","."));}} style={{width:55,fontSize:11,padding:2}}/></td>
-      <td><input className="ec" type="text" value={t.cotaFondoA != null && t.cotaFondoA !== "" ? t.cotaFondoA : (t.cfA != null && t.cfA !== "" ? t.cfA : (t.cotaFondoA || ""))} onChange={function(e){updSmart(i,"cotaFondoA",e.target.value.replace(",","."));}} style={{width:55,fontSize:11,padding:2}}/></td>
+      <td><input className={"ec" + (isMissing(t.de) ? " input-missing-alert" : "")} type="text" value={t.de||""} onChange={function(e){upd(i,"de",e.target.value);}} style={{width:65,fontSize:11,padding:2}} title={isMissing(t.de)?"Dato faltante: Nombre de pozo entrada":""}/></td>
+      <td><input className={"ec" + (isMissing(t.a) ? " input-missing-alert" : "")} type="text" value={t.a||""} onChange={function(e){upd(i,"a",e.target.value);}} style={{width:65,fontSize:11,padding:2}} title={isMissing(t.a)?"Dato faltante: Nombre de pozo salida":""}/></td>
+      <td><input className={"ec" + (isMissing(t.longitud) ? " input-missing-alert" : "")} type="text" value={t.longitud||""} onChange={function(e){updSmart(i,"longitud",e.target.value.replace(",","."));}} style={{width:45,fontSize:11,padding:2}} title={isMissing(t.longitud)?"Dato faltante: Longitud":""}/></td>
+      <td><input className={"ec" + (isMissing(t.pendiente) ? " input-missing-alert" : "")} type="text" value={t.pendiente||""} onChange={function(e){updSmart(i,"pendiente",e.target.value.replace(",","."));}} style={{width:40,fontSize:11,padding:2}} title={isMissing(t.pendiente)?"Dato faltante: Pendiente":""}/></td>
+      <td><input className={"ec" + (isMissing(t.cotaRasante) ? " input-missing-alert" : "")} type="text" value={t.cotaRasante||""} onChange={function(e){upd(i,"cotaRasante",e.target.value.replace(",","."));}} style={{width:55,fontSize:11,padding:2}} title={isMissing(t.cotaRasante)?"Dato faltante: Cota rasante DE":""}/></td>
+      <td><input className={"ec" + (isMissing(t.cotaRasanteA) ? " input-missing-alert" : "")} type="text" value={t.cotaRasanteA||""} onChange={function(e){upd(i,"cotaRasanteA",e.target.value.replace(",","."));}} style={{width:55,fontSize:11,padding:2}} title={isMissing(t.cotaRasanteA)?"Dato faltante: Cota rasante A":""}/></td>
+      <td><input className={"ec" + (isMissing(cfDEVal) ? " input-missing-alert" : "")} type="text" value={cfDEVal||""} onChange={function(e){updSmart(i,"cotaFondoDE",e.target.value.replace(",","."));}} style={{width:55,fontSize:11,padding:2}} title={isMissing(cfDEVal)?"Dato faltante: Cota fondo DE":""}/></td>
+      <td><input className={"ec" + (isMissing(cfAVal) ? " input-missing-alert" : "")} type="text" value={cfAVal||""} onChange={function(e){updSmart(i,"cotaFondoA",e.target.value.replace(",","."));}} style={{width:55,fontSize:11,padding:2}} title={isMissing(cfAVal)?"Dato faltante: Cota fondo A":""}/></td>
       <td><input className="ec" type="text" value={t.areaParcial||""} onChange={function(e){upd(i,"areaParcial",e.target.value.replace(",","."));}} style={{width:45,fontSize:11,padding:2}}/></td>
       <td><input className="ec" type="text" value={t.aV_prop||""} onChange={function(e){upd(i,"aV_prop",e.target.value.replace(",","."));}} style={{width:45,fontSize:11,padding:2, background:"#f1f5f9"}}/></td>
       <td><input className="ec" type="text" value={t.densidad||""} onChange={function(e){upd(i,"densidad",e.target.value.replace(",","."));}} style={{width:45,fontSize:11,padding:2}}/></td>

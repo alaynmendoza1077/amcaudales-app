@@ -7,10 +7,29 @@ import LandingPage from './components/LandingPage';
 import NewProjectModal from './components/NewProjectModal';
 import UpgradeProModal from './components/UpgradeProModal';
 
-// Lazy loading de módulos pesados
-const ReposicionModule = lazy(() => import('./modules/ReposicionModule'));
-const ExpressModule = lazy(() => import('./modules/ExpressModule'));
-const PresupuestoModule = lazy(() => import('./modules/PresupuestoModule'));
+// Helper para cargar módulos lazy con reintento automático si falla el chunk (evita ChunkLoadError)
+const lazyWithRetry = (componentImport) =>
+  lazy(async () => {
+    const pageHasRefreshed = JSON.parse(
+      window.sessionStorage.getItem('chunk_refresh_retry') || 'false'
+    );
+    try {
+      const component = await componentImport();
+      window.sessionStorage.setItem('chunk_refresh_retry', 'false');
+      return component;
+    } catch (error) {
+      if (!pageHasRefreshed) {
+        window.sessionStorage.setItem('chunk_refresh_retry', 'true');
+        window.location.reload();
+      }
+      throw error;
+    }
+  });
+
+// Lazy loading de módulos pesados con recuperador automático
+const ReposicionModule = lazyWithRetry(() => import('./modules/ReposicionModule'));
+const ExpressModule = lazyWithRetry(() => import('./modules/ExpressModule'));
+const PresupuestoModule = lazyWithRetry(() => import('./modules/PresupuestoModule'));
 
 // Fallback de carga (Loader)
 const Loader = () => (

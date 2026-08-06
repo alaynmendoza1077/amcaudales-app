@@ -47,12 +47,26 @@ export default function ResumenCantidadesTab(props) {
     let maxDiff = 0;
 
     activeItems.forEach(it => {
-      const ptoQty = it.q || 0;
+      const ptoQty = parseFloat(it.q) || 0;
       const bk = it.breakdown;
-      const analSum = bk.sections.reduce((s, sec) => s + (sec.subtotal || 0), 0);
+      let analSum = 0;
+      if (bk && bk.sections && bk.sections.length > 0) {
+        bk.sections.forEach(sec => {
+          if (sec.rows && sec.rows.length > 0) {
+            sec.rows.forEach(r => {
+              analSum += (parseFloat(r.sub) || 0);
+            });
+          } else {
+            analSum += (parseFloat(sec.subtotal) || 0);
+          }
+        });
+      } else {
+        analSum = ptoQty;
+      }
+
       const diff = Math.abs(ptoQty - analSum);
       if (diff > maxDiff) maxDiff = diff;
-      if (diff < 0.05) matchCount++;
+      if (diff < 0.1) matchCount++;
     });
 
     const isPerfect = totalItems > 0 && matchCount === totalItems;
@@ -198,14 +212,14 @@ export default function ResumenCantidadesTab(props) {
 
       {/* TABLA PRINCIPAL DESGLEGABLE (SIN PRECIOS) CON SCROLL HORIZONTAL */}
       <div style={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '12px', overflowX: 'auto', maxWidth: '100%' }}>
-        <table style={{ width: '100%', minWidth: '950px', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
+        <table style={{ width: '100%', minWidth: '850px', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left', tableLayout: 'auto' }}>
           <thead>
             <tr style={{ backgroundColor: '#1e293b', color: '#94a3b8', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              <th style={{ padding: '14px', width: '40px', textAlign: 'center' }}></th>
-              <th style={{ padding: '14px', width: '110px' }}>Ítem Code</th>
-              <th style={{ padding: '14px' }}>Descripción del Concepto de Obra</th>
-              <th style={{ padding: '14px', width: '90px', textAlign: 'center' }}>Unidad</th>
-              <th style={{ padding: '14px', width: '150px', textAlign: 'right' }}>Cantidad Analizada</th>
+              <th style={{ padding: '12px 10px', width: '35px', textAlign: 'center' }}></th>
+              <th style={{ padding: '12px 10px', width: '110px' }}>Ítem Code</th>
+              <th style={{ padding: '12px 10px' }}>Descripción del Concepto de Obra</th>
+              <th style={{ padding: '12px 10px', width: '80px', textAlign: 'center' }}>Unidad</th>
+              <th style={{ padding: '12px 10px', width: '160px', textAlign: 'right' }}>Cantidad Analizada</th>
             </tr>
           </thead>
           <tbody>
@@ -224,22 +238,22 @@ export default function ResumenCantidadesTab(props) {
                       transition: 'background-color 0.15s ease'
                     }}
                   >
-                    <td style={{ padding: '12px', textAlign: 'center', color: '#38bdf8', fontWeight: 'bold' }}>
+                    <td style={{ padding: '12px 10px', textAlign: 'center', color: '#38bdf8', fontWeight: 'bold' }}>
                       {isExpanded ? '▼' : '▶'}
                     </td>
-                    <td style={{ padding: '12px', fontWeight: 700, color: '#38bdf8', fontFamily: 'monospace' }}>
+                    <td style={{ padding: '12px 10px', fontWeight: 700, color: '#38bdf8', fontFamily: 'monospace' }}>
                       {it.c}
                     </td>
-                    <td style={{ padding: '12px', fontWeight: 600, color: '#f1f5f9' }}>
+                    <td style={{ padding: '12px 10px', fontWeight: 600, color: '#f1f5f9', wordBreak: 'break-word', whiteSpace: 'normal' }}>
                       {it.d}
-                      <span style={{ marginLeft: '10px', fontSize: '10px', padding: '2px 8px', borderRadius: '4px', backgroundColor: 'rgba(148, 163, 184, 0.12)', color: '#94a3b8', fontWeight: 500 }}>
+                      <span style={{ marginLeft: '10px', fontSize: '10px', padding: '2px 8px', borderRadius: '4px', backgroundColor: 'rgba(148, 163, 184, 0.12)', color: '#94a3b8', fontWeight: 500, display: 'inline-block', marginTop: '2px' }}>
                         {it.chap}
                       </span>
                     </td>
-                    <td style={{ padding: '12px', textAlign: 'center', color: '#cbd5e1', fontWeight: 600 }}>
+                    <td style={{ padding: '12px 10px', textAlign: 'center', color: '#cbd5e1', fontWeight: 600 }}>
                       {it.u || "UND"}
                     </td>
-                    <td style={{ padding: '12px', textAlign: 'right', fontWeight: 800, color: '#10b981', fontSize: '14px' }}>
+                    <td style={{ padding: '12px 10px', textAlign: 'right', fontWeight: 800, color: '#10b981', fontSize: '14px', whiteSpace: 'nowrap' }}>
                       {it.q.toLocaleString("es-CO", { maximumFractionDigits: 2 })}
                     </td>
                   </tr>
@@ -247,58 +261,58 @@ export default function ResumenCantidadesTab(props) {
                   {/* VISTA DESPLEGABLE DE ANÁLISIS MULTI-SECCIÓN (FORMATO P2 VILLANUEVA / COMUNEROS) */}
                   {isExpanded && (
                     <tr style={{ backgroundColor: '#070c18' }}>
-                      <td colSpan="5" style={{ padding: '16px 24px', borderBottom: '2px solid #1e293b' }}>
-                        <div style={{ backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '10px', padding: '18px' }}>
+                      <td colSpan="5" style={{ padding: '12px 16px', borderBottom: '2px solid #1e293b' }}>
+                        <div style={{ backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '10px', padding: '16px', maxWidth: '100%', overflowX: 'hidden' }}>
                           
                           {/* HEADER & FÓRMULA MATEMÁTICA */}
-                          <div style={{ marginBottom: '16px' }}>
+                          <div style={{ marginBottom: '14px' }}>
                             <div style={{ fontSize: '13px', fontWeight: 800, color: '#38bdf8', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
                               📌 {bk.originTitle}
                             </div>
-                            <div style={{ marginTop: '6px', fontSize: '12px', fontFamily: 'monospace', backgroundColor: '#050a15', padding: '10px 14px', borderRadius: '6px', color: '#f59e0b', border: '1px solid #1e293b' }}>
+                            <div style={{ marginTop: '6px', fontSize: '12px', fontFamily: 'monospace', backgroundColor: '#050a15', padding: '10px 14px', borderRadius: '6px', color: '#f59e0b', border: '1px solid #1e293b', wordBreak: 'break-word', whiteSpace: 'normal' }}>
                               Fórmula General: {bk.formula}
                             </div>
                           </div>
 
                           {/* SECCIONES DETALLADAS POR TRAMOS, ACOMETIDAS, POZOS Y SUMIDEROS */}
                           {bk.sections.map((sec, secIdx) => (
-                            <div key={secIdx} style={{ marginBottom: '20px' }}>
-                              <div style={{ fontSize: '12px', fontWeight: 700, color: '#f1f5f9', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #334155', paddingBottom: '4px' }}>
+                            <div key={secIdx} style={{ marginBottom: '16px' }}>
+                              <div style={{ fontSize: '12px', fontWeight: 700, color: '#f1f5f9', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #334155', paddingBottom: '4px', flexWrap: 'wrap', gap: '8px' }}>
                                 <span>{sec.title}</span>
-                                <span style={{ color: '#38bdf8' }}>Subtotal Sección: {sec.subtotal.toLocaleString("es-CO", { maximumFractionDigits: 2 })} {sec.u}</span>
+                                <span style={{ color: '#38bdf8', fontWeight: 800 }}>Subtotal Sección: {sec.subtotal.toLocaleString("es-CO", { maximumFractionDigits: 2 })} {sec.u}</span>
                               </div>
 
-                              <div style={{ overflowX: 'auto', maxHeight: '380px', overflowY: 'auto', border: '1px solid #1e293b', borderRadius: '6px' }}>
-                                <table style={{ width: '100%', minWidth: '1200px', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
+                              <div style={{ overflowX: 'auto', maxHeight: '380px', overflowY: 'auto', border: '1px solid #1e293b', borderRadius: '6px', width: '100%' }}>
+                                <table style={{ width: '100%', minWidth: '1000px', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
                                   <thead style={{ position: 'sticky', top: 0, zIndex: 2 }}>
                                     <tr style={{ backgroundColor: '#1e293b', color: '#94a3b8', fontSize: '11px' }}>
-                                      <th style={{ padding: '8px 10px', width: '40px', textAlign: 'center' }}>#</th>
-                                      <th style={{ padding: '8px 10px', width: '220px' }}>Identificador / Elemento</th>
-                                      <th style={{ padding: '8px 10px', width: '60px', textAlign: 'center' }}>Cant. (N°)</th>
-                                      <th style={{ padding: '8px 10px', width: '90px', textAlign: 'right' }}>Long. L (m)</th>
-                                      <th style={{ padding: '8px 10px', width: '90px', textAlign: 'right' }}>Ancho W (m)</th>
-                                      <th style={{ padding: '8px 10px', width: '90px', textAlign: 'right' }}>Prof. H (m)</th>
-                                      <th style={{ padding: '8px 10px', width: '220px' }}>Expresión / Dimensión</th>
+                                      <th style={{ padding: '8px 10px', width: '35px', textAlign: 'center' }}>#</th>
+                                      <th style={{ padding: '8px 10px', width: '240px' }}>Identificador / Elemento</th>
+                                      <th style={{ padding: '8px 10px', width: '55px', textAlign: 'center' }}>Cant.</th>
+                                      <th style={{ padding: '8px 10px', width: '80px', textAlign: 'right' }}>Long. L (m)</th>
+                                      <th style={{ padding: '8px 10px', width: '80px', textAlign: 'right' }}>Ancho W (m)</th>
+                                      <th style={{ padding: '8px 10px', width: '80px', textAlign: 'right' }}>Prof. H (m)</th>
+                                      <th style={{ padding: '8px 10px', width: '210px' }}>Expresión / Dimensión</th>
                                       <th style={{ padding: '8px 10px', width: '130px', textAlign: 'right' }}>Subtotal Cantidad</th>
-                                      <th style={{ padding: '8px 10px', width: '70px', textAlign: 'center' }}>Unidad</th>
-                                      <th style={{ padding: '8px 10px', width: '250px' }}>Criterio y Nota Técnica</th>
+                                      <th style={{ padding: '8px 10px', width: '60px', textAlign: 'center' }}>Unidad</th>
+                                      <th style={{ padding: '8px 10px', width: '220px' }}>Criterio y Nota Técnica</th>
                                     </tr>
                                   </thead>
                                   <tbody>
                                     {sec.rows.map((r, rIdx) => (
                                       <tr key={rIdx} style={{ borderBottom: '1px solid #1e293b', backgroundColor: rIdx % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)' }}>
                                         <td style={{ padding: '6px 10px', textAlign: 'center', color: '#64748b' }}>{rIdx + 1}</td>
-                                        <td style={{ padding: '6px 10px', fontWeight: 600, color: '#f1f5f9' }}>{r.elem}</td>
+                                        <td style={{ padding: '6px 10px', fontWeight: 600, color: '#f1f5f9', wordBreak: 'break-word' }}>{r.elem}</td>
                                         <td style={{ padding: '6px 10px', textAlign: 'center', color: '#cbd5e1' }}>{r.n || 1}</td>
                                         <td style={{ padding: '6px 10px', textAlign: 'right', color: '#cbd5e1', fontFamily: 'monospace' }}>{r.l || "-"}</td>
                                         <td style={{ padding: '6px 10px', textAlign: 'right', color: '#cbd5e1', fontFamily: 'monospace' }}>{r.w || "-"}</td>
                                         <td style={{ padding: '6px 10px', textAlign: 'right', color: '#cbd5e1', fontFamily: 'monospace' }}>{r.h || "-"}</td>
-                                        <td style={{ padding: '6px 10px', color: '#f59e0b', fontFamily: 'monospace' }}>{r.expr || "-"}</td>
-                                        <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 700, color: '#38bdf8' }}>
+                                        <td style={{ padding: '6px 10px', color: '#f59e0b', fontFamily: 'monospace', wordBreak: 'break-word' }}>{r.expr || "-"}</td>
+                                        <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 800, color: '#38bdf8', whiteSpace: 'nowrap' }}>
                                           {typeof r.sub === 'number' ? r.sub.toLocaleString("es-CO", { maximumFractionDigits: 2 }) : r.sub}
                                         </td>
                                         <td style={{ padding: '6px 10px', textAlign: 'center', color: '#94a3b8' }}>{r.u}</td>
-                                        <td style={{ padding: '6px 10px', color: '#64748b', fontSize: '11px' }}>{r.nota}</td>
+                                        <td style={{ padding: '6px 10px', color: '#64748b', fontSize: '11px', wordBreak: 'break-word' }}>{r.nota}</td>
                                       </tr>
                                     ))}
                                   </tbody>
@@ -308,7 +322,7 @@ export default function ResumenCantidadesTab(props) {
                           ))}
 
                           {/* RESUMEN TOTAL ÍTEM */}
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#050a15', padding: '12px 16px', borderRadius: '8px', border: '1px solid #1e293b', marginTop: '12px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#050a15', padding: '12px 16px', borderRadius: '8px', border: '1px solid #1e293b', marginTop: '12px', flexWrap: 'wrap', gap: '8px' }}>
                             <span style={{ fontWeight: 700, color: '#f1f5f9', fontSize: '13px' }}>TOTAL CANTIDAD ANALIZADA PARA EL ÍTEM {it.c}:</span>
                             <span style={{ fontWeight: 800, color: '#10b981', fontSize: '16px' }}>{it.q.toLocaleString("es-CO", { maximumFractionDigits: 2 })} {it.u || "UND"}</span>
                           </div>

@@ -2,6 +2,7 @@ import React, {useState, useEffect, useRef} from 'react';
 import {K, SepRow, TH} from '../ui';
 import * as XLSX from 'xlsx';
 import {IDF, PIPES, PIPES_DB, MATERIALS} from '../constants';
+import {formatDiam} from '../engine';
 import {calcCantSumidero, agruparTuberias} from '../calcHelpers';
 import { exportCalculos } from '../exportCalculos';
 
@@ -232,8 +233,8 @@ export default function CalcTab(props){
     </div>:null}
         {(sub==="hid" || props.isExport)?<div className={"c" + (props.isExport?" print-page-break":"")}><div className="ct">Hidraulica <span style={{marginLeft:15, fontSize:12, background:'#003B73', color:'white', padding:'2px 8px', borderRadius:10}}>Estación de Cálculo: {P.estacion||"BUC"}</span></div><div style={{overflowX:"auto",maxHeight:"60vh",overflowY:"auto"}}><table><thead><tr>
       <TH>#</TH><TH>DE</TH><TH>A</TH><TH className="gh">Mat</TH><TH style={{fontSize:10,color:"#7088A8"}}>Cat</TH><TH className="gh">Diam</TH><TH>Di</TH>
-      {/* >>> ADICIÓN v36.2: columna D.Prop <<< */}
-      <TH style={{background:"#2D5A1E",color:"#8FD67A",fontSize:11}}>D.Prop</TH>
+      {/* >>> ADICIÓN v36.2: columna D.Prop llamativa <<< */}
+      <TH style={{background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', color: '#000000', fontSize: '12px', fontWeight: '900', padding: '6px 10px', borderRadius: '6px', boxShadow: '0 0 12px rgba(245, 158, 11, 0.6)', border: '1px solid #fcd34d', letterSpacing: '0.05em'}}>★ D.Prop</TH>
       {/* >>> FIN ADICIÓN v36.2 <<< */}
       <TH className="gh">L(m)</TH><TH className="gh">P(%)</TH><TH>Qsan</TH><TH>Qplu</TH><TH>Qd</TH><TH>n</TH><TH style={{color:P.formulaQo==="M"?"#475569":""}}>Qo(DW)</TH><TH style={{color:P.formulaQo==="M"?"":"#475569"}}>Qo(M)</TH><TH>Q/Qo%</TH><TH>Y/Do%</TH><TH>V/Vo</TH><TH>Y(mm)</TH><TH>V</TH><TH>Ft</TH><TH>Fr</TH><TH title="Diámetro de Boquilla (mm) para reducir Hw en diseño">Boq(mm)</TH><TH title="Longitud de Boquilla en metros (6 * Diámetro)">L.Boq</TH><TH>Hw</TH><TH>vV</TH><TH>vFt</TH><TH>vQ</TH>
     </tr></thead><tbody>
@@ -241,12 +242,13 @@ export default function CalcTab(props){
       var h=isSel(r.de, r.a);
       if(filterSel && (!h || r.sep)) return null;
       if(r.sep)return <SepRow key={r.id} cols={26}/>;
-      /* >>> ADICIÓN v36.2: lógica color D.Prop <<< */
+      /* >>> ADICIÓN v36.2: lógica color D.Prop llamativo <<< */
       var tItem = T[r.id - 1] || {};
       var currentNom = tItem.diametroCom || r.nom;
       var propIsDiff=r.nomProp&&r.nomProp!==currentNom&&r.reponer==="S";
-      var propColor=propIsDiff?"#D4A843":"#28A745";
-      var propBg=propIsDiff?"rgba(212,168,67,.15)":"transparent";
+      var propColor=propIsDiff?"#fef08a":"#34d399";
+      var propBg=propIsDiff?"rgba(245, 158, 11, 0.35)":"rgba(16, 185, 129, 0.15)";
+      var propBorder=propIsDiff?"1px solid #f59e0b":"1px solid rgba(16, 185, 129, 0.4)";
       /* >>> FIN ADICIÓN v36.2 <<< */
       var h_pozo_DE = parseFloat(tItem.cotaRasanteDE || r.crDE) - parseFloat(tItem.cotaFondoDE != null && tItem.cotaFondoDE !== "" ? tItem.cotaFondoDE : (tItem.cotaFondo != null && tItem.cotaFondo !== "" ? tItem.cotaFondo : (r.cfDE || 0)));
       var isHNivel = !isNaN(h_pozo_DE) && (parseFloat(r.Hw) > h_pozo_DE);
@@ -256,7 +258,7 @@ export default function CalcTab(props){
       var roughness = tItem.nManning || r.n;
       var displayedMaterial = tItem.material;
       if (!displayedMaterial || (displayedMaterial === "PVC" && roughness >= 0.013)) {
-        displayedMaterial = roughness >= 0.013 ? "GRES" : "PVC";
+        displayedMaterial = roughness >= 0.013 ? "CONCRETO" : "PVC";
       }
       var pipeOptions = PIPES_DB[displayedMaterial] || PIPES;
 
@@ -266,10 +268,10 @@ export default function CalcTab(props){
           <select className="es" value={displayedMaterial} onChange={function(e){var v=e.target.value; updSmart(r.id,"material",v); updSmart(r.id,"nManning",v.includes("PVC")?0.01:v.includes("GRES")?0.014:v.includes("PEAD")?0.01:0.013);}}>{MATERIALS.map(function(m){return <option key={m}>{m}</option>;})}</select>
         </td>
         <td style={{fontSize:10,color:"#7088A8"}}>{r.matOrig||r.mat}</td>
-        <td><select className="es" value={tItem.diametroCom||"315 mm"} onChange={function(e){updSmart(r.id,"diametroCom",e.target.value);}}>{pipeOptions.map(function(p){return <option key={p.id||p.nom} value={p.nom}>{p.nom}</option>;})}</select></td>
+        <td><select className="es" value={formatDiam(tItem.diametroCom||"315 mm", displayedMaterial)} onChange={function(e){updSmart(r.id,"diametroCom",e.target.value);}}>{pipeOptions.map(function(p){return <option key={p.id||p.nom} value={p.nom}>{p.nom}</option>;})}</select></td>
         <td title={r.nom}>{r.D}</td>
-        {/* >>> ADICIÓN v36.2: celda D.Prop con click para aplicar individual <<< */}
-        <td style={{background:propBg,color:propColor,fontWeight:600,fontSize:12,cursor:propIsDiff?"pointer":"default",textAlign:"center"}} title={propIsDiff?"Click para aplicar "+r.nomProp:"Cumple con "+currentNom} onClick={function(){if(propIsDiff)handleApplySingle(ri,r.nomProp);}}>{r.nomProp||"-"}{propIsDiff?" ↑":""}</td>
+        {/* >>> ADICIÓN v36.2: celda D.Prop con click para aplicar individual y estilo llamativo <<< */}
+        <td style={{background:propBg,color:propColor,border:propBorder,fontWeight:900,fontSize:13,cursor:propIsDiff?"pointer":"default",textAlign:"center",borderRadius:6,padding:"4px 6px",boxShadow:propIsDiff?"0 0 10px rgba(245,158,11,0.4)":"none"}} title={propIsDiff?"Click para aplicar "+r.nomProp:"Cumple con "+currentNom} onClick={function(){if(propIsDiff)handleApplySingle(ri,r.nomProp);}}>{formatDiam(r.nomProp||"-", displayedMaterial)}{propIsDiff?" ↑":""}</td>
         {/* >>> FIN ADICIÓN v36.2 <<< */}
         <td><input className="ec" type="text" value={tItem.longitud||""} onChange={function(e){updSmart(r.id,"longitud",e.target.value.replace(",","."));}} style={{width:60,fontSize:12,padding:3}}/></td>
         <td><input className="ec" type="text" value={tItem.pendiente||""} onChange={function(e){updSmart(r.id,"pendiente",e.target.value.replace(",","."));}} style={{width:55,fontSize:12,padding:3}}/></td>

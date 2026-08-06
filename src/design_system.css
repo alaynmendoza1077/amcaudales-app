@@ -17,34 +17,34 @@ select,
 textarea,
 .ec {
   background: rgba(15, 23, 42, 0.9) !important;
-  color: #7dd3fc !important; /* Ciano neón suave / Soft neon cyan */
+  color: #34d399 !important; /* Soft neon green */
   border: 1px solid rgba(59, 130, 246, 0.4) !important;
   border-radius: 6px !important;
   padding: 6px 10px !important;
   font-size: 13px !important;
-  font-weight: 600 !important;
+  font-weight: 700 !important;
   box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.4) !important;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
 
 /* Hover & Focus state for inputs */
 input:hover, select:hover, textarea:hover, .ec:hover {
-  border-color: rgba(56, 189, 248, 0.7) !important;
-  box-shadow: 0 0 8px rgba(56, 189, 248, 0.2) !important;
+  border-color: rgba(52, 211, 153, 0.7) !important;
+  box-shadow: 0 0 8px rgba(52, 211, 153, 0.2) !important;
 }
 
 input:focus, select:focus, textarea:focus, .ec:focus {
   outline: none !important;
-  border-color: #38bdf8 !important;
+  border-color: #34d399 !important;
   background: rgba(15, 23, 42, 0.98) !important;
-  color: #a5f3fc !important;
-  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.25), inset 0 1px 3px rgba(0, 0, 0, 0.4) !important;
+  color: #6ee7b7 !important;
+  box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.25), inset 0 1px 3px rgba(0, 0, 0, 0.4) !important;
 }
 
 /* Styling dropdown options */
 select option {
   background-color: #0f172a !important;
-  color: #7dd3fc !important;
+  color: #34d399 !important;
   padding: 8px !important;
 }
 
@@ -186,38 +186,55 @@ table {
 
 table th {
   color: #38bdf8 !important; /* Soft neon cyan header */
-  font-weight: 700 !important;
+  font-weight: 800 !important;
   font-size: 11.5px !important;
   background: rgba(15, 23, 42, 0.95) !important;
   padding: 8px 10px !important;
-  border-bottom: 1px solid rgba(59, 130, 246, 0.3) !important;
+  border-bottom: 1px solid rgba(59, 130, 246, 0.35) !important;
   letter-spacing: 0.02em !important;
 }
 
 table td {
-  color: #f1f5f9 !important; /* High contrast crisp soft-white */
+  color: #ffffff !important; /* Crisp 100% white text */
   font-size: 11.5px !important;
   font-weight: 600 !important;
   padding: 6px 10px !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+input.ec, select.es, textarea.ec, .ec {
+  background: rgba(15, 23, 42, 0.95) !important;
+  color: #fcd34d !important; /* Soft warm pastel gold - gentle contrast */
+  border: 1px solid rgba(59, 130, 246, 0.4) !important;
+  border-radius: 4px !important;
+  font-weight: 600 !important;
+  font-size: 11px !important;
+  padding: 2px 5px !important;
+}
+
+input.ec:focus, select.es:focus, textarea.ec:focus {
+  border-color: #38bdf8 !important;
+  box-shadow: 0 0 6px rgba(56, 189, 248, 0.35) !important;
+  color: #ffffff !important;
+  outline: none !important;
 }
 
 table tr:nth-child(even) td {
-  background: rgba(15, 23, 42, 0.45) !important;
+  background: rgba(15, 23, 42, 0.6) !important;
 }
 
 table tr:nth-child(odd) td {
-  background: rgba(30, 41, 59, 0.25) !important;
+  background: rgba(30, 41, 59, 0.35) !important;
 }
 
 table tr:hover td {
-  background: rgba(59, 130, 246, 0.15) !important;
+  background: rgba(59, 130, 246, 0.2) !important;
   color: #ffffff !important;
 }
 
 /* Secondary muted text in table cells */
 table td span, table th span {
-  color: #94a3b8 !important;
+  color: #cbd5e1 !important;
 }
 
 /* 6. Universal High Contrast Titles & Component Headers */
@@ -227,11 +244,11 @@ h1, h2, h3, h4, h5, h6, .dpt {
 }
 
 .ct {
-  background: rgba(15, 23, 42, 0.92) !important;
+  background: rgba(15, 23, 42, 0.95) !important;
   border-bottom: 2px solid rgba(56, 189, 248, 0.4) !important;
   padding: 10px 14px !important;
   border-radius: 8px 8px 0 0 !important;
-  color: #38bdf8 !important;
+  color: #fbbf24 !important; /* Soft Gold Header title */
   font-size: 14.5px !important;
   font-weight: 800 !important;
   letter-spacing: -0.01em !important;
@@ -243,6 +260,64 @@ h1, h2, h3, h4, h5, h6, .dpt {
 }
 
 label, fieldset legend {
-  color: #e2e8f0 !important;
+  color: #f1f5f9 !important;
   font-weight: 600 !important;
+}
+
+/* 7. Visor Espacial - High Contrast Leaflet Layer Control */
+.leaflet-control-layers {
+  background: rgba(15, 23, 42, 0.96) !important;
+  border: 1px solid rgba(59, 130, 246, 0.45) !important;
+  border-radius: 10px !important;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.6) !important;
+  padding: 10px 14px !important;
+  backdrop-filter: blur(12px) !important;
+}
+
+.leaflet-control-layers label,
+.leaflet-control-layers label span,
+.leaflet-control-layers-base label,
+.leaflet-control-layers-overlays label,
+.leaflet-control-layers-overlays span {
+  color: #f8fafc !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+}
+
+.leaflet-control-layers label:hover span {
+  color: #38bdf8 !important;
+}
+
+.leaflet-control-layers input[type="radio"],
+.leaflet-control-layers input[type="checkbox"] {
+  accent-color: #3b82f6 !important;
+  margin-right: 6px !important;
+}
+
+/* Light mode overrides for Leaflet Control Layers */
+.light-mode .leaflet-control-layers {
+  background: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.15) !important;
+}
+
+.light-mode .leaflet-control-layers label,
+.light-mode .leaflet-control-layers label span,
+.light-mode .leaflet-control-layers-base label,
+.light-mode .leaflet-control-layers-overlays label,
+.light-mode .leaflet-control-layers-overlays span {
+  color: #0f172a !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+}
+
+/* 8. Missing Data Input Alarm Highlight */
+.input-missing-alert,
+input.input-missing-alert,
+select.input-missing-alert {
+  border: 2px solid #ef4444 !important;
+  background: rgba(239, 68, 68, 0.22) !important;
+  color: #fca5a5 !important;
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.5) !important;
+  font-weight: 800 !important;
 }

@@ -57,10 +57,12 @@ function ParTab(props){
 
   useEffect(() => {
     var tramos = (R && R.length > 0) ? R : (props.T || []);
+    let totalAreaHa = 0;
     if (tramos && tramos.length > 0) {
       var maxRas = 0;
       tramos.forEach(function(r) {
         if (!r || r.sep) return;
+        totalAreaHa += parseFloat(r.areaParcial || r.area || 0);
         var crDE = parseFloat(r.cotaRasante !== undefined ? r.cotaRasante : (r.crDE || r.cotaRasanteDE || r.cota_terreno || 0));
         var crA = parseFloat(r.cotaRasanteA !== undefined ? r.cotaRasanteA : (r.crA || r.cota_terreno || 0));
         if (!isNaN(crDE) && crDE > maxRas) maxRas = crDE;
@@ -69,13 +71,16 @@ function ParTab(props){
       if (maxRas > 0) {
         var altCalc = Math.round(maxRas);
         var consCalc = getConsumoFromAltura(altCalc);
+        const den = parseFloat(P.densidad || 256);
+        const pobIndCalc = totalAreaHa > 0 ? Math.round(totalAreaHa * den) : (P.pobIndirecta || 0);
+
         sP(function(prev) {
-          if (prev.alturaSNM === altCalc && prev.consumo === consCalc) return prev;
-          return Object.assign({}, prev, { alturaSNM: altCalc, consumo: consCalc });
+          if (prev.alturaSNM === altCalc && prev.consumo === consCalc && prev.pobIndirecta === pobIndCalc) return prev;
+          return Object.assign({}, prev, { alturaSNM: altCalc, consumo: consCalc, pobIndirecta: pobIndCalc });
         });
       }
     }
-  }, [R, props.T, sP]);
+  }, [R, props.T, P.densidad, sP]);
 
   var uGroup=function(keys,k,v){sP(function(p){
     var n=Object.assign({},p);var diff=v-(p[k]||0);n[k]=v;

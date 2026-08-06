@@ -38,7 +38,15 @@ export function recalcPbItems(data) {
   var t025 = dN.reduce((s, r) => s + (r.v025 || 0), 0);
   var t2550 = dN.reduce((s, r) => s + (r.v2550 || 0), 0);
   var t50p = dN.reduce((s, r) => s + (r.v50p || 0), 0);
-  var tArena = dN.reduce((s, r) => s + (r.rArena || 0), 0);
+  var tArena = dN.reduce((s, t) => {
+    const L = parseFloat(t.Le || t.L || t.longitud || 0);
+    const dNom = (parseFloat(t.diametroCom || t.diametro || 200) / 1000);
+    const W = dNom + 0.60;
+    const hTotalCimentacion = 0.20 + dNom + 0.20;
+    const areaTubo = Math.PI * Math.pow(dNom / 2, 2);
+    const areaNetaArena = (W * hTotalCimentacion) - areaTubo;
+    return s + Math.max(0, areaNetaArena * L);
+  }, 0);
   var tComun = dN.reduce((s, r) => s + (r.rComun || 0), 0);
   var sumExcLat = 0, sumExcTrans = 0, sumRellLat = 0, sumRellTrans = 0, sumConcLat = 0, sumConcTrans = 0;
   var sumRotLat = 0, sumRotTrans = 0, sumA37Lat = 0, sumA37Trans = 0, sumPdrLat = 0, sumPdrTrans = 0;
@@ -99,7 +107,7 @@ export function recalcPbItems(data) {
     "1.01.03.03": Math.ceil(lt / 100), "1.01.03.05": nTramRep, "1.01.03.06": lt,
     "1.02.01.06": lt,
     "1.02.02.01": (P.camp1 || 0) * (P.frentes || 1) * (P.tiempoObra || 1), "1.02.02.02": (P.camp2 || 0) * (P.frentes || 1) * (P.tiempoObra || 1), "1.02.02.03": (P.camp3 || 0) * (P.frentes || 1) * (P.tiempoObra || 1), "1.02.02.04": (P.camp4 || 0) * (P.frentes || 1) * (P.tiempoObra || 1),
-    "1.02.03.08": (P.tiempoObra || 2),
+    "1.02.03.08": (P.tiempoObra !== undefined && P.tiempoObra > 0 ? P.tiempoObra : Math.max(1, Math.ceil(lt / 90))),
     "1.03.01.01": (() => { var r = 0; dN.forEach(t => { if ((t.tipoVia === "FX" || t.tipoVia === "TL") && (P.espesorPav || 0.15) < 0.10) r += t.rotP || 0; }); return r; })(),
     "1.03.01.02": (() => { var r = 0; dN.forEach(t => { if (t.tipoVia === "FX" || t.tipoVia === "TL" || !t.tipoVia) { var esp = P.espesorPav || 0.15; if (esp >= 0.10 && esp <= 0.20) r += t.rotP || 0; } }); return r + sumRotTot; })(),
     "1.03.01.03": (() => { var r = 0; dN.forEach(t => { if ((t.tipoVia === "FX" || t.tipoVia === "TL") && (P.espesorPav || 0.15) > 0.20) r += t.rotP || 0; }); return r; })(),
@@ -132,7 +140,8 @@ export function recalcPbItems(data) {
     "4.06.01.10": nAc * (largoAco - (P.anchoAnden || 1)) * .56 * (1 - ratioRepTodo) * (P.inclAcom_4060110 !== false ? 1 : 0),
     "4.06.01.11": nAc * (P.anchoAnden || 1) * .56 * (P.inclAcom_4060111 !== false ? 1 : 0),
     "4.07.01.01": ep2.tJu + sumPdrTot,
-    "4.08.01.01": (() => { var r = 0; dN.forEach(t => { if (t.tipoVia === "FX" || !t.tipoVia) r += (t.L || 0) * (t.anchoVia || P.anchoVia || 6); }); return r + sumRotTot; })(),
+    "4.08.01.01": (() => { var r = 0; dN.forEach(t => { if (t.tipoVia === "FX" || t.tipoVia === "TL" || !t.tipoVia) { var esp = P.espesorPav || 0.15; if (esp >= 0.10 && esp <= 0.20) r += t.rotP || 0; } }); return r + sumRotTot; })(),
+    "4.08.01.02": (() => { var r = 0; dN.forEach(t => { if (t.tipoVia === "FX" || t.tipoVia === "TL" || !t.tipoVia) r += (t.Le || t.L || 0) * (t.anchoVia || P.anchoVia || 6); }); return r; })(),
     "4.08.02.02": uSubBase, "4.08.02.03": uBase, "4.08.03.01": (() => { var r = 0; dN.forEach(t => { if (t.tipoVia === "RG") r += (t.L || 0) * (t.anchoVia || P.anchoVia || 6); }); return r; })(),
     "4.08.03.02": (() => { var r = 0; dN.forEach(t => { if (t.tipoVia === "PP" || t.tipoVia === "AD") r += (t.L || 0) * (t.anchoVia || P.anchoVia || 6); }); return r; })(),
     "4.09.01.02": uSardinel, "4.09.01.01": (() => { var r = 0; dN.forEach(t => { if (t.tipoVia === "AN") r += (t.L || 0) * (t.anchoVia || P.anchoVia || 6); }); return r; })(),

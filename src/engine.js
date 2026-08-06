@@ -419,17 +419,20 @@ function cAlternatingBlocks(est, Tr, duracionMin, dtMin, P) {
 }
 
 function formatDiam(rawStr, mat) {
-    if (!rawStr) return mat === "GRES" ? '8"' : '200 mm';
+    let mUpper = String(mat || "").toUpperCase();
+    let isInchMat = mUpper === "GRES" || mUpper === "CONCRETO";
+    if (!rawStr) return isInchMat ? '8"' : '200 mm';
     let str = String(rawStr);
     let dr = str.replace(/[^0-9.]/g, "");
     let dm = parseFloat(dr);
-    if (isNaN(dm)) return mat === "GRES" ? '8"' : '200 mm';
+    if (isNaN(dm)) return isInchMat ? '8"' : '200 mm';
     
     let isI = str.includes('"');
     if (isI || dm < 20) dm = Math.round(dm * 25.4);
     if (dm < 100) dm = 200; // minimum
     
-    let db = PIPES_DB[mat] || PIPES_DB["PVC"];
+    let dbKey = isInchMat ? (mUpper === "CONCRETO" ? "CONCRETO" : "GRES") : (mUpper === "PEAD" ? "PEAD" : "PVC");
+    let db = PIPES_DB[dbKey] || PIPES_DB["PVC"];
     let closestPipe = db[0];
     let minDiff = 99999;
     
@@ -448,7 +451,7 @@ function formatDiam(rawStr, mat) {
             closestPipe = p;
         }
     }
-    return closestPipe.nom;
+    return closestPipe ? closestPipe.nom : (isInchMat ? '8"' : '200 mm');
 }
 
 export {cIDF, gTr, gDi, gDe, gYDo, gVVo, gDhD, QoM, QoDW, autoDiam, getMinPipeIdx, runCalc, cAlternatingBlocks, formatDiam};

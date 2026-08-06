@@ -28,6 +28,12 @@ var PIPES_DB = {
     {nom:"44\"",Di:1.000,De:1.220}, {nom:"48\"",Di:1.200,De:1.440}, {nom:"52\"",Di:1.300,De:1.560},
     {nom:"56\"",Di:1.400,De:1.680}
   ],
+  "CONCRETO": [
+    {nom:"6\"",Di:0.150,De:0.200}, {nom:"8\"",Di:0.203,De:0.250}, {nom:"10\"",Di:0.254,De:0.310},
+    {nom:"12\"",Di:0.305,De:0.370}, {nom:"15\"",Di:0.381,De:0.450}, {nom:"18\"",Di:0.457,De:0.540},
+    {nom:"24\"",Di:0.610,De:0.720}, {nom:"30\"",Di:0.762,De:0.900}, {nom:"36\"",Di:0.914,De:1.080},
+    {nom:"42\"",Di:1.067,De:1.240}, {nom:"48\"",Di:1.219,De:1.420}, {nom:"60\"",Di:1.524,De:1.750}
+  ],
   "PEAD": [
     {nom:"200 mm",Di:0.184,De:0.200}, {nom:"250 mm",Di:0.229,De:0.249}, {nom:"300 mm",Di:0.279,De:0.308},
     {nom:"375 mm",Di:0.351,De:0.382}, {nom:"450 mm",Di:0.418,De:0.460}, {nom:"600 mm",Di:0.563,De:0.614},
@@ -77,7 +83,7 @@ var DP={
   distBotadero:8,tiempoObra:2,anchoVia:6,tipoViaGral:"FX",espesorPav:0.15,
   nAcom06:0,nAcom610:0,nAcom10:0,diamAcom:200,diamSumid:200,anchoAnden:1,largoAco:6,
   nSumLat:2,nSumTrans:0,tipoSumLat:"SL-200",longSumLat:6,
-  porcAdmin:.29,porcImprevistos:.01,porcUtilidad:.05,porcIVA:.19,
+  porcAdmin:.24,porcImprevistos:.01,porcUtilidad:.05,porcIVA:.19,
   vallas1:0,vallas2:0,vallas3:0,vallas4:1,camp1:0,camp2:0,camp3:0,camp4:1,
   coef_aR:0.8,coef_aC:0.9,coef_aI:0.6,coef_aIn:0.6,coef_aV:0.9,coef_aRe:0.3,
   /* >>> ADICIÓN v36.7: frentes de obra, estaciones acarreo, % acarreo <<< */

@@ -122,25 +122,46 @@ function SwmmTab(props) {
       nodeList.forEach(function(n){if(outfallSet[n])return;
         var pz=pozosData.find(function(p){return String(p.IdNodo)===String(n)||String(p.IDfinal)===String(n);})||pozosData.find(function(p){return String(p.Nombre||"")===String(n);});
         var elev=0;var maxD=0;var ctapa=0;
-        if(pz){elev=+(pz.Cfondo||0);ctapa=+(pz.Ctapa||0);maxD=ctapa-elev;}
-        else{var sal=dR.filter(function(r){return(r.deNum||r.de)===n;});var ent2=dR.filter(function(r){return(r.aNum||r.a)===n;});
-          if(sal.length>0){elev=sal[0].cfDE||0;ctapa=sal[0].crDE||0;maxD=ctapa-elev;}
-          else if(ent2.length>0){elev=ent2[0].cfA||0;ctapa=ent2[0].crA||0;maxD=ctapa-elev;}}
-        if(maxD<0)maxD=0;
-        L.push(pad(formatId(nodeMap[n]||n),18)+pad(elev.toFixed(2),14)+pad(maxD.toFixed(2),14)+pad("0",14)+pad(ctapa.toFixed(3),14)+"0");});
+        
+        if(pz){
+          elev = parseFloat(pz.Cfondo !== undefined && pz.Cfondo !== 0 ? pz.Cfondo : (pz.CotaFondo !== undefined && pz.CotaFondo !== 0 ? pz.CotaFondo : (pz.cota_fondo !== undefined && pz.cota_fondo !== 0 ? pz.cota_fondo : (pz.cotaFondo !== undefined && pz.cotaFondo !== 0 ? pz.cotaFondo : (pz.cfDE || 0)))));
+          ctapa = parseFloat(pz.Ctapa !== undefined && pz.Ctapa !== 0 ? pz.Ctapa : (pz.CotaTapa !== undefined && pz.CotaTapa !== 0 ? pz.CotaTapa : (pz.cota_tapa !== undefined && pz.cota_tapa !== 0 ? pz.cota_tapa : (pz.cotaRasante || pz.cota_terreno || 0))));
+        }
+        
+        var sal=dR.filter(function(r){return String(r.deNum||r.de).trim()===String(n).trim();});
+        var ent2=dR.filter(function(r){return String(r.aNum||r.a).trim()===String(n).trim();});
+
+        if(elev===0 && sal.length>0) elev = parseFloat(sal[0].cfDE || sal[0].cotaFondoDE || sal[0].cotaFondo || sal[0].cota_fondo || 0);
+        if(elev===0 && ent2.length>0) elev = parseFloat(ent2[0].cfA || ent2[0].cotaFondoA || ent2[0].cotaFondo || ent2[0].cota_fondo || 0);
+        
+        if(ctapa===0 && sal.length>0) ctapa = parseFloat(sal[0].crDE || sal[0].cotaRasante || sal[0].cotaRasanteDE || sal[0].cr || 0);
+        if(ctapa===0 && ent2.length>0) ctapa = parseFloat(ent2[0].crA || ent2[0].cotaRasanteA || ent2[0].cotaRasanteA_from_datos || ent2[0].cr || 0);
+
+        if(ctapa>0 && elev===0) elev = ctapa - 2.0;
+        if(elev>0 && ctapa===0) ctapa = elev + 2.0;
+
+        maxD = (ctapa > elev) ? (ctapa - elev) : 2.0;
+        if(maxD <= 0) maxD = 2.0;
+
+        L.push(pad(formatId(nodeMap[n]||n),18)+pad(elev.toFixed(3),14)+pad(maxD.toFixed(3),14)+pad("0",14)+pad(ctapa.toFixed(3),14)+"0");});
       L.push("");
       L.push("[OUTFALLS]");L.push(";; Name Elev Type");
       selectedOutfalls.forEach(function(outNode){
-        var outPz=pozosData.find(function(p){return String(p.IdNodo||"")===outNode;});
-        var outElev=outPz?(outPz.Cfondo||0):0;
-        if(outElev===0){var oe=dR.filter(function(r){return(r.aNum||r.a)===outNode;});if(oe.length>0)outElev=oe[0].cfA||0;}
-        L.push(pad(formatId(nodeMap[outNode]||outNode),18)+pad(outElev.toFixed(2),14)+"FREE          NO");
+        var outPz=pozosData.find(function(p){return String(p.IdNodo||"")===String(outNode)||String(p.Nombre||"")===String(outNode);});
+        var outElev=outPz?parseFloat(outPz.Cfondo||outPz.CotaFondo||outPz.cota_fondo||outPz.cotaFondo||0):0;
+        if(outElev===0){
+          var oe=dR.filter(function(r){return String(r.aNum||r.a).trim()===String(outNode).trim();});
+          if(oe.length>0) outElev=parseFloat(oe[0].cfA||oe[0].cotaFondoA||oe[0].cotaFondo||0);
+        }
+        L.push(pad(formatId(nodeMap[outNode]||outNode),18)+pad(outElev.toFixed(3),14)+"FREE          NO");
       });
       L.push("");
       L.push("[CONDUITS]");
       dR.forEach(function(r,ri){var nde=r.deNum||r.de;var na=r.aNum||r.a;
         var linkId=ri+1;
-        L.push(pad(linkId,18)+pad(formatId(nodeMap[nde]||nde),18)+pad(formatId(nodeMap[na]||na),18)+pad(r.L,14)+pad((r.n||0.01).toFixed(3),14)+pad((r.cfDE||0).toFixed(3),14)+pad((r.cfA||0).toFixed(3),14)+pad("0",14)+"0");});
+        var cf1 = parseFloat(r.cfDE || r.cotaFondoDE || r.cotaFondo || 0);
+        var cf2 = parseFloat(r.cfA || r.cotaFondoA || r.cotaFondo || 0);
+        L.push(pad(linkId,18)+pad(formatId(nodeMap[nde]||nde),18)+pad(formatId(nodeMap[na]||na),18)+pad(Number(r.L||r.longitud||0).toFixed(2),14)+pad((r.n||0.01).toFixed(3),14)+pad(cf1.toFixed(3),14)+pad(cf2.toFixed(3),14)+pad("0",14)+"0");});
       L.push("");
       L.push("[XSECTIONS]");
       dR.forEach(function(r,ri){var linkId=ri+1;
@@ -190,18 +211,37 @@ function SwmmTab(props) {
       nodeList.forEach(function(n){var nm=nodes[n]?nodes[n].name:n;
         L.push(pad("Node",18)+pad(formatId(nodeMap[n]||n),14)+nm);});
       L.push("");
+      
+      var formatCoordMeters = function(xVal, yVal) {
+        var x = parseFloat(xVal);
+        var y = parseFloat(yVal);
+        if (isNaN(x) || isNaN(y)) return null;
+        if (x >= -180 && x <= 180 && y >= -90 && y <= 90) {
+          try {
+            var proj = proj4("EPSG:4326", "EPSG:3116", [x, y]);
+            x = proj[0];
+            y = proj[1];
+          } catch(e){}
+        }
+        return { x: x, y: y, text: pad(x.toFixed(3), 14) + y.toFixed(3) };
+      };
+
       L.push("[MAP]");
-      var minX=999999999,minY=999999999,maxX=0,maxY=0;
-      if (raw && raw.COORDINATES) {
-         raw.COORDINATES.forEach(function(l){
-            var p = l.trim().split(/\s+/);
-            if (p.length>=3) { var cx=parseFloat(p[1]), cy=parseFloat(p[2]); if(!isNaN(cx)){minX=Math.min(minX,cx);maxX=Math.max(maxX,cx);minY=Math.min(minY,cy);maxY=Math.max(maxY,cy);} }
-         });
-      } else {
-         pozosData.forEach(function(p){if(p.CoordX){minX=Math.min(minX,p.CoordX);maxX=Math.max(maxX,p.CoordX);minY=Math.min(minY,p.CoordY);maxY=Math.max(maxY,p.CoordY);}});
-      }
-      if(maxX>0)L.push("DIMENSIONS        "+minX.toFixed(3)+"   "+minY.toFixed(3)+"   "+maxX.toFixed(3)+"   "+maxY.toFixed(3));
-      else L.push("DIMENSIONS        0 0 10000 10000");
+      var minX=999999999,minY=999999999,maxX=-999999999,maxY=-999999999;
+      nodeList.forEach(function(n){
+        var pz2=pozosData.find(function(p){return String(p.IdNodo)===String(n)||String(p.IDfinal)===String(n);})||pozosData.find(function(p){return String(p.Nombre||"")===String(n);});
+        var xRaw = pz2 ? (pz2.CoordX !== undefined ? pz2.CoordX : (pz2.x !== undefined ? pz2.x : pz2.X)) : null;
+        var yRaw = pz2 ? (pz2.CoordY !== undefined ? pz2.CoordY : (pz2.y !== undefined ? pz2.y : pz2.Y)) : null;
+        if (xRaw != null && yRaw != null) {
+          var res = formatCoordMeters(xRaw, yRaw);
+          if (res) {
+            minX = Math.min(minX, res.x); maxX = Math.max(maxX, res.x);
+            minY = Math.min(minY, res.y); maxY = Math.max(maxY, res.y);
+          }
+        }
+      });
+      if(maxX > -999999999 && minX < 999999999) L.push("DIMENSIONS        "+(minX - 50).toFixed(3)+"   "+(minY - 50).toFixed(3)+"   "+(maxX + 50).toFixed(3)+"   "+(maxY + 50).toFixed(3));
+      else L.push("DIMENSIONS        1000000 1000000 1200000 1300000");
       L.push("Units             Metros");L.push("");
       
       L.push("[COORDINATES]");
@@ -211,9 +251,12 @@ function SwmmTab(props) {
       if (raw && raw.COORDINATES) {
          raw.COORDINATES.forEach(function(l){
             var p = l.trim().split(/\s+/);
-            if (p.length>0 && validNodeIDs[p[0]]) {
-                L.push(l);
-                rawCoords[p[0]] = true;
+            if (p.length>=3 && validNodeIDs[p[0]]) {
+                var res = formatCoordMeters(p[1], p[2]);
+                if (res) {
+                  L.push(pad(p[0], 18) + res.text);
+                  rawCoords[p[0]] = true;
+                }
             }
          });
       }
@@ -221,8 +264,16 @@ function SwmmTab(props) {
         var shortId = formatId(nodeMap[n]||n);
         if(rawCoords[shortId]) return;
         var pz2=pozosData.find(function(p){return String(p.IdNodo)===String(n)||String(p.IDfinal)===String(n);})||pozosData.find(function(p){return String(p.Nombre||"")===String(n);});
-        if(pz2&&pz2.CoordX)L.push(pad(shortId,18)+pad(pz2.CoordX.toFixed(3),14)+pz2.CoordY.toFixed(3));
-        else{var idx=nodeList.indexOf(n);L.push(pad(shortId,18)+pad((1000+idx*100).toFixed(3),14)+(5000).toFixed(3));}});
+        var xRaw = pz2 ? (pz2.CoordX !== undefined ? pz2.CoordX : (pz2.x !== undefined ? pz2.x : pz2.X)) : null;
+        var yRaw = pz2 ? (pz2.CoordY !== undefined ? pz2.CoordY : (pz2.y !== undefined ? pz2.y : pz2.Y)) : null;
+        if (xRaw != null && yRaw != null) {
+          var res = formatCoordMeters(xRaw, yRaw);
+          if (res) L.push(pad(shortId, 18) + res.text);
+        } else {
+          var idx=nodeList.indexOf(n);
+          L.push(pad(shortId,18)+pad((1105000+idx*50).toFixed(3),14)+(1281000).toFixed(3));
+        }
+      });
       L.push("");
       
       L.push("[VERTICES]");
@@ -273,15 +324,22 @@ function SwmmTab(props) {
                     if (bestSn) {
                         var pts = subs[bestSn];
                         if (pts.length > 2) {
-                            var lastPt = null;
+                            var firstPt = null;
+                            var countClosed = 0;
                             pts.forEach(function(pt) {
-                                if (lastPt && Math.abs(lastPt.CoordX - pt.CoordX) < 0.000001 && Math.abs(lastPt.CoordY - pt.CoordY) < 0.000001) return;
                                 var x = pt.X !== undefined ? pt.X : pt.CoordX;
                                 var y = pt.Y !== undefined ? pt.Y : pt.CoordY;
-                                if (x !== undefined && y !== undefined && !isNaN(x) && !isNaN(y)) {
+                                if (x === undefined || y === undefined || isNaN(x) || isNaN(y)) return;
+                                
+                                if (!firstPt) {
+                                    firstPt = { x: x, y: y };
                                     L.push(pad(subName, 18) + pad(Number(x).toFixed(6), 14) + Number(y).toFixed(6));
-                                    lastPt = { CoordX: x, CoordY: y };
-                                    hasPoly = true;
+                                } else {
+                                    if (countClosed > 0) return; // Evitar anillos secundarios que cortan el polígono en SWMM
+                                    if (Math.abs(firstPt.x - x) < 0.000001 && Math.abs(firstPt.y - y) < 0.000001) {
+                                        countClosed++;
+                                    }
+                                    L.push(pad(subName, 18) + pad(Number(x).toFixed(6), 14) + Number(y).toFixed(6));
                                 }
                             });
                         }
@@ -290,38 +348,52 @@ function SwmmTab(props) {
           }
           
           if (!hasPoly && props.autoAreasPoly && props.autoAreasPoly.length > 0) {
-              var poly = props.autoAreasPoly.find(p => p.properties && (
-                  String(p.properties.id||"").trim() === String(tId).trim() ||
-                  String(p.properties.id||"").trim() === String(r.de).trim() ||
-                  String(p.properties.tramoId||"").trim() === String(tId).trim() || 
-                  String(p.properties.DE||"").trim() === String(tId).trim() ||
-                  String(p.properties.de||"").trim() === String(r.de).trim() ||
-                  String(p.properties.de||"").trim() === String(tId).trim() ||
-                  String(p.properties.IDNODO||"").trim() === String(r.de).trim() ||
-                  String(p.properties.Nombre||"").trim() === String(r.de).trim() ||
-                  String(p.properties.IDNODO||"").trim() === String(r.a).trim() ||
-                  String(p.properties.Nombre||"").trim() === String(r.a).trim() ||
-                  String(p.properties.label||"").trim() === ("Tramo " + String(tId).trim()) ||
-                  String(p.properties.label||"").trim() === ("Tramo " + String(r.de).trim())
+              var poly = props.autoAreasPoly.find(p => p.properties && p.properties.isCompleta && (
+                  String(p.properties.de||"").trim().toLowerCase() === String(r.de).trim().toLowerCase() ||
+                  String(p.properties.tramoId||"").trim().toLowerCase() === String(tId).trim().toLowerCase() ||
+                  String(p.properties.id||"").trim().toLowerCase() === String(tId).trim().toLowerCase()
+              )) || props.autoAreasPoly.find(p => p.properties && (
+                  String(p.properties.id||"").trim().toLowerCase() === String(tId).trim().toLowerCase() ||
+                  String(p.properties.id||"").trim().toLowerCase() === String(r.de).trim().toLowerCase() ||
+                  String(p.properties.tramoId||"").trim().toLowerCase() === String(tId).trim().toLowerCase() || 
+                  String(p.properties.DE||"").trim().toLowerCase() === String(tId).trim().toLowerCase() ||
+                  String(p.properties.de||"").trim().toLowerCase() === String(r.de).trim().toLowerCase() ||
+                  String(p.properties.IDNODO||"").trim().toLowerCase() === String(r.de).trim().toLowerCase() ||
+                  String(p.properties.Nombre||"").trim().toLowerCase() === String(r.de).trim().toLowerCase() ||
+                  String(p.properties.label||"").trim().toLowerCase() === ("tramo " + String(tId).trim().toLowerCase())
               ));
+
                 if (poly && poly.geometry) {
-                    var geom = poly.geometry;
-                    var rings = [];
-                    if (geom.type === 'Polygon') {
-                        rings = [geom.coordinates[0]];
-                    } else if (geom.type === 'MultiPolygon') {
-                        geom.coordinates.forEach(c => { rings.push(c[0]); });
+                    var targetPoly = poly;
+                    if (poly.geometry.type === 'MultiPolygon') {
+                        try {
+                            var hull = turf.convex(turf.explode(poly));
+                            if (hull && hull.geometry) targetPoly = hull;
+                        } catch(e){}
                     }
-                    rings.forEach(ring => {
+                    var geom = targetPoly.geometry;
+                    var mainRing = null;
+                    if (geom.type === 'Polygon') {
+                        mainRing = geom.coordinates[0];
+                    } else if (geom.type === 'MultiPolygon') {
+                        var bestArea = -1;
+                        geom.coordinates.forEach(c => {
+                            try {
+                                var a = turf.area(turf.polygon(c));
+                                if (a > bestArea) { bestArea = a; mainRing = c[0]; }
+                            } catch(e) { if (!mainRing) mainRing = c[0]; }
+                        });
+                    }
+                    if (mainRing) {
                         var lastPt = null;
-                        ring.forEach(pt => {
+                        mainRing.forEach(pt => {
                             if (lastPt && Math.abs(lastPt[0] - pt[0]) < 0.000001 && Math.abs(lastPt[1] - pt[1]) < 0.000001) return;
-                            // Convert from WGS84 (Lat/Lon) back to MAGNA-SIRGAS
+                            // Convertir de WGS84 (Lat/Lon) a MAGNA-SIRGAS EPSG:3116
                             var projCoords = proj4("EPSG:4326", "EPSG:3116", [pt[0], pt[1]]);
                             L.push(pad(subName, 18) + pad(Number(projCoords[0]).toFixed(6), 14) + Number(projCoords[1]).toFixed(6));
                             lastPt = pt;
                         });
-                    });
+                    }
                 }
             }
         });
@@ -335,6 +407,29 @@ function SwmmTab(props) {
       var defaultName = (P.barrio||"modelo").replace(/\s+/g,"_")+".inp";
       import('../utils/fileSaver').then(m => m.saveFileWithDialog(blob, defaultName));
     };
+  const downloadRainTemplate = () => {
+    const data = [
+      ["Nombre", "Tiempo_min", "Intensidad_mmh"],
+      ["Bucaramanga_Tr10", 0, 0],
+      ["Bucaramanga_Tr10", 5, 12.5],
+      ["Bucaramanga_Tr10", 10, 28.4],
+      ["Bucaramanga_Tr10", 15, 65.2],
+      ["Bucaramanga_Tr10", 20, 110.8],
+      ["Bucaramanga_Tr10", 25, 145.3],
+      ["Bucaramanga_Tr10", 30, 95.7],
+      ["Bucaramanga_Tr10", 35, 52.1],
+      ["Bucaramanga_Tr10", 40, 31.4],
+      ["Bucaramanga_Tr10", 45, 20.8],
+      ["Bucaramanga_Tr10", 50, 15.2],
+      ["Bucaramanga_Tr10", 55, 11.0],
+      ["Bucaramanga_Tr10", 60, 8.5]
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Estaciones");
+    XLSX.writeFile(wb, "Plantilla_Lluvia_SWMM.xlsx");
+  };
+
   var nOut=selectedOutfalls.length;
   return <div>
     <div className="c"><div className="ct">EPA SWMM 5.x (.inp)</div>
@@ -361,13 +456,16 @@ function SwmmTab(props) {
         </div>
       </div>
       <div className="f" style={{marginBottom:8}}><label>Coordenadas</label><input readOnly value={Object.keys(nodes).length>0?Object.keys(nodes).length+" nodos XY (Filtrados)":"Esquematicas"} style={{background:"#151D30",border:"1px solid #1C2E4A",borderRadius:3,padding:"5px 7px",color:"#7088A8",fontSize:14,width:"100%"}}/></div>
-      <div style={{display:"flex", gap:10}}>
+      <div style={{display:"flex", gap:10, flexWrap: "wrap"}}>
         <button className="btn" onClick={generateINP} style={{flex:1,fontSize:14,padding:"10px",background:"linear-gradient(135deg,#00A6D6,#007bb5)",color:"#fff",fontWeight:600}}>Generar .INP</button>
         <button className="btn" onClick={() => {if(refINP.current) refINP.current.click();}} style={{flex:1,fontSize:14,padding:"10px",background:"linear-gradient(135deg,#D4A843,#B28828)",color:"#111",fontWeight:600}}>
           Cargar Proyecto .INP
         </button>
         <button className="btn" onClick={() => {if(refExcel.current) refExcel.current.click();}} style={{flex:1,fontSize:14,padding:"10px",background:"linear-gradient(135deg,#4CAF50,#388E3C)",color:"#fff",fontWeight:600}}>
           Cargar Lluvia (Excel)
+        </button>
+        <button className="btn" onClick={downloadRainTemplate} style={{flex:1,fontSize:14,padding:"10px",background:"linear-gradient(135deg,#0284c7,#0369a1)",color:"#fff",fontWeight:600}} title="Descarga una plantilla Excel lista con el formato exacto para cargar series de lluvia en SWMM">
+          📥 Plantilla Lluvia (Excel)
         </button>
       </div>
       

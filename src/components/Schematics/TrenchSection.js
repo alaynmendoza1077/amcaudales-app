@@ -155,8 +155,15 @@ const TrenchSection = ({ tramo, P }) => {
         <text x={cx - trenchW/2 - 35} y={groundY + trenchH/2} fill="#f8fafc" fontSize="12" textAnchor="middle" transform={`rotate(-90, ${cx - trenchW/2 - 35}, ${groundY + trenchH/2})`} fontWeight="600">HP = {HP.toFixed(2)}m</text>
 
         {/* Pipe Label */}
-        <line x1={cx} y1={bottomY - bedDepth - pipeR} x2={cx - trenchW/2 - 20} y2={bottomY - bedDepth - pipeR - 20} stroke="#38bdf8" strokeWidth="1" />
-        <text x={cx - trenchW/2 - 25} y={bottomY - bedDepth - pipeR - 16} fill="#38bdf8" fontSize="10" fontWeight="600" textAnchor="end">Tubo Ø {D}m</text>
+        {(() => {
+          let nomDiam = tramo.diametroCom || (D > 0 ? (D < 0.1 ? Math.round(D * 39.3701) + '"' : Math.round(D * 1000) + ' mm') : '200 mm');
+          return (
+            <g>
+              <line x1={cx} y1={bottomY - bedDepth - pipeR} x2={cx - trenchW/2 - 20} y2={bottomY - bedDepth - pipeR - 20} stroke="#38bdf8" strokeWidth="1" />
+              <text x={cx - trenchW/2 - 25} y={bottomY - bedDepth - pipeR - 16} fill="#38bdf8" fontSize="11" fontWeight="700" textAnchor="end">Tubo Ø {nomDiam}</text>
+            </g>
+          );
+        })()}
       </svg>
     </div>
   );
