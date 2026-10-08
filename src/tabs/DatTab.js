@@ -20,7 +20,13 @@ function DatTab(props){
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         setTimeout(function() {
-          f.arrayBuffer().then(function(buf){onFL(new Uint8Array(buf));});
+          f.arrayBuffer().then(function(buf){
+            onFL(new Uint8Array(buf));
+            if(ref.current) ref.current.value = "";
+          }).catch(function(err){
+            alert("Error al leer el archivo Excel: " + (err.message || err));
+            if(ref.current) ref.current.value = "";
+          });
         }, 10);
       });
     });

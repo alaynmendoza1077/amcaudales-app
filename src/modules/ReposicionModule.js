@@ -194,6 +194,10 @@ export default function ReposicionModule({ onBack, initialData }){
           var trans=[];for(var j2=0;j2<15;j2++)trans.push({id:j2,cant:0,tipo:"ST-40",diam:250,pozo:"",long:6});
           setSumTrans(trans);
           var p=parseLibro(d);var trams=topoSort(buildTramos(p));
+          if (!trams || trams.length === 0) {
+            alert("⚠️ Atención: No se encontraron tramos válidos en el archivo Excel.\n\nPor favor verifica que contenga la hoja de tramos ('Walcan_Tramos_Ordenado' o '2.Datos') con las columnas requeridas (DE, A, LONGITUD).");
+            return;
+          }
           var newP=Object.assign({},DP);
           if(p.libroParams){Object.assign(newP,p.libroParams);}
           var mst=parseMaestra(d);
@@ -242,7 +246,10 @@ export default function ReposicionModule({ onBack, initialData }){
           }
           setP(newP);setT(trams);setInpData(p);
           setIdfEst(newP.estacion || "BUC");
-        }catch(e){console.error(e);}
+        }catch(e){
+          console.error("Error al procesar archivo Excel:", e);
+          alert("Error al procesar el archivo Excel: " + (e.message || e));
+        }
         finally { setIsThinking(false); }
     }, 50);
   },[T]);

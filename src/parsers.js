@@ -15,83 +15,185 @@ function getValCI(obj, ...keys) {
   return undefined;
 }
 
-function parseLibro(d){
-  var wb=XLSX.read(d,{type:"array"});
-  var ps=function(n){var ws=wb.Sheets[n];return ws?XLSX.utils.sheet_to_json(ws,{defval:null}):[];};
-  var ad=ps("AreaDrenaje");
-  var trWs=wb.Sheets["Walcan_Tramos_Ordenado"];
-  var tr=trWs?XLSX.utils.sheet_to_json(trWs,{defval:null,blankrows:true}):[];
-  var datWs=wb.Sheets["2.Datos"];
-  var datos=[];
-  var raw=[];
-  if(datWs){
-    raw=XLSX.utils.sheet_to_json(datWs,{defval:null,range:5});
-    datos=raw.filter(function(r){var de=r["TRAMO"]||r["De"]||"";return de&&String(de)!=="0"&&String(de)!=="";});
+function findSheet(wb, candidateNames) {
+  if (!wb || !wb.SheetNames) return null;
+  const list = Array.isArray(candidateNames) ? candidateNames : [candidateNames];
+  for (let n of list) {
+    if (wb.Sheets[n]) return wb.Sheets[n];
   }
-  if(datos.length>0){
-    var di=0;
-    tr.forEach(function(t){
-      var de1=String(t.DE1||t.DE||"").trim();
-      var a1=String(t.A1||t.A||"").trim();
-      var rawIdx=raw.findIndex(function(dd){return String(dd["TRAMO"]||dd["De"]||"").trim()===de1;});
-      var d2=rawIdx!==-1?raw[rawIdx]:null;
-      var d3=null;
-      if(rawIdx!==-1){
-        var nextRow=(rawIdx+1<raw.length)?raw[rawIdx+1]:null;
-        if(nextRow){
-          var deNext=String(nextRow["TRAMO"]||nextRow["De"]||"").trim();
-          if(!deNext||deNext==="0"||deNext===""){
-            d3=nextRow;
-          }
-        }
-        if(!d3&&a1){
-          d3=raw.find(function(dd){return String(dd["TRAMO"]||dd["De"]||"").trim()===a1;});
+  const norm = str => String(str || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, '');
+  for (let n of list) {
+    const cleanN = norm(n);
+    const foundKey = wb.SheetNames.find(sn => norm(sn) === cleanN);
+    if (foundKey && wb.Sheets[foundKey]) return wb.Sheets[foundKey];
+  }
+  return null;
+}
+
+function readSheetSmart(ws) {
+  if (!ws) return [];
+  var rows0 = XLSX.utils.sheet_to_json(ws, { defval: null });
+  if (rows0 && rows0.length > 0) {
+    var keys = Object.keys(rows0[0] || {});
+    var hasPipeHeaders = keys.some(k => {
+      var kU = String(k).toUpperCase().trim();
+      return kU === "DE" || kU === "DE1" || kU === "TRAMO" || kU === "LONGITUD";
+    });
+    if (hasPipeHeaders) return rows0;
+  }
+  for (var r = 1; r <= 10; r++) {
+    var rowsR = XLSX.utils.sheet_to_json(ws, { defval: null, range: r });
+    if (rowsR && rowsR.length > 0) {
+      var keysR = Object.keys(rowsR[0] || {});
+      var hasHeader = keysR.some(k => {
+        var kU = String(k).toUpperCase().trim();
+        return kU === "DE" || kU === "DE1" || kU === "TRAMO" || kU === "LONGITUD" || kU === "IDNODO";
+      });
+      if (hasHeader) return rowsR;
+    }
+  }
+  return rows0 || [];
+}
+
+function parseLibro(d){
+  var wb = XLSX.read(d, {type: "array"});
+  var ps = function(names){
+    var ws = findSheet(wb, names);
+    return ws ? readSheetSmart(ws) : [];
+  };
+
+  var ad = ps(["AreaDrenaje", "Area_Drenaje", "AreasDrenaje", "Areas", "Cuencas"]);
+  var trWs = findSheet(wb, ["Walcan_Tramos_Ordenado", "Walcan_Tramos", "Tramos_Ordenado", "Tramos", "Conduits", "Pipes", "Red"]);
+  var tr = trWs ? readSheetSmart(trWs) : [];
+
+  var datWs = findSheet(wb, ["2.Datos", "Datos", "2. Datos", "Datos_Tramos", "Tramos_Datos"]);
+  var datos = [];
+  var raw = [];
+  if (datWs) {
+    raw = readSheetSmart(datWs);
+    datos = raw.filter(function(r){
+      var de = getValCI(r, "TRAMO", "De", "DE", "DE1", "Tramo");
+      return de && String(de) !== "0" && String(de) !== "";
+    });
+  }
+
+  // Si tr está vacío pero tenemos datos en 2.Datos, construir tr directamente desde datos
+  if ((!tr || tr.length === 0) && datos.length > 0) {
+    tr = datos.map(function(d2, idx) {
+      return {
+        id: idx + 1,
+        id_1: idx + 1,
+        DE: getValCI(d2, "TRAMO", "De", "DE", "DE1") || ("T" + (idx + 1)),
+        DE1: getValCI(d2, "TRAMO", "De", "DE", "DE1") || ("T" + (idx + 1)),
+        A: getValCI(d2, "A", "A1", "Hasta", "Pozo_Salida") || ("T" + (idx + 2)),
+        A1: getValCI(d2, "A", "A1", "Hasta", "Pozo_Salida") || ("T" + (idx + 2)),
+        LONGITUD: parseNum(getValCI(d2, "LONGITUD", "Longitud", "Longitud (m)", "L", "LONGITUD_C") || 50),
+        PENDIENTE: parseNum(getValCI(d2, "PENDIENTE", "Pendiente", "Pendiente (%)", "S", "PENDIENTE_C") || 1),
+        CRas1: getValCI(d2, 'Cota Rasante del Pozo de Entrada', 'Cota Rasante', 'CRas1', 'Ctapa', 'cras1'),
+        CRas2: getValCI(d2, 'Cota Rasante del Pozo de Salida', 'Cota Rasante Salida', 'CRas2', 'cras2'),
+        CINI: getValCI(d2, 'Cota Fondo del Pozo de Entrada', 'Cota Fondo', 'CINI', 'cfonde'),
+        CFIN: getValCI(d2, 'Cota Fondo del Pozo de Salida', 'Cota Fondo Salida', 'CFIN', 'cfonda'),
+        diametro: getValCI(d2, "diametro", "Diametro", "Diámetro", "DIAMETRO", "diam") || "200",
+        MATERIAL: getValCI(d2, "MATERIAL", "Material", "material") || "PVC",
+        Reponer: getValCI(d2, "Reponer", "Si/No") || "S",
+        TipoVia: getValCI(d2, "[Flexible, Rígido, Andén, Piedra Pegada, Adoquín, Pasto, Tierra]", "TipoVia", "Tipo Via") || "FX",
+        PavAncho: getValCI(d2, "Pavimento de Ancho de via?", "PavAncho") || "S",
+        PozoNuevo: getValCI(d2, "Pozo Nuevo", "PozoNuevo") || "N",
+        TipoPozo: getValCI(d2, "Tipo Pozo", "Concre/Mamp") || "M",
+        nManning: parseNum(getValCI(d2, "Corf. Rugosidad Manning", "nManning") || 0.010),
+        PInicial: parseNum(getValCI(d2, "PInicial", "P Inicial") || 0)
+      };
+    });
+  }
+
+  // Si aun sigue vacío, escanear todas las hojas del libro buscando columnas de tramos
+  if (!tr || tr.length === 0) {
+    for (var sn of wb.SheetNames) {
+      var candidateWs = wb.Sheets[sn];
+      var candidateRows = readSheetSmart(candidateWs);
+      if (candidateRows && candidateRows.length > 0) {
+        var firstR = candidateRows[0];
+        var hasDe = getValCI(firstR, "DE", "DE1", "TRAMO", "De", "Desde") !== undefined;
+        var hasA = getValCI(firstR, "A", "A1", "Hasta") !== undefined;
+        var hasL = getValCI(firstR, "LONGITUD", "Longitud", "L", "LONGITUD_C") !== undefined;
+        if (hasDe && (hasA || hasL)) {
+          tr = candidateRows;
+          break;
         }
       }
-      if(!d2&&di<datos.length)d2=datos[di];
-      if(d2){
-        t.Reponer=String(d2["Reponer"]||d2["Si/No"]||"S");
-        t.TipoVia=String(d2["[Flexible, Rígido, Andén, Piedra Pegada, Adoquín, Pasto, Tierra]"]||"FX").substring(0,2);
-        t.PavAncho=String(d2["Pavimento de Ancho de via?"]||"S");
-        t.PozoNuevo=String(d2["Pozo Nuevo"]||"N");
-        t.TipoPozo=String(d2["Tipo Pozo"]||d2["Concre/Mamp"]||"M");
-        t.nManning=+(d2["Corf. Rugosidad Manning"]||0);
-        
-        var rasDE=getValCI(d2,'Cota Rasante del Pozo de Entrada','Cota Rasante','Cota_Rasante','Ctapa','CotaTapa','cras1','rasante','terreno','cota_terreno');
-        if(rasDE!==undefined&&rasDE!==null&&rasDE!==""){
-          t.cotaRasante_from_datos=+String(rasDE).replace(",",".");
+    }
+  }
+
+  if(datos.length > 0 && tr.length > 0){
+    var di = 0;
+    tr.forEach(function(t){
+      var de1 = String(getValCI(t, "DE1", "DE", "De", "TRAMO") || "").trim();
+      var a1 = String(getValCI(t, "A1", "A", "Hasta") || "").trim();
+      var rawIdx = raw.findIndex(function(dd){
+        return String(getValCI(dd, "TRAMO", "De", "DE") || "").trim() === de1;
+      });
+      var d2 = rawIdx !== -1 ? raw[rawIdx] : null;
+      var d3 = null;
+      if(rawIdx !== -1){
+        var nextRow = (rawIdx + 1 < raw.length) ? raw[rawIdx + 1] : null;
+        if(nextRow){
+          var deNext = String(getValCI(nextRow, "TRAMO", "De", "DE") || "").trim();
+          if(!deNext || deNext === "0" || deNext === ""){
+            d3 = nextRow;
+          }
         }
-        var fonDE=getValCI(d2,'Cota Fondo del Pozo de Entrada','Cota Fondo','Cota_Fondo','CotaFondo','cfonde','cini','cfDE');
-        if(fonDE!==undefined&&fonDE!==null&&fonDE!==""){
-          t.cotaFondo_from_datos=+String(fonDE).replace(",",".");
+        if(!d3 && a1){
+          d3 = raw.find(function(dd){
+            return String(getValCI(dd, "TRAMO", "De", "DE") || "").trim() === a1;
+          });
+        }
+      }
+      if(!d2 && di < datos.length) d2 = datos[di];
+      if(d2){
+        t.Reponer = String(getValCI(d2, "Reponer", "Si/No") || t.Reponer || "S");
+        t.TipoVia = String(getValCI(d2, "[Flexible, Rígido, Andén, Piedra Pegada, Adoquín, Pasto, Tierra]", "TipoVia", "Tipo Via") || t.TipoVia || "FX").substring(0, 2);
+        t.PavAncho = String(getValCI(d2, "Pavimento de Ancho de via?", "PavAncho") || t.PavAncho || "S");
+        t.PozoNuevo = String(getValCI(d2, "Pozo Nuevo", "PozoNuevo") || t.PozoNuevo || "N");
+        t.TipoPozo = String(getValCI(d2, "Tipo Pozo", "Concre/Mamp") || t.TipoPozo || "M");
+        t.nManning = parseNum(getValCI(d2, "Corf. Rugosidad Manning", "nManning") || t.nManning || 0.010);
+        
+        var rasDE = getValCI(d2, 'Cota Rasante del Pozo de Entrada','Cota Rasante','Cota_Rasante','Ctapa','CotaTapa','cras1','rasante','terreno','cota_terreno');
+        if(rasDE !== undefined && rasDE !== null && rasDE !== ""){
+          t.cotaRasante_from_datos = parseNum(rasDE);
+        }
+        var fonDE = getValCI(d2, 'Cota Fondo del Pozo de Entrada','Cota Fondo','Cota_Fondo','CotaFondo','cfonde','cini','cfDE');
+        if(fonDE !== undefined && fonDE !== null && fonDE !== ""){
+          t.cotaFondo_from_datos = parseNum(fonDE);
         }
         
         if(d3){
-          var rasA=getValCI(d3,'Cota Rasante del Pozo de Entrada','Cota Rasante','Cota_Rasante','Ctapa','CotaTapa','cras1','rasante','terreno','cota_terreno');
-          if(rasA!==undefined&&rasA!==null&&rasA!==""){
-            t.cotaRasanteA_from_datos=+String(rasA).replace(",",".");
+          var rasA = getValCI(d3, 'Cota Rasante del Pozo de Entrada','Cota Rasante','Cota_Rasante','Ctapa','CotaTapa','cras1','rasante','terreno','cota_terreno');
+          if(rasA !== undefined && rasA !== null && rasA !== ""){
+            t.cotaRasanteA_from_datos = parseNum(rasA);
           }
-          var fonA=getValCI(d3,'Cota Fondo del Pozo de Entrada','Cota Fondo','Cota_Fondo','CotaFondo','cfonde','cini','cfDE');
-          if(fonA!==undefined&&fonA!==null&&fonA!==""){
-            t.cotaFondoA_from_datos=+String(fonA).replace(",",".");
+          var fonA = getValCI(d3, 'Cota Fondo del Pozo de Entrada','Cota Fondo','Cota_Fondo','CotaFondo','cfonde','cini','cfDE');
+          if(fonA !== undefined && fonA !== null && fonA !== ""){
+            t.cotaFondoA_from_datos = parseNum(fonA);
           }
         }
       }
       di++;
     });
   }
-  var verts=ps("Vertices");
-  var pozos=ps("Walcan_Pozos_Ordenado");
-  var outfallNodes={};
-  if(pozos&&pozos.length>0){pozos.forEach(function(p){
-    if(p.TipoEstruc&&String(p.TipoEstruc).toUpperCase().indexOf("OUTFALL")>=0){
-      outfallNodes[String(p.IdNodo||p.IDfinal||"")]=true;
-    }
-  });}
-  var libroParams={};
-  var infoWs=wb.Sheets["1.InformaciónGeneral"]||wb.Sheets["1.InformacionGeneral"];
+  var verts = ps(["Vertices", "Vertice", "Vertices_Ordenado", "Coordinates"]);
+  var pozos = ps(["Walcan_Pozos_Ordenado", "Walcan_Pozos", "Pozos_Ordenado", "Pozos", "Nodos", "Junctions"]);
+  var outfallNodes = {};
+  if(pozos && pozos.length > 0){
+    pozos.forEach(function(p){
+      if(p.TipoEstruc && String(p.TipoEstruc).toUpperCase().indexOf("OUTFALL") >= 0){
+        outfallNodes[String(p.IdNodo || p.IDfinal || "")] = true;
+      }
+    });
+  }
+  var libroParams = {};
+  var infoWs = findSheet(wb, ["1.InformaciónGeneral", "1.InformacionGeneral", "InformaciónGeneral", "InformacionGeneral", "General", "Parametros"]);
   if(infoWs){
-    var ir=XLSX.utils.sheet_to_json(infoWs,{header:1,defval:null});
+    var ir = XLSX.utils.sheet_to_json(infoWs, {header: 1, defval: null});
     if(ir&&ir.length>20){
       libroParams.proyecto=ir[3]&&ir[3][5]?String(ir[3][5]):"";
       libroParams.municipio=ir[4]&&ir[4][5]?String(ir[4][5]):"";
@@ -336,18 +438,24 @@ function buildTramos(inp){
   if(!inp||!inp.tr||!inp.tr.length)return[];
   var assignedNodes = {};
   return inp.tr.map(function(t,i){
-    var de1Raw=t.DE1||t.DE||"";
-    var lonRaw=parseNum(t.LONGITUD);
-    if(!de1Raw||String(de1Raw)==="0"||lonRaw<=0){return{id:i+1,sep:true};}
+    var de1Raw = getValCI(t, 'DE1', 'DE', 'De', 'de', 'TRAMO', 'Tramo', 'Desde', 'From');
+    var a1Raw = getValCI(t, 'A1', 'A', 'Hasta', 'To');
+    var lonRaw = parseNum(getValCI(t, 'LONGITUD', 'Longitud', 'longitud', 'LONGITUD_C', 'L', 'Long', 'Long.'));
+    if(!de1Raw || String(de1Raw) === "0" || lonRaw <= 0){
+      return {id: i + 1, sep: true};
+    }
     var sumAreas = {res:0, com:0, ind:0, inst:0, via:0, rec:0};
     var adList = [];
     var adRes = null, adVia = null;
     if(inp.ad){
-      var deNum=String(t.DE||"").trim();var deNom=String(t.DE1||"").trim();
+      var deNum = String(getValCI(t, 'DE', 'De', 'TRAMO') || "").trim();
+      var deNom = String(getValCI(t, 'DE1', 'Nombre') || "").trim();
       if (!assignedNodes[deNum]) {
-      adList=inp.ad.filter(function(a){return String(a.IDNODO||"").trim()===deNum || String(a.Nombre||"").trim()===deNom;});
-      adList.forEach(function(a){
-          var tc = String(a.TIPOCUENCA).toUpperCase();
+        adList = inp.ad.filter(function(a){
+          return String(a.IDNODO||"").trim() === deNum || String(a.Nombre||"").trim() === deNom || String(a.DE||"").trim() === deNum;
+        });
+        adList.forEach(function(a){
+          var tc = String(a.TIPOCUENCA||"").toUpperCase();
           var ac = +(a.AREACUENCA||0);
           if(tc==="COMERCIAL") sumAreas.com+=ac;
           else if(tc==="INDUSTRIAL") sumAreas.ind+=ac;
@@ -355,19 +463,23 @@ function buildTramos(inp){
           else if(tc==="RECREACIONAL") sumAreas.rec+=ac;
           else if(tc==="VIA"||tc==="VIAS") sumAreas.via+=ac;
           else sumAreas.res+=ac;
-      });
-      adVia = adList.find(function(a){return String(a.TIPOCUENCA).toUpperCase()==="VIA" || String(a.TIPOCUENCA).toUpperCase()==="VIAS";});
-      adRes = adList.find(function(a){return String(a.TIPOCUENCA).toUpperCase()!=="VIA" && String(a.TIPOCUENCA).toUpperCase()!=="VIAS";});
-      if (!adRes && adList.length > 0 && !adVia) adRes = adList[0];
-      assignedNodes[deNum] = true;
+        });
+        adVia = adList.find(function(a){return String(a.TIPOCUENCA||"").toUpperCase()==="VIA" || String(a.TIPOCUENCA||"").toUpperCase()==="VIAS";});
+        adRes = adList.find(function(a){return String(a.TIPOCUENCA||"").toUpperCase()!=="VIA" && String(a.TIPOCUENCA||"").toUpperCase()!=="VIAS";});
+        if (!adRes && adList.length > 0 && !adVia) adRes = adList[0];
+        assignedNodes[deNum] = true;
       }
     }
-    var ad = adRes || adVia; // Fallback for qmh and other properties
-    var dStr=String(t.diametro||"315").trim();
-    var isInch=dStr.indexOf('"')>=0||dStr.indexOf("pulg")>=0;
-    var dRaw=dStr.replace(/[^0-9.]/g,"");var dMM=+dRaw;
-    if(isInch||dMM<50)dMM=Math.round(dMM*25.4);if(dMM<100)dMM=315;
-    var matRaw = String(t.MATERIAL || t.material || t.Mat || t.MAT || "PVC").toUpperCase();
+    var ad = adRes || adVia;
+    var dStr = String(getValCI(t, 'diametro', 'Diametro', 'Diámetro', 'DIAMETRO', 'diam') || "315").trim();
+    var isInch = dStr.indexOf('"') >= 0 || dStr.toLowerCase().indexOf("pulg") >= 0;
+    var dRaw = dStr.replace(/[^0-9.]/g,"");
+    var dMM = +dRaw;
+    if(isInch || dMM < 50) dMM = Math.round(dMM * 25.4);
+    if(dMM < 100) dMM = 315;
+    
+    var nMann = parseNum(getValCI(t, 'nManning', 'nManning_from_datos', 'Corf. Rugosidad Manning', 'Coef. Rugosidad Manning', 'n', 'Manning') || 0.010);
+    var matRaw = String(getValCI(t, 'MATERIAL', 'Material', 'material', 'Mat', 'MAT') || "PVC").toUpperCase();
     var mat = "PVC";
     if (matRaw.includes("CONCRETO")) mat = "CONCRETO";
     else if (matRaw.includes("GRES")) mat = "GRES";
@@ -386,12 +498,13 @@ function buildTramos(inp){
       var closest=nomArr.reduce(function(prev,curr){return Math.abs(curr-dMM)<Math.abs(prev-dMM)?curr:prev;});
       dNom = closest + " mm";
     }
-    var repRaw=String(t.Reponer||"S").toUpperCase();
-    var reponer=repRaw==="N"?"N":"S";
-    var tipoViaRaw=String(t.TipoVia||t["Tipo Via"]||"FX").toUpperCase();
-    var pavAnchoRaw=String(t.PavAncho||"S").toUpperCase();
-    var pozoNuevoRaw=String(t.PozoNuevo||"N").toUpperCase();
-    var tipoPozoRaw=String(t.TipoPozo||"M").toUpperCase();
+    var repRaw = String(getValCI(t, 'Reponer', 'Si/No') || "S").toUpperCase();
+    var reponer = repRaw === "N" ? "N" : "S";
+    var tipoViaRaw = String(getValCI(t, 'TipoVia', 'Tipo Via', '[Flexible, Rígido, Andén, Piedra Pegada, Adoquín, Pasto, Tierra]') || "FX").toUpperCase();
+    var pavAnchoRaw = String(getValCI(t, 'PavAncho', 'Pavimento de Ancho de via?') || "S").toUpperCase();
+    var pozoNuevoRaw = String(getValCI(t, 'PozoNuevo', 'Pozo Nuevo') || "N").toUpperCase();
+    var tipoPozoRaw = String(getValCI(t, 'TipoPozo', 'Tipo Pozo', 'Concre/Mamp') || "M").toUpperCase();
+    
     var parsedCR1 = getValCI(t, 'CRas1', 'Rasante_Inicial', 'Rasante Inicial (m)', 'Rasante Inicial', 'Cota_Rasante_Ini', 'Cota_Rasante', 'Cota Rasante Inicial', 'Cota Rasante', 'cras1', 'cota_rasante_ini', 'C.Ras', 'Ctapa', 'CotaTapa', 'cotaTapa', 'cota', 'Cota', 'Cota_Terreno', 'CotaTerreno', 'Rasante1', 'crDE', 'cotaRasante', 'crasDE', 'crasde');
     var cR1 = parseNum(parsedCR1 !== undefined && parsedCR1 !== null && parsedCR1 !== "" ? parsedCR1 : (t.crDE !== undefined && t.crDE !== null ? t.crDE : t.cotaRasante_from_datos));
     var parsedCR2 = getValCI(t, 'CRas2', 'Rasante_Final', 'Rasante Final (m)', 'Rasante Final', 'Cota_Rasante_Fin', 'Cota Rasante Final', 'Cota_Rasante_Fin', 'cras2', 'cota_rasante_fin', 'C.RasA', 'Rasante2', 'crA', 'cotaRasanteA', 'crasA', 'crasa');
@@ -405,36 +518,53 @@ function buildTramos(inp){
     var cFA = parsedCFA !== undefined && parsedCFA !== null && parsedCFA !== "" ? parsedCFA : t.cotaFondoA_from_datos;
     var cFA_parsed = cFA !== undefined && cFA !== null && cFA !== "" ? parseNum(cFA) : null;
 
+    var pendVal = parseNum(getValCI(t, 'PENDIENTE', 'Pendiente', 'pendiente', 'PENDIENTE_C', 'S', 'Pend', 'Pend.'));
+
     var qmh = ad && ad.QMH ? parseFloat(ad.QMH) : 0;
     var areaC = adRes ? +(adRes.AREACUENCA||0) : (ad ? +(ad.AREACUENCA||0) : 0);
     var areaViaC = adVia ? +(adVia.AREACUENCA||0) : 0;
     var denCalculada = null;
     if (qmh > 0 && areaC > 0) {
-      // QMH = (Pop * Consumo * Retorno) / 86400 -> Pop = (QMH * 86400) / (Consumo * Retorno)
       var pop = (qmh * 86400) / (140 * 0.85);
       denCalculada = Math.round(pop / areaC);
     }
 
-    return{id:i+1,de:t.DE1||t.DE||"",a:t.A1||t.A||"",deNum:String(t.DE||""),aNum:String(t.A||""),
-      longitud:parseNum(t.LONGITUD),pendiente:parseNum(t.PENDIENTE),
-      cotaRasante:cR1,
-      cotaRasanteA:cR2,
-      crDE:cR1,
-      crA:cR2,
-      cotaFondo:cFDE,
-      cotaFondoDE:cFDE,
-      cotaFondoA:cFA_parsed,
-      cfDE:cFDE,
-      cfA:cFA_parsed,
-      diametroCom:dNom,diamOrig:dNom,material:mat,matOrig:matOrig,
-      esInicial:+(t.PInicial||0)===1?"I":"N",
-      areaParcial:areaC, aV_prop: areaViaC, tipoArea:ad?(ad.TIPOCUENCA||"RESIDENCIAL"):"RESIDENCIAL",
+    return {
+      id: i + 1,
+      de: String(de1Raw).trim(),
+      a: String(a1Raw || "").trim(),
+      deNum: String(getValCI(t, 'DE', 'De') || de1Raw).trim(),
+      aNum: String(getValCI(t, 'A', 'Hasta') || a1Raw || "").trim(),
+      longitud: lonRaw,
+      pendiente: pendVal,
+      cotaRasante: cR1,
+      cotaRasanteA: cR2,
+      crDE: cR1,
+      crA: cR2,
+      cotaFondo: cFDE,
+      cotaFondoDE: cFDE,
+      cotaFondoA: cFA_parsed,
+      cfDE: cFDE,
+      cfA: cFA_parsed,
+      diametroCom: dNom,
+      diamOrig: dNom,
+      material: mat,
+      matOrig: matOrig,
+      esInicial: +(getValCI(t, 'PInicial', 'P Inicial') || 0) === 1 ? "I" : "N",
+      areaParcial: areaC,
+      aV_prop: areaViaC,
+      tipoArea: ad ? (ad.TIPOCUENCA || "RESIDENCIAL") : "RESIDENCIAL",
       areas: sumAreas,
       coefEscorrentia: ad && ad.CESC ? +(ad.CESC) : null,
       densidad: ad && ad.DENSIDAD ? +(ad.DENSIDAD) : denCalculada,
       consumo: ad && ad.CONSUMO ? +(ad.CONSUMO) : null,
-      estacion:ad?(ad.IDESTACION||ad.estacion||ad.Estacion||""):"",
-      nManning:nMann,reponer:reponer,tipoVia:tipoViaRaw.substring(0,2)||"FX",pavAncho:pavAnchoRaw==="S"?"S":"N",pozoNuevo:pozoNuevoRaw==="S"?"S":"N",tipoPozo:tipoPozoRaw==="C"?"C":"M",
+      estacion: ad ? (ad.IDESTACION || ad.estacion || ad.Estacion || "") : "",
+      nManning: nMann,
+      reponer: reponer,
+      tipoVia: tipoViaRaw.substring(0, 2) || "FX",
+      pavAncho: pavAnchoRaw === "S" ? "S" : "N",
+      pozoNuevo: pozoNuevoRaw === "S" ? "S" : "N",
+      tipoPozo: tipoPozoRaw === "C" ? "C" : "M",
     };
   });
 }
