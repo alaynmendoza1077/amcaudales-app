@@ -86,6 +86,7 @@ export function recalcPbItems(data) {
   var pT = P.porcExcTierra || .55, pG = P.porcExcGranular || .30, pR = P.porcExcRoca || .15;
   var pAL = P.porcAcarreoLibre || .5;
   var vaP = calcVallasAuto(R, data.pbItems);
+  var campAuto = calcVallasAuto(R, data.pbItems);
   var FO = P.frentesObra || 1;
   var nEst = P.distBotadero || 8;
   var pA200 = P.porcAcarreo200 || .10, pA500 = P.porcAcarreo500 || 0, pA1000 = P.porcAcarreo1000 || .90;
@@ -106,8 +107,11 @@ export function recalcPbItems(data) {
     "1.01.02.01": FO * 2,
     "1.01.03.03": Math.ceil(lt / 100), "1.01.03.05": nTramRep, "1.01.03.06": lt,
     "1.02.01.06": lt,
-    "1.02.02.01": (P.camp1 || 0) * (P.frentes || 1) * (P.tiempoObra || 1), "1.02.02.02": (P.camp2 || 0) * (P.frentes || 1) * (P.tiempoObra || 1), "1.02.02.03": (P.camp3 || 0) * (P.frentes || 1) * (P.tiempoObra || 1), "1.02.02.04": (P.camp4 || 0) * (P.frentes || 1) * (P.tiempoObra || 1),
-    "1.02.03.08": (P.tiempoObra !== undefined && P.tiempoObra > 0 ? P.tiempoObra : Math.max(1, Math.ceil(lt / 90))),
+    "1.02.02.01": P.camp1 !== undefined && P.camp1 !== "" ? P.camp1 : campAuto.v1 * FO * (P.tiempoObra || 1),
+    "1.02.02.02": P.camp2 !== undefined && P.camp2 !== "" ? P.camp2 : campAuto.v2 * FO * (P.tiempoObra || 1),
+    "1.02.02.03": P.camp3 !== undefined && P.camp3 !== "" ? P.camp3 : campAuto.v3 * FO * (P.tiempoObra || 1),
+    "1.02.02.04": P.camp4 !== undefined && P.camp4 !== "" ? P.camp4 : campAuto.v4 * FO * (P.tiempoObra || 1),
+    "1.02.03.08": (P.tiempoObra || 2),
     "1.03.01.01": (() => { var r = 0; dN.forEach(t => { if ((t.tipoVia === "FX" || t.tipoVia === "TL") && (P.espesorPav || 0.15) < 0.10) r += t.rotP || 0; }); return r; })(),
     "1.03.01.02": (() => { var r = 0; dN.forEach(t => { if (t.tipoVia === "FX" || t.tipoVia === "TL" || !t.tipoVia) { var esp = P.espesorPav || 0.15; if (esp >= 0.10 && esp <= 0.20) r += t.rotP || 0; } }); return r + sumRotTot; })(),
     "1.03.01.03": (() => { var r = 0; dN.forEach(t => { if ((t.tipoVia === "FX" || t.tipoVia === "TL") && (P.espesorPav || 0.15) > 0.20) r += t.rotP || 0; }); return r; })(),

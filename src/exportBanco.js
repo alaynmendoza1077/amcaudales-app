@@ -110,7 +110,7 @@ export async function exportBancoExcel(P, usedItems, capTot, cd, adm, imp, ut, p
   let rowsToPrint = dataToUse.filter(it => neededCodes.has(it.c));
 
   let totalsMap = {};
-  usedItems.forEach(it => totalsMap[it.c] = (it.q || 0) * (it.p || 0));
+  usedItems.forEach(it => totalsMap[it.c] = Math.round((it.q || 0) * (it.p || 0)));
 
   rowsToPrint.slice().reverse().forEach(it => {
     let parts = it.c.split('.');
@@ -199,16 +199,16 @@ export async function exportBancoExcel(P, usedItems, capTot, cd, adm, imp, ut, p
     return row;
   };
 
-  let pAdmin = P.porcAdmin !== undefined ? parseFloat(P.porcAdmin) : 0.29;
+  let pAdmin = P.porcAdmin !== undefined ? parseFloat(P.porcAdmin) : 0.24;
   let pImp = P.porcImprevistos !== undefined ? parseFloat(P.porcImprevistos) : 0.01;
   let pUt = P.porcUtilidad !== undefined ? parseFloat(P.porcUtilidad) : 0.05;
   let pIva = P.porcIVA !== undefined ? parseFloat(P.porcIVA) : 0.19;
 
-  let iva = ut * pIva;
+  let iva = Math.round(ut * pIva);
   let obraCivil = cd + adm + imp + ut + iva;
   let costoObra = obraCivil + pma + pmt;
-  let interObra = (P.reqInterventoria === "S" || P.reqInterventoria === true) ? (costoObra + sumDirecto + sumDirecto * 0.291) * (P.porcInterventoria !== undefined ? parseFloat(P.porcInterventoria) : 0.08) : 0;
-  let aiuSum = sumDirecto * 0.291;
+  let interObra = (P.reqInterventoria === "S" || P.reqInterventoria === true) ? Math.round((costoObra + sumDirecto + sumDirecto * 0.291) * (P.porcInterventoria !== undefined ? parseFloat(P.porcInterventoria) : 0.08)) : 0;
+  let aiuSum = Math.round(sumDirecto * 0.291);
   let intSum = 0;
   let costoSuministros = sumDirecto + aiuSum + intSum;
   let costoTotalProyecto = costoObra + interObra + costoSuministros;

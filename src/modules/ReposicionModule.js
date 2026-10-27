@@ -883,6 +883,32 @@ const handleBack = () => {
                 <div onClick={() => { setIsThinking("Generando Excel de Diseño..."); setTimeout(() => import('../exportDiseno').then(m => m.exportDiseno(P, R, alivData, sumLat, sumTrans, estSepData)).catch(e => { console.error(e); alert("Error al exportar: " + e.message); }).finally(() => setIsThinking(null)), 100); }} style={{ padding:'10px 15px', fontSize:'13px', cursor:'pointer', borderBottom: lightMode?'1px solid #f3f4f6':'1px solid #374151', color: lightMode?'#1f2937':'#f3f4f6' }} className="dropdown-item">Excel de Diseño</div>
                 <div onClick={() => { setIsThinking("Generando Memoria de Cantidades..."); setTimeout(() => import('../exportCantidades').then(m => m.exportMemoriaCantidades(P, R, T, sumLat, sumTrans, pbItems, urbanismoData)).catch(e => { console.error(e); alert("Error al exportar: " + e.message); }).finally(() => setIsThinking(null)), 100); }} style={{ padding:'10px 15px', fontSize:'13px', cursor:'pointer', borderBottom: lightMode?'1px solid #f3f4f6':'1px solid #374151', color: lightMode?'#1f2937':'#f3f4f6', fontWeight:'bold' }} className="dropdown-item">📊 Memoria de Cantidades</div>
                 <div onClick={() => { setIsThinking("Generando Excel de Cantidades..."); setTimeout(() => import('../exportCantidades').then(m => m.exportCantidades(P, R, T, sumLat, sumTrans, pbItems, estSepData, urbanismoData)).catch(e => { console.error(e); alert("Error al exportar: " + e.message); }).finally(() => setIsThinking(null)), 100); }} style={{ padding:'10px 15px', fontSize:'13px', cursor:'pointer', borderBottom: lightMode?'1px solid #f3f4f6':'1px solid #374151', color: lightMode?'#1f2937':'#f3f4f6' }} className="dropdown-item">Excel de Cantidades</div>
+                <div onClick={() => {
+                  setIsThinking("Generando Presupuesto EMPAS...");
+                  import('../tabs/ProjectConsolidatorTab').then(({ recalcPbItems }) => {
+                    var data = { v: "v36", P: P, T: T, sumLat: sumLat, sumTrans: sumTrans, pbItems: pbItems, alivData: alivData, sumData: sumData, estSepData: estSepData, urbanismoData: urbanismoData, inpData: inpData, R: R };
+                    var freshPbItems = recalcPbItems(data);
+                    var dR = (R||[]).filter(r => !r.sep);
+                    var dN = dR.filter(r => r.reponer === "S");
+                    var lt = dN.reduce((s, r) => s + (r.L || 0), 0);
+                    var leafs = freshPbItems.filter(it => it.lv >= 3);
+                    var used = leafs.filter(it => it.q > 0);
+                    var cd = 0; var capTot = {};
+                    leafs.forEach(it => { if (it.q > 0 && it.p > 0) { var v = Math.round(it.q * it.p); cd += v; var ch = it.c.substring(0, 1); capTot[ch] = (capTot[ch] || 0) + v; } });
+                    var pAdmin = P.porcAdmin !== undefined ? parseFloat(P.porcAdmin) : 0.24;
+                    var pImp = P.porcImprevistos !== undefined ? parseFloat(P.porcImprevistos) : 0.01;
+                    var pUt = P.porcUtilidad !== undefined ? parseFloat(P.porcUtilidad) : 0.05;
+                    var adm = Math.round(cd * pAdmin);
+                    var imp = Math.round(cd * pImp);
+                    var ut = Math.round(cd * pUt);
+                    var pma = (P.reqPMA !== "S" && P.reqPMA !== true) ? 0 : Math.round(cd * (P.porcPMA !== undefined ? parseFloat(P.porcPMA) : 0.025525));
+                    var pmt = (P.reqPMT !== "S" && P.reqPMT !== true) ? 0 : Math.round(cd * (P.porcPMT !== undefined ? parseFloat(P.porcPMT) : 0.051068));
+                    import('../exportBanco').then(m => {
+                      m.exportBancoExcel(P, used, capTot, cd, adm, imp, ut, pma, pmt, (capTot["S"] || 0), lt, freshPbItems);
+                      setTimeout(() => setIsThinking(null), 1000);
+                    }).catch(e => { console.error(e); alert("Error al exportar EMPAS: " + e.message); setIsThinking(null); });
+                  });
+                }} style={{ padding:'10px 15px', fontSize:'13px', cursor:'pointer', borderBottom: lightMode?'1px solid #f3f4f6':'1px solid #374151', color: lightMode?'#1f2937':'#f3f4f6', fontWeight:'bold' }} className="dropdown-item">🏛️ Presupuesto Banco (EMPAS)</div>
                 <div onClick={handleExportMAESTRA} style={{ padding:'10px 15px', fontSize:'13px', cursor:'pointer', borderBottom: lightMode?'1px solid #f3f4f6':'1px solid #374151', color: lightMode?'#1f2937':'#f3f4f6' }} className="dropdown-item">Formato MAESTRA</div>
                 <div onClick={() => { setIsThinking("Generando Libro GIS..."); setTimeout(() => import('../exportLibro').then(m => m.exportLibro(P, R, T, inpData, autoAreasPoly)).catch(e => { console.error(e); alert("Error al exportar: " + e.message); }).finally(() => setIsThinking(null)), 100); }} style={{ padding:'10px 15px', fontSize:'13px', cursor:'pointer', color: lightMode?'#1f2937':'#f3f4f6' }} className="dropdown-item">Libro GIS</div>
               </div>

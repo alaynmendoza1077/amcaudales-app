@@ -4,7 +4,7 @@ import * as XLSX from 'xlsx';
 import {CAPNAMES} from '../constants';
 
 function CronoTab(props){
-  var P=props.P,R=props.R;var m=parseInt(P.tiempoObra||2, 10);
+  var P=props.P,R=props.R;var m=parseInt(P.tiempoObra||P.meses||2, 10);
   var defaultSC=[{cod:"1.01",n:"Vallas y senales",cap:0},{cod:"1.02",n:"Trabajos preliminares",cap:0},{cod:"1.03",n:"Rotura pavimentos",cap:0},{cod:"2.01",n:"Excavaciones zanja",cap:1},{cod:"2.04",n:"Entibados",cap:1},{cod:"2.05",n:"Rellenos",cap:1},{cod:"2.06",n:"Sobreacarreos",cap:1},{cod:"3.02",n:"Tuberias",cap:2},{cod:"4.01",n:"Concretos/Mamposteria",cap:3},{cod:"4.06",n:"Acometidas",cap:3},{cod:"4.08",n:"Reparacion pavimento",cap:3},{cod:"5.03",n:"Accesorios",cap:4},{cod:"5.05",n:"Ensayos",cap:4},{cod:"5.09",n:"Demarcacion",cap:4}];
   var scCosts={};
   var pbI3=props.pbItems||[];
@@ -15,24 +15,29 @@ function CronoTab(props){
   var sData=useState(P.cronoData||null);var cronoData=sData[0],setCronoData=sData[1];
   var sAnticipo=useState(P.anticipo!==undefined?P.anticipo:35);var anticipo=sAnticipo[0],setAnticipo=sAnticipo[1];
   useEffect(function(){
-    if(cronoData&&cronoData.length===subCaps.length&&cronoData[0].length===m)return;
-    if(P.cronoData&&P.cronoData.length===subCaps.length&&P.cronoData[0].length===m){setCronoData(P.cronoData);return;}
-    var d=[];for(var i=0;i<subCaps.length;i++){var row=[];for(var mi=0;mi<m;mi++){row.push(Math.round(100/m));}d.push(row);}
+    var mVal=parseInt(P.tiempoObra||P.meses||2, 10);
+    if(cronoData&&cronoData.length===subCaps.length&&cronoData[0]&&cronoData[0].length===mVal)return;
+    if(P.cronoData&&P.cronoData.length===subCaps.length&&P.cronoData[0]&&P.cronoData[0].length===mVal){setCronoData(P.cronoData);return;}
+    var d=[];for(var i=0;i<subCaps.length;i++){var row=[];for(var mi=0;mi<mVal;mi++){row.push(Math.round(100/mVal));}d.push(row);}
     setCronoData(d);
     if(props.sP) props.sP(function(p){var n=Object.assign({},p);n.cronoData=d;return n;});
-  },[m, P.cronoData]);
+  },[m, P.cronoData, P.tiempoObra, P.meses]);
   if(!cronoData)return null;
   var dR=R?R.filter(function(r){return !r.sep;}):[];var lt=dR.reduce(function(s,r){return s+(r.L||0);},0);
   var pbI2=props.pbItems||[];var pbCdC=0;pbI2.forEach(function(it){if(it.lv>=3&&it.q>0&&it.p>0)pbCdC+=Math.round(it.q*it.p);});
-    var cdE=pbCdC>0?pbCdC:Math.round(lt*5474000);var adm=Math.round(cdE*P.porcAdmin);var imp=Math.round(cdE*P.porcImprevistos);var ut=Math.round(cdE*P.porcUtilidad);var iva=Math.round(ut*P.porcIVA);var totE=cdE+adm+imp+ut+iva;
+  var pAdmin = P.porcAdmin !== undefined ? parseFloat(P.porcAdmin) : 0.24;
+  var pImp = P.porcImprevistos !== undefined ? parseFloat(P.porcImprevistos) : 0.01;
+  var pUt = P.porcUtilidad !== undefined ? parseFloat(P.porcUtilidad) : 0.05;
+  var pIva = P.porcIVA !== undefined ? parseFloat(P.porcIVA) : 0.19;
+  var cdE=pbCdC>0?pbCdC:Math.round(lt*5474000);var adm=Math.round(cdE*pAdmin);var imp=Math.round(cdE*pImp);var ut=Math.round(cdE*pUt);var iva=Math.round(ut*pIva);var totE=cdE+adm+imp+ut+iva;
   var mL=[];for(var i=0;i<m;i++)mL.push("M"+(i+1));
   var updC=function(si,mi,v){var d=cronoData.map(function(r){return r.slice();});d[si][mi]=Math.max(0,Math.min(100,+v||0));setCronoData(d);if(props.sP)props.sP(function(p){var n=Object.assign({},p);n.cronoData=d;return n;});};
   var prevCap=-1;
   var mesCD=[];var hasCosts=subCaps.some(function(sc){return sc.costo>0;});for(var mi=0;mi<m;mi++){var mT=0;subCaps.forEach(function(_s,si){var scC=hasCosts?(_s.costo||0):Math.round(cdE/subCaps.length);mT+=Math.round(scC*(cronoData[si]?cronoData[si][mi]:0)/100);});mesCD.push(mT);}
-  var mesAdm=mesCD.map(function(v){return Math.round(v*P.porcAdmin);});
-  var mesImp=mesCD.map(function(v){return Math.round(v*P.porcImprevistos);});
-  var mesUt=mesCD.map(function(v){return Math.round(v*P.porcUtilidad);});
-  var mesIva=mesUt.map(function(v){return Math.round(v*P.porcIVA);});
+  var mesAdm=mesCD.map(function(v){return Math.round(v*pAdmin);});
+  var mesImp=mesCD.map(function(v){return Math.round(v*pImp);});
+  var mesUt=mesCD.map(function(v){return Math.round(v*pUt);});
+  var mesIva=mesUt.map(function(v){return Math.round(v*pIva);});
   var mesTot=mesCD.map(function(v,i){return v+mesAdm[i]+mesImp[i]+mesUt[i]+mesIva[i];});
   var mesAntic=mesTot.map(function(v){return Math.round(v*anticipo/100);});
   var mesAmort=mesTot.map(function(v,i){return i===0?Math.round(totE*anticipo/100):0;});

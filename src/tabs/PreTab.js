@@ -45,8 +45,8 @@ function PreTab(props){
   var sumExcLat=0,sumExcTrans=0,sumRellLat=0,sumRellTrans=0,sumConcLat=0,sumConcTrans=0;
   var sumRotLat=0,sumRotTrans=0,sumA37Lat=0,sumA37Trans=0,sumPdrLat=0,sumPdrTrans=0;
   var sumCimLat=0,sumCimTrans=0;
-  if(sumLat)sumLat.forEach(function(f){if((f.cant||0)>0){var c=calcCantSumidero(f);sumExcLat+=c.totExc||0;sumRellLat+=c.rell||0;sumConcLat+=c.c4||0;sumRotLat+=(c.rot||0);sumA37Lat+=(c.a37||0);sumPdrLat+=(c.pdr||0);sumCimLat+=(c.cim||0);}});
-  if(sumTrans)sumTrans.forEach(function(f){if((f.cant||0)>0){var c=calcCantSumidero(f);sumExcTrans+=c.totExc||0;sumRellTrans+=c.rell||0;sumConcTrans+=c.c4||0;sumRotTrans+=(c.rot||0);sumA37Trans+=(c.a37||0);sumPdrTrans+=(c.pdr||0);sumCimTrans+=(c.cim||0);}});
+  if(sumLat)sumLat.forEach(function(f){if((f.cant||0)>0){var c=calcCantSumidero(f, P);sumExcLat+=c.totExc||0;sumRellLat+=c.rell||0;sumConcLat+=c.c4||0;sumRotLat+=(c.rot||0);sumA37Lat+=(c.a37||0);sumPdrLat+=(c.pdr||0);sumCimLat+=(c.cim||0);}});
+  if(sumTrans)sumTrans.forEach(function(f){if((f.cant||0)>0){var c=calcCantSumidero(f, P);sumExcTrans+=c.totExc||0;sumRellTrans+=c.rell||0;sumConcTrans+=c.c4||0;sumRotTrans+=(c.rot||0);sumA37Trans+=(c.a37||0);sumPdrTrans+=(c.pdr||0);sumCimTrans+=(c.cim||0);}});
   var sumExcTot=sumExcLat+sumExcTrans;
   var sumRotTot=sumRotLat+sumRotTrans;
   var sumConcTot=sumConcLat+sumConcTrans;
@@ -403,16 +403,41 @@ function PreTab(props){
   if(search){var sl=search.toLowerCase();shown=shown.filter(function(it){return it.c.includes(sl)||it.d.toLowerCase().includes(sl);});}
   var cd=0;var capTot={};
   leafs.forEach(function(it){if(it.q>0&&it.p>0){var v=Math.round(it.q*it.p);cd+=v;var ch=it.c.substring(0,1);capTot[ch]=(capTot[ch]||0)+v;}});
-  var adm=Math.round(cd*(P.porcAdmin||.29)),imp=Math.round(cd*(P.porcImprevistos||.01));
-  var ut=Math.round(cd*(P.porcUtilidad||.05)),iva=Math.round(ut*(P.porcIVA||.19));var tot=cd+adm+imp+ut+iva;
-  var handleExportPre=function(){
-    var dR=props.R.filter(function(r){return !r.sep;});
-    var dN=dR.filter(function(r){return r.reponer==="S";});
-    var lt=dN.reduce(function(s,r){return s+(r.L||0);},0);
-    var pma = (P.reqPMA !== "S" && P.reqPMA !== true) ? 0 : cd * (P.porcPMA !== undefined ? P.porcPMA : 0.025525);
-    var pmt = (P.reqPMT !== "S" && P.reqPMT !== true) ? 0 : cd * (P.porcPMT !== undefined ? P.porcPMT : 0.051068);
+  var pAdmin = P.porcAdmin !== undefined ? parseFloat(P.porcAdmin) : 0.24;
+  var pImp = P.porcImprevistos !== undefined ? parseFloat(P.porcImprevistos) : 0.01;
+  var pUt = P.porcUtilidad !== undefined ? parseFloat(P.porcUtilidad) : 0.05;
+  var pIva = P.porcIVA !== undefined ? parseFloat(P.porcIVA) : 0.19;
+  var pPma = P.porcPMA !== undefined ? parseFloat(P.porcPMA) : 0.025525;
+  var pPmt = P.porcPMT !== undefined ? parseFloat(P.porcPMT) : 0.051068;
+  var pInt = P.porcInterventoria !== undefined ? parseFloat(P.porcInterventoria) : 0.08;
+
+  var adm = Math.round(cd * pAdmin);
+  var imp = Math.round(cd * pImp);
+  var ut = Math.round(cd * pUt);
+  var iva = Math.round(ut * pIva);
+  var pma = (P.reqPMA !== "S" && P.reqPMA !== true) ? 0 : Math.round(cd * pPma);
+  var pmt = (P.reqPMT !== "S" && P.reqPMT !== true) ? 0 : Math.round(cd * pPmt);
+  var obraCivil = cd + adm + imp + ut + iva;
+  var costoObra = obraCivil + pma + pmt;
+  var sumDirecto = capTot["S"] || 0;
+  var interObra = (P.reqInterventoria === "S" || P.reqInterventoria === true) ? Math.round((costoObra + sumDirecto + sumDirecto * 0.291) * pInt) : 0;
+  var aiuSum = Math.round(sumDirecto * 0.291);
+  var intSum = 0;
+  var costoSuministros = sumDirecto + aiuSum + intSum;
+  var costoTotalProyecto = costoObra + interObra + costoSuministros;
+
+  var handleExportPre = function(){
+    var dR = props.R.filter(function(r){ return !r.sep; });
+    var dN = dR.filter(function(r){ return r.reponer === "S"; });
+    var lt = dN.reduce(function(s,r){ return s + (r.L || 0); }, 0);
     import('../exportBanco').then(m => {
-      m.exportBancoExcel(P, used, capTot, cd, adm, imp, ut, pma, pmt, (capTot["S"]||0), lt, items);
+      m.exportBancoExcel(P, used, capTot, cd, adm, imp, ut, pma, pmt, sumDirecto, lt, items);
+    });
+  };
+
+  var handleExportMaestraLocal = function(){
+    import('../exportMAESTRA').then(m => {
+      m.exportMAESTRA(P, props.R, props.T || [], props.sumLat, props.sumTrans, items, props.inpData, props.estSepData, props.urbanismoData);
     });
   };
   return <div>
@@ -434,7 +459,16 @@ function PreTab(props){
         <button className={"stab"+(filt==="all"?" a":"")} onClick={function(){setFilt("all");}}>Todos ({leafs.length})</button>
       </div>
       <input type="text" placeholder="Buscar codigo o descripcion..." value={search} onChange={function(e){setSearch(e.target.value);}} style={{flex:1,background:"#0C1122",border:"1px solid #1C2E4A",borderRadius:3,padding:"5px 8px",color:"#D8E2F0",fontSize:12,minWidth:160}}/>
-      {used.length>0?<button className="btn" onClick={handleExportPre} style={{fontSize:11,padding:"4px 10px",background:"linear-gradient(135deg,#28A745,#1A6B2C)"}}>XLSX</button>:null}
+      {used.length>0 && (
+        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          <button className="btn" onClick={handleExportPre} style={{fontSize:12,padding:"6px 14px",fontWeight:700,background:"linear-gradient(135deg, #10b981 0%, #047857 100%)",border:"1px solid #34d399",borderRadius:5,display:"flex",alignItems:"center",gap:6,color:"#fff",cursor:"pointer",boxShadow:"0 2px 6px rgba(0,0,0,0.3)"}} title="Descargar Presupuesto Oficial en formato EMPAS (Excel)">
+            📥 Descargar Presupuesto EMPAS (Excel)
+          </button>
+          <button className="btn" onClick={handleExportMaestraLocal} style={{fontSize:12,padding:"6px 14px",fontWeight:700,background:"linear-gradient(135deg, #0284c7 0%, #0369a1 100%)",border:"1px solid #38bdf8",borderRadius:5,display:"flex",alignItems:"center",gap:6,color:"#fff",cursor:"pointer",boxShadow:"0 2px 6px rgba(0,0,0,0.3)"}} title="Descargar Formato MAESTRA (Excel)">
+            📑 Descargar Formato MAESTRA
+          </button>
+        </div>
+      )}
     </div>
     {shown.length>0?<div className="c"><div className="ct">Presupuesto ({shown.length} items)</div><div style={{overflowX:"auto",maxHeight:props.isExport?"none":"50vh",overflowY:props.isExport?"visible":"auto"}}><table><thead><tr>
       <TH style={{width:90}}>Codigo</TH><TH style={{minWidth:200}}>Descripcion</TH><TH>Und</TH><TH style={{width:80}}>Cant</TH><TH>P.Unit</TH><TH style={{width:100}}>Total</TH>
@@ -467,31 +501,22 @@ function PreTab(props){
         {["1","2","3","4","5"].map(function(ch){return <div key={ch} style={{background:"#151D30",border:"1px solid #1C2E4A",borderRadius:4,padding:6,textAlign:"center"}}><div style={{fontSize:10,color:"#7088A8"}}>Cap.{ch}</div><div style={{fontSize:12,fontWeight:700,color:"#D4A843",fontFamily:"monospace"}}>{fm(capTot[ch]||0)}</div></div>;})}
       </div>
       {(() => {
-        var admVal = cd * (P.porcAdmin || 0.29);
-        var impVal = cd * (P.porcImprevistos || 0.01);
-        var utVal = cd * (P.porcUtilidad || 0.05);
-        var ivaVal = utVal * (P.porcIVA || 0.19);
-        var pma = (P.reqPMA !== "S" && P.reqPMA !== true) ? 0 : cd * (P.porcPMA !== undefined ? P.porcPMA : 0.025525);
-        var pmt = (P.reqPMT !== "S" && P.reqPMT !== true) ? 0 : cd * (P.porcPMT !== undefined ? P.porcPMT : 0.051068);
-        var obraCivil = cd + admVal + impVal + utVal + ivaVal;
-        var costoObra = obraCivil + pma + pmt;
-        var interObra = (P.reqInterventoria === "S" || P.reqInterventoria === true) ? (costoObra + (capTot["S"] || 0) + ((capTot["S"] || 0) * 0.291)) * (P.porcInterventoria !== undefined ? P.porcInterventoria : 0.08) : 0;
-        
-        var sumDirecto = capTot["S"] || 0;
-        var aiuSum = sumDirecto * 0.291;
-        var intSum = 0;
-        var costoSuministros = sumDirecto + aiuSum + intSum;
-        var costoTotalProyecto = costoObra + interObra + costoSuministros;
+        var admVal = adm;
+        var impVal = imp;
+        var utVal = ut;
+        var ivaVal = iva;
+        var pmaVal = pma;
+        var pmtVal = pmt;
 
         return <>
           <div className="dpr" style={{color:"#D8E2F0"}}><span>COSTO DIRECTO OBRA CIVIL</span><span>{fm(cd)}</span></div>
-          <div className="dpr"><span>Admin ({((P.porcAdmin||0.29)*100).toFixed(0)}%)</span><span>{fm(admVal)}</span></div>
-          <div className="dpr"><span>Imprevistos ({((P.porcImprevistos||0.01)*100).toFixed(0)}%)</span><span>{fm(impVal)}</span></div>
-          <div className="dpr"><span>Utilidad ({((P.porcUtilidad||0.05)*100).toFixed(0)}%)</span><span>{fm(utVal)}</span></div>
-          <div className="dpr"><span>IVA sobre Utilidad ({((P.porcIVA||0.19)*100).toFixed(0)}%)</span><span>{fm(ivaVal)}</span></div>
+          <div className="dpr"><span>Admin ({(pAdmin*100).toFixed(0)}%)</span><span>{fm(admVal)}</span></div>
+          <div className="dpr"><span>Imprevistos ({(pImp*100).toFixed(0)}%)</span><span>{fm(impVal)}</span></div>
+          <div className="dpr"><span>Utilidad ({(pUt*100).toFixed(0)}%)</span><span>{fm(utVal)}</span></div>
+          <div className="dpr"><span>IVA sobre Utilidad ({(pIva*100).toFixed(0)}%)</span><span>{fm(ivaVal)}</span></div>
           <div className="dpr" style={{color:"#D8E2F0", fontWeight: 600}}><span>COSTO TOTAL OBRA CIVIL</span><span>{fm(obraCivil)}</span></div>
-          <div className="dpr"><span>Plan Manejo Ambiental (PMA)</span><span>{fm(pma)}</span></div>
-          <div className="dpr"><span>Plan Manejo Tránsito (PMT)</span><span>{fm(pmt)}</span></div>
+          <div className="dpr"><span>Plan Manejo Ambiental (PMA)</span><span>{fm(pmaVal)}</span></div>
+          <div className="dpr"><span>Plan Manejo Tránsito (PMT)</span><span>{fm(pmtVal)}</span></div>
           
           <div style={{borderTop:"1px solid #1C2E4A",marginTop:6,paddingTop:6,display:"flex",justifyContent:"space-between"}}>
             <span style={{fontSize:14,fontWeight:700,color:"#00A6D6"}}>COSTO TOTAL OBRA</span>

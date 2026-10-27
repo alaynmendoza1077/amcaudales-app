@@ -399,18 +399,26 @@ function PreBancoTab(props){
           </tbody>
           <tfoot>
             {cd > 0 && (() => {
-              var admVal = cd * (P.porcAdmin || 0.29);
-              var impVal = cd * (P.porcImprevistos || 0.01);
-              var utVal = cd * (P.porcUtilidad || 0.05);
-              var ivaVal = utVal * (P.porcIVA || 0.19);
-              var pma = (P.reqPMA === "N" || P.reqPMA === false) ? 0 : cd * (P.porcPMA !== undefined ? P.porcPMA : 0.025525);
-              var pmt = (P.reqPMT === "N" || P.reqPMT === false) ? 0 : cd * (P.porcPMT !== undefined ? P.porcPMT : 0.051068);
+              var pAdmin = P.porcAdmin !== undefined ? parseFloat(P.porcAdmin) : 0.24;
+              var pImp = P.porcImprevistos !== undefined ? parseFloat(P.porcImprevistos) : 0.01;
+              var pUt = P.porcUtilidad !== undefined ? parseFloat(P.porcUtilidad) : 0.05;
+              var pIva = P.porcIVA !== undefined ? parseFloat(P.porcIVA) : 0.19;
+              var pPma = P.porcPMA !== undefined ? parseFloat(P.porcPMA) : 0.025525;
+              var pPmt = P.porcPMT !== undefined ? parseFloat(P.porcPMT) : 0.051068;
+              var pInt = P.porcInterventoria !== undefined ? parseFloat(P.porcInterventoria) : 0.08;
+
+              var admVal = Math.round(cd * pAdmin);
+              var impVal = Math.round(cd * pImp);
+              var utVal = Math.round(cd * pUt);
+              var ivaVal = Math.round(utVal * pIva);
+              var pma = (P.reqPMA !== "S" && P.reqPMA !== true) ? 0 : Math.round(cd * pPma);
+              var pmt = (P.reqPMT !== "S" && P.reqPMT !== true) ? 0 : Math.round(cd * pPmt);
               var obraCivil = cd + admVal + impVal + utVal + ivaVal;
               var costoObra = obraCivil + pma + pmt;
-              var interObra = (P.reqInterventoria !== "N" && P.reqInterventoria !== false) ? (costoObra + (capTot["S"] || 0) + ((capTot["S"] || 0) * 0.291)) * (P.porcInterventoria !== undefined ? P.porcInterventoria : 0.08) : 0;
+              var interObra = (P.reqInterventoria === "S" || P.reqInterventoria === true) ? Math.round((costoObra + (capTot["S"] || 0) + ((capTot["S"] || 0) * 0.291)) * pInt) : 0;
               
               var sumDirecto = capTot["S"] || 0;
-              var aiuSum = sumDirecto * 0.291;
+              var aiuSum = Math.round(sumDirecto * 0.291);
               var intSum = 0;
               var costoSuministros = sumDirecto + aiuSum + intSum;
               var costoTotalProyecto = costoObra + interObra + costoSuministros;

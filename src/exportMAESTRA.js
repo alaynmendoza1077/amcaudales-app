@@ -32,35 +32,30 @@ async function exportMAESTRA(P,R,T,sumLat,sumTrans,pbItems,inpData,estSepData, u
     cdTotal = Math.round(lt*5474000);
   }
   
-  // Calculate EXACT program total
-  var admProg = cdTotal * (P.porcAdmin || 0.29);
-  var impProg = cdTotal * (P.porcImprevistos || 0.01);
-  var utProg = cdTotal * (P.porcUtilidad || 0.05);
-  var pmaProg = (P.reqPMA !== "S" && P.reqPMA !== true) ? 0 : cdTotal * (P.porcPMA !== undefined ? P.porcPMA : 0.025525);
-  var pmtProg = (P.reqPMT !== "S" && P.reqPMT !== true) ? 0 : cdTotal * (P.porcPMT !== undefined ? P.porcPMT : 0.051068);
-  var ivaProg = utProg * (P.porcIVA !== undefined ? P.porcIVA : 0.19);
-  var obraCivil = cdTotal + admProg + impProg + utProg + ivaProg;
-  var costoObra = obraCivil + pmaProg + pmtProg;
-  var interObra = obraCivil * 0.073615;
-  var aiuSum = sumDirecto * 0.291;
-  var intSum = sumDirecto * 0.163;
-  var costoSuministros = sumDirecto + aiuSum + intSum;
-  var exactAppTotal = Math.round(costoObra + interObra + costoSuministros);
+  // Calculate EXACT program totals matching PreTab and exportBanco
+  var pAdmin = P.porcAdmin !== undefined ? parseFloat(P.porcAdmin) : 0.24;
+  var pImp = P.porcImprevistos !== undefined ? parseFloat(P.porcImprevistos) : 0.01;
+  var pUt = P.porcUtilidad !== undefined ? parseFloat(P.porcUtilidad) : 0.05;
+  var pIva = P.porcIVA !== undefined ? parseFloat(P.porcIVA) : 0.19;
+  var pPma = P.porcPMA !== undefined ? parseFloat(P.porcPMA) : 0.025525;
+  var pPmt = P.porcPMT !== undefined ? parseFloat(P.porcPMT) : 0.051068;
+  var pInt = P.porcInterventoria !== undefined ? parseFloat(P.porcInterventoria) : 0.08;
 
-  // Reverse calculate MAESTRA's variables to preserve the old Excel format perfectly
-  var pctTotal = 1 + (P.porcAdmin||0.29) + (P.porcImprevistos||0.01) + (P.porcUtilidad||0.05) + (P.porcUtilidad||0.05)*(P.porcIVA||0.19);
-  if (P.reqInterventoria === "S" || P.reqInterventoria === true) pctTotal += pctTotal * (P.porcInterventoria||0.08); // Include interventoria in the reverse calculation if the original script did
-  
-  var cd = Math.round(exactAppTotal / pctTotal);
-  var adm = Math.round(cd*(P.porcAdmin||0.29));
-  var imp = Math.round(cd*(P.porcImprevistos||0.01));
-  var ut = Math.round(cd*(P.porcUtilidad||0.05));
-  var iva = Math.round(ut*(P.porcIVA||0.19));
-  var interv = (P.reqInterventoria === "S" || P.reqInterventoria === true) ? Math.round((cd+adm+imp+ut+iva)*(P.porcInterventoria||0.08)) : 0;
-  
-  // Forcing tot to exactly match the application to absorb rounding
-  var tot = exactAppTotal;
-  var costoMl = lt>0 ? Math.round(tot/lt) : 0;
+  var cd = cdTotal;
+  var adm = Math.round(cd * pAdmin);
+  var imp = Math.round(cd * pImp);
+  var ut = Math.round(cd * pUt);
+  var iva = Math.round(ut * pIva);
+  var pma = (P.reqPMA !== "S" && P.reqPMA !== true) ? 0 : Math.round(cd * pPma);
+  var pmt = (P.reqPMT !== "S" && P.reqPMT !== true) ? 0 : Math.round(cd * pPmt);
+  var obraCivil = cd + adm + imp + ut + iva;
+  var costoObra = obraCivil + pma + pmt;
+  var interObra = (P.reqInterventoria === "S" || P.reqInterventoria === true) ? Math.round((costoObra + sumDirecto + sumDirecto * 0.291) * pInt) : 0;
+  var aiuSum = Math.round(sumDirecto * 0.291);
+  var intSum = 0;
+  var costoSuministros = sumDirecto + aiuSum + intSum;
+  var tot = costoObra + interObra + costoSuministros;
+  var costoMl = lt > 0 ? Math.round(tot / lt) : 0;
 
   var estName=IDF[P.estacion]?IDF[P.estacion].name:P.estacion;
   var wb = new ExcelJS.Workbook();
@@ -162,21 +157,30 @@ async function exportMAESTRA(P,R,T,sumLat,sumTrans,pbItems,inpData,estSepData, u
   /* R59-R65: AIU */
   rows.push(["4. ANALISIS A.I.U.",null,"BASE DE CALCULO"]);
   rows.push(["RUBRO","% (Input)","BASE"]);
-  rows.push(["Administracion",P.porcAdmin||0.29,"Sobre Costo Directo"]);
-  rows.push(["Imprevistos",P.porcImprevistos||0.01,"Sobre Costo Directo"]);
-  rows.push(["Utilidad",P.porcUtilidad||0.05,"Sobre Costo Directo"]);
-  rows.push(["IVA sobre Utilidad",P.porcIVA||0.19,"Sobre Utilidad"]);
-  rows.push(["TOTAL AIU",(P.porcAdmin||0.29)+(P.porcImprevistos||0.01)+(P.porcUtilidad||0.05)]);
+  rows.push(["Administracion",pAdmin,"Sobre Costo Directo"]);
+  rows.push(["Imprevistos",pImp,"Sobre Costo Directo"]);
+  rows.push(["Utilidad",pUt,"Sobre Costo Directo"]);
+  rows.push(["IVA sobre Utilidad",pIva,"Sobre Utilidad"]);
+  rows.push(["TOTAL AIU",pAdmin+pImp+pUt]);
   rows.push([]);
 
   /* R67-R80: Resumen costos */
   rows.push(["5. RESUMEN DE COSTOS",null,"REFERENCIA"]);
-  rows.push(["F. COSTO DIRECTO",cd,"AMCaudales v36"]);
-  rows.push(["G. Administracion",adm,((P.porcAdmin||0.29)*100).toFixed(0)+"% sobre Costo Directo"]);
-  rows.push(["H. Imprevistos",imp,((P.porcImprevistos||0.01)*100).toFixed(0)+"% sobre Costo Directo"]);
-  rows.push(["I. Utilidad",ut,((P.porcUtilidad||0.05)*100).toFixed(0)+"% sobre Costo Directo"]);
-  rows.push(["J. IVA sobre Utilidad",iva,Math.round((P.porcIVA||0.19)*100)+"% sobre Utilidad"]);
-  rows.push(["COSTO TOTAL",tot]);
+  rows.push(["F. COSTO DIRECTO OBRA CIVIL",cd,"AMCaudales v37"]);
+  rows.push(["G. Administracion",adm,((pAdmin)*100).toFixed(0)+"% sobre Costo Directo"]);
+  rows.push(["H. Imprevistos",imp,((pImp)*100).toFixed(0)+"% sobre Costo Directo"]);
+  rows.push(["I. Utilidad",ut,((pUt)*100).toFixed(0)+"% sobre Costo Directo"]);
+  rows.push(["J. IVA sobre Utilidad",iva,Math.round((pIva)*100)+"% sobre Utilidad"]);
+  rows.push(["COSTO TOTAL OBRA CIVIL",obraCivil,"Obra Civil"]);
+  if(pma > 0) rows.push(["Plan Manejo Ambiental (PMA)",pma,((pPma)*100).toFixed(2)+"% sobre Costo Directo"]);
+  if(pmt > 0) rows.push(["Plan Manejo Transito (PMT)",pmt,((pPmt)*100).toFixed(2)+"% sobre Costo Directo"]);
+  rows.push(["COSTO TOTAL OBRA",costoObra,"Obra Civil + PMA + PMT"]);
+  if(interObra > 0) rows.push(["Interventoria",interObra,((pInt)*100).toFixed(0)+"% sobre Costo Obra"]);
+  if(sumDirecto > 0) {
+    rows.push(["Subtotal Suministros",sumDirecto,"Costo Directo"]);
+    rows.push(["A.I.U Suministros (29.1%)",aiuSum,"29.1% sobre Suministros"]);
+  }
+  rows.push(["COSTO TOTAL DEL PROYECTO",tot,"Presupuesto General"]);
   rows.push(["Valor por Metro de Obra [$/ml]",costoMl,"$/ml sobre Longitud"]);
   rows.push([]);
 
@@ -614,13 +618,17 @@ async function exportMAESTRA(P,R,T,sumLat,sumTrans,pbItems,inpData,estSepData, u
         if(it.c.startsWith('S')) sumPb2 += v2; else cdPb2 += v2;
       }
     });
-    var admPb2 = Math.round(cdPb2 * (P.porcAdmin || 0.29));
-    var impPb2 = Math.round(cdPb2 * (P.porcImprevistos || 0.01));
-    var utPb2  = Math.round(cdPb2 * (P.porcUtilidad || 0.05));
-    var ivaPb2 = Math.round(utPb2 * (P.porcIVA || 0.19));
-    var pmaPb2 = (P.reqPMA === 'N' || P.reqPMA === false) ? 0 : Math.round(cdPb2 * (P.porcPMA !== undefined ? P.porcPMA : 0.025525));
-    var pmtPb2 = (P.reqPMT === 'N' || P.reqPMT === false) ? 0 : Math.round(cdPb2 * (P.porcPMT !== undefined ? P.porcPMT : 0.051068));
-    var totPb2 = cdPb2 + admPb2 + impPb2 + utPb2 + ivaPb2 + pmaPb2 + pmtPb2 + sumPb2;
+    var admPb2 = Math.round(cdPb2 * pAdmin);
+    var impPb2 = Math.round(cdPb2 * pImp);
+    var utPb2  = Math.round(cdPb2 * pUt);
+    var ivaPb2 = Math.round(utPb2 * pIva);
+    var pmaPb2 = (P.reqPMA !== 'S' && P.reqPMA !== true) ? 0 : Math.round(cdPb2 * pPma);
+    var pmtPb2 = (P.reqPMT !== 'S' && P.reqPMT !== true) ? 0 : Math.round(cdPb2 * pPmt);
+    var obraCivilPb2 = cdPb2 + admPb2 + impPb2 + utPb2 + ivaPb2;
+    var costoObraPb2 = obraCivilPb2 + pmaPb2 + pmtPb2;
+    var interPb2 = (P.reqInterventoria === "S" || P.reqInterventoria === true) ? Math.round((costoObraPb2 + sumPb2 + sumPb2 * 0.291) * pInt) : 0;
+    var aiuSumPb2 = Math.round(sumPb2 * 0.291);
+    var totPb2 = costoObraPb2 + interPb2 + sumPb2 + aiuSumPb2;
     var mlPb2  = lt > 0 ? Math.round(totPb2 / lt) : 0;
 
     curRow++; // separador
@@ -658,17 +666,21 @@ async function exportMAESTRA(P,R,T,sumLat,sumTrans,pbItems,inpData,estSepData, u
     let sumFormula = sumRoots.length > 0 ? sumRoots.map(c => `F${rowMap[c.c]}`).join('+') : `${sumPb2}`;
 
     var rCD = curRow; addFR('F. COSTO DIRECTO OBRA CIVIL',   cdPb2, null, false, cdFormula);
-    var rAdm = curRow; addFR('G. Administracion',             admPb2, P.porcAdmin||0.29, false, `F${rCD}*C${rAdm}`);
-    var rImp = curRow; addFR('H. Imprevistos',                impPb2, P.porcImprevistos||0.01, false, `F${rCD}*C${rImp}`);
-    var rUt = curRow; addFR('I. Utilidad',                   utPb2,  P.porcUtilidad||0.05, false, `F${rCD}*C${rUt}`);
-    var rIva = curRow; addFR('J. IVA sobre Utilidad',         ivaPb2, P.porcIVA||0.19, false, `F${rUt}*C${rIva}`);
+    var rAdm = curRow; addFR('G. Administracion',             admPb2, pAdmin, false, `F${rCD}*C${rAdm}`);
+    var rImp = curRow; addFR('H. Imprevistos',                impPb2, pImp, false, `F${rCD}*C${rImp}`);
+    var rUt = curRow; addFR('I. Utilidad',                   utPb2,  pUt, false, `F${rCD}*C${rUt}`);
+    var rIva = curRow; addFR('J. IVA sobre Utilidad',         ivaPb2, pIva, false, `F${rUt}*C${rIva}`);
     
-    var rPma = -1, rPmt = -1, rSum = -1;
-    if(pmaPb2 > 0) { rPma = curRow; addFR('Plan Manejo Ambiental (PMA)', pmaPb2, P.porcPMA||0.025525, false, `F${rCD}*C${rPma}`); }
-    if(pmtPb2 > 0) { rPmt = curRow; addFR('Plan Manejo Transito (PMT)',  pmtPb2, P.porcPMT||0.051068, false, `F${rCD}*C${rPmt}`); }
-    if(sumPb2 > 0) { rSum = curRow; addFR('Suministros (Costo Directo)', sumPb2, null, false, sumFormula); }
+    var rPma = -1, rPmt = -1, rSum = -1, rInt = -1;
+    if(pmaPb2 > 0) { rPma = curRow; addFR('Plan Manejo Ambiental (PMA)', pmaPb2, pPma, false, `F${rCD}*C${rPma}`); }
+    if(pmtPb2 > 0) { rPmt = curRow; addFR('Plan Manejo Transito (PMT)',  pmtPb2, pPmt, false, `F${rCD}*C${rPmt}`); }
+    if(interPb2 > 0) { rInt = curRow; addFR('Interventoria', interPb2, pInt, false); }
+    if(sumPb2 > 0) {
+      rSum = curRow; addFR('Suministros (Costo Directo)', sumPb2, null, false, sumFormula);
+      addFR('A.I.U Suministros (29.1%)', aiuSumPb2, 0.291, false, `F${rSum}*0.291`);
+    }
     
-    var totF = `F${rCD}+F${rAdm}+F${rImp}+F${rUt}+F${rIva}` + (rPma > -1 ? `+F${rPma}` : '') + (rPmt > -1 ? `+F${rPmt}` : '') + (rSum > -1 ? `+F${rSum}` : '');
+    var totF = `F${rCD}+F${rAdm}+F${rImp}+F${rUt}+F${rIva}` + (rPma > -1 ? `+F${rPma}` : '') + (rPmt > -1 ? `+F${rPmt}` : '') + (rInt > -1 ? `+F${rInt}` : '') + (rSum > -1 ? `+F${rSum}+F${rSum+1}` : '');
     var rTot = curRow; addFR('COSTO TOTAL DEL PROYECTO',      totPb2, null, true, totF);
     addFR('Valor por Metro Lineal [$/ml]', mlPb2, null, false, `F${rTot}/${lt}`);
   }

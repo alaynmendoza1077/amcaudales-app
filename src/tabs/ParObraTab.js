@@ -14,7 +14,17 @@ function EF(p){
 
 function ParObraTab(props){
   var P=props.P,sP=props.sP,R=props.R;
-  var u=function(k,v){sP(function(p){var n={};for(var key in p)n[key]=p[key];n[k]=v;return n;});};
+  var u=function(k,v){
+    sP(function(p){
+      var n={};for(var key in p)n[key]=p[key];
+      n[k]=v;
+      if(k==="tiempoObra" || k==="meses"){
+        n.tiempoObra = v;
+        n.meses = v;
+      }
+      return n;
+    });
+  };
   var uGroup=function(keys,k,v){sP(function(p){
     var n=Object.assign({},p);var diff=v-(p[k]||0);n[k]=v;
     var others=keys.filter(function(x){return x!==k;});
@@ -81,7 +91,7 @@ function ParObraTab(props){
       <div className="dp" style={{display:"flex",flexDirection:"column",justifyContent:"flex-start"}}>
         <div className="dpt" style={{background:"linear-gradient(90deg, #003B73 0%, transparent 100%)"}}>Parámetros de Obra</div>
         <div className="g2" style={{marginTop:8, marginBottom:12}}>
-          <EF P={P} u={u} uGroup={uGroup} k="meses" l="MESES" def={6}/>
+          <EF P={P} u={u} uGroup={uGroup} k="tiempoObra" l="TIEMPO DE OBRA (MESES)" def={P.tiempoObra !== undefined ? P.tiempoObra : (P.meses || 2)}/>
           <EF P={P} u={u} uGroup={uGroup} k="frentesObra" l="FRENTES DE OBRA" def={1}/>
         </div>
         <div className="g2" style={{marginTop:8}}>
