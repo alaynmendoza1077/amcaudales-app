@@ -7,7 +7,11 @@ import {recalcPbItems} from './tabs/ProjectConsolidatorTab';
 import PTOBASE_DATA from './ptoBaseData';
 
 /* >>> Exportación MAESTRA con ExcelJS y Estilos Corporativos <<< */
-async function exportMAESTRA(P,R,T,sumLat,sumTrans,pbItems,inpData,estSepData, urbanismoData){
+async function exportMAESTRA(P = {}, R = [], T = [], sumLat = [], sumTrans = [], pbItems = null, inpData = null, estSepData = null, urbanismoData = null){
+  try {
+    R = R || [];
+    P = P || {};
+    T = T || [];
   if(!pbItems || pbItems.length === 0){
     pbItems = JSON.parse(JSON.stringify(PTOBASE_DATA));
   }
@@ -694,7 +698,13 @@ async function exportMAESTRA(P,R,T,sumLat,sumTrans,pbItems,inpData,estSepData, u
   var fn = (P.proyecto || P.barrio || "Proyecto").replace(/\s+/g, "_") + "_MAESTRA.xlsx";
   const buffer = await wb.xlsx.writeBuffer();
   const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-  saveFileWithDialog(blob, fn);
+    await saveFileWithDialog(blob, fn);
+    return true;
+  } catch (err) {
+    console.error("Error al exportar MAESTRA:", err);
+    alert("Error al generar archivo MAESTRA: " + err.message);
+    return false;
+  }
 }
 
 export {exportMAESTRA};

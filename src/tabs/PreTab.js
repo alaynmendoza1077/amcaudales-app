@@ -427,17 +427,26 @@ function PreTab(props){
   var costoTotalProyecto = costoObra + interObra + costoSuministros;
 
   var handleExportPre = function(){
-    var dR = props.R.filter(function(r){ return !r.sep; });
+    var realR = props.R || R || [];
+    var dR = realR.filter(function(r){ return r && !r.sep; });
     var dN = dR.filter(function(r){ return r.reponer === "S"; });
     var lt = dN.reduce(function(s,r){ return s + (r.L || 0); }, 0);
     import('../exportBanco').then(m => {
       m.exportBancoExcel(P, used, capTot, cd, adm, imp, ut, pma, pmt, sumDirecto, lt, items);
+    }).catch(err => {
+      console.error(err);
+      alert("Error al descargar Presupuesto EMPAS: " + err.message);
     });
   };
 
   var handleExportMaestraLocal = function(){
     import('../exportMAESTRA').then(m => {
-      m.exportMAESTRA(P, props.R, props.T || [], props.sumLat, props.sumTrans, items, props.inpData, props.estSepData, props.urbanismoData);
+      var realR = props.R || R || [];
+      var realT = props.T || T || [];
+      m.exportMAESTRA(P, realR, realT, props.sumLat, props.sumTrans, items, props.inpData, props.estSepData, props.urbanismoData);
+    }).catch(err => {
+      console.error(err);
+      alert("Error al descargar MAESTRA: " + err.message);
     });
   };
   return <div>

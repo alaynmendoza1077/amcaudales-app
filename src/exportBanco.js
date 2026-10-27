@@ -8,66 +8,63 @@ import PTOBASE_DATA from './ptoBaseData';
  * Cumple estrictamente con la estructura de filas, columnas, fórmulas por capítulos,
  * subtotales, totales dinámicos, cuadro de A.I.U. e imagen corporativa de EMPAS.
  */
-export async function exportBancoExcel(P, usedItems, capTot, cd, adm, imp, ut, pma, pmt, sumDirecto, lt = 1, allItems = null) {
-  const wb = new ExcelJS.Workbook();
-  wb.creator = 'AMCaudales Pro';
-  wb.created = new Date();
+export async function exportBancoExcel(P = {}, usedItems = [], capTot = {}, cd = 0, adm = 0, imp = 0, ut = 0, pma = 0, pmt = 0, sumDirecto = 0, lt = 1, allItems = null) {
+  try {
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'AMCaudales Pro';
+    wb.created = new Date();
 
-  // Mapear items utilizados y items completos
-  const usedMap = {};
-  (usedItems || []).forEach(it => {
-    if (it && it.c) usedMap[it.c] = it;
-  });
+    // Mapear items utilizados y catálogo completo
+    const usedMap = {};
+    (usedItems || []).forEach(it => {
+      if (it && it.c) usedMap[it.c] = it;
+    });
 
-  const allItemsMap = {};
-  (allItems || []).forEach(it => {
-    if (it && it.c) allItemsMap[it.c] = it;
-  });
+    const allItemsMap = {};
+    (allItems || []).forEach(it => {
+      if (it && it.c) allItemsMap[it.c] = it;
+    });
 
-  // Base del catálogo EMPAS 2026 (excluyendo los primeros 3 objetos que son metadatos de cabecera)
-  const baseCatalog = PTOBASE_DATA.filter(it => it && it.c && /^[1-9S]/.test(it.c));
+    // Catálogo base oficial EMPAS (filtrando metadatos iniciales)
+    const baseCatalog = (PTOBASE_DATA || []).filter(it => it && it.c && /^[1-9S]/.test(it.c));
 
-  // Parámetros financieros
-  const pAdmin = P.porcAdmin !== undefined ? parseFloat(P.porcAdmin) : 0.24;
-  const pImp = P.porcImprevistos !== undefined ? parseFloat(P.porcImprevistos) : 0.01;
-  const pUt = P.porcUtilidad !== undefined ? parseFloat(P.porcUtilidad) : 0.05;
-  const pIva = P.porcIVA !== undefined ? parseFloat(P.porcIVA) : 0.19;
-  const pPma = P.porcPMA !== undefined ? parseFloat(P.porcPMA) : 0.025525;
-  const pPmt = P.porcPMT !== undefined ? parseFloat(P.porcPMT) : 0.051068;
-  const pInt = P.porcInterventoria !== undefined ? parseFloat(P.porcInterventoria) : 0.08;
+    // Parámetros financieros
+    const pAdmin = P.porcAdmin !== undefined ? parseFloat(P.porcAdmin) : 0.24;
+    const pImp = P.porcImprevistos !== undefined ? parseFloat(P.porcImprevistos) : 0.01;
+    const pUt = P.porcUtilidad !== undefined ? parseFloat(P.porcUtilidad) : 0.05;
+    const pIva = P.porcIVA !== undefined ? parseFloat(P.porcIVA) : 0.19;
+    const pPma = P.porcPMA !== undefined ? parseFloat(P.porcPMA) : 0.025525;
+    const pPmt = P.porcPMT !== undefined ? parseFloat(P.porcPMT) : 0.051068;
+    const pInt = P.porcInterventoria !== undefined ? parseFloat(P.porcInterventoria) : 0.08;
 
-  // Estilos y paleta institucional EMPAS
-  const fillHeader = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF003B73' } };
-  const fillSubHeader = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD6E4F0' } };
-  const fillFormTitle = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEBF5FB' } };
-  const fillCap1 = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1A3A5C' } };
-  const fillCap2 = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1D6A9C' } };
-  const fillCap3 = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD6E4F0' } };
-  const fillResumen = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEBF5FB' } };
-  const fillRowAlt = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
+    // Estilos institucionales EMPAS
+    const fillHeader = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF003B73' } };
+    const fillSubHeader = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD6E4F0' } };
+    const fillFormTitle = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEBF5FB' } };
+    const fillCap1 = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1A3A5C' } };
+    const fillCap2 = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1D6A9C' } };
+    const fillCap3 = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD6E4F0' } };
+    const fillResumen = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEBF5FB' } };
+    const fillRowAlt = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
 
-  const fontWhiteBold = (sz = 10) => ({ name: 'Arial', size: sz, bold: true, color: { argb: 'FFFFFFFF' } });
-  const fontNavyBold = (sz = 10) => ({ name: 'Arial', size: sz, bold: true, color: { argb: 'FF003B73' } });
-  const fontData = (bold = false, sz = 10) => ({ name: 'Arial', size: sz, bold: !!bold, color: { argb: 'FF0A0A0A' } });
+    const fontWhiteBold = (sz = 10) => ({ name: 'Arial', size: sz, bold: true, color: { argb: 'FFFFFFFF' } });
+    const fontNavyBold = (sz = 10) => ({ name: 'Arial', size: sz, bold: true, color: { argb: 'FF003B73' } });
+    const fontData = (bold = false, sz = 10) => ({ name: 'Arial', size: sz, bold: !!bold, color: { argb: 'FF0A0A0A' } });
 
-  const borderThin = {
-    top: { style: 'thin', color: { argb: 'FFBBBBBB' } },
-    left: { style: 'thin', color: { argb: 'FFBBBBBB' } },
-    bottom: { style: 'thin', color: { argb: 'FFBBBBBB' } },
-    right: { style: 'thin', color: { argb: 'FFBBBBBB' } }
-  };
-  const borderHeader = {
-    top: { style: 'medium', color: { argb: 'FF002244' } },
-    left: { style: 'medium', color: { argb: 'FF002244' } },
-    bottom: { style: 'medium', color: { argb: 'FF002244' } },
-    right: { style: 'medium', color: { argb: 'FF002244' } }
-  };
+    const borderThin = {
+      top: { style: 'thin', color: { argb: 'FFBBBBBB' } },
+      left: { style: 'thin', color: { argb: 'FFBBBBBB' } },
+      bottom: { style: 'thin', color: { argb: 'FFBBBBBB' } },
+      right: { style: 'thin', color: { argb: 'FFBBBBBB' } }
+    };
+    const borderHeader = {
+      top: { style: 'medium', color: { argb: 'FF002244' } },
+      left: { style: 'medium', color: { argb: 'FF002244' } },
+      bottom: { style: 'medium', color: { argb: 'FF002244' } },
+      right: { style: 'medium', color: { argb: 'FF002244' } }
+    };
 
-  /**
-   * Función constructora de la hoja oficial
-   */
-  const buildSheet = (wsName, autoHideZeroRows = true) => {
-    const ws = wb.addWorksheet(wsName, {
+    const ws = wb.addWorksheet('10.Presupuesto2026', {
       views: [{ showGridLines: true }]
     });
 
@@ -203,25 +200,21 @@ export async function exportBancoExcel(P, usedItems, capTot, cd, adm, imp, ut, p
 
     // Filas 26+: Inyección secuencial de items del catálogo
     let currentRow = 26;
-    const rowMap = {}; // code -> excel row number
-    const isLeafMap = {}; // code -> boolean
+    const rowMap = {};
+    const isLeafMap = {};
 
-    // Pre-procesar items para saber si son hoja
     baseCatalog.forEach(it => {
       const parts = it.c.split('.');
       const hasPrice = (it.p || 0) > 0;
-      // Es hoja si tiene precio unitario o es nivel 4
-      const isLeaf = hasPrice || parts.length >= 4;
-      isLeafMap[it.c] = isLeaf;
+      isLeafMap[it.c] = hasPrice || parts.length >= 4;
     });
 
-    baseCatalog.forEach((it, idx) => {
+    baseCatalog.forEach(it => {
       const code = it.c;
       const parts = code.split('.');
       const lv = parts.length;
       const isLeaf = isLeafMap[code];
 
-      // Verificar si hay datos actualizados del proyecto
       const usedItem = usedMap[code];
       const allItem = allItemsMap[code];
       const sourceItem = usedItem || allItem || it;
@@ -230,7 +223,6 @@ export async function exportBancoExcel(P, usedItems, capTot, cd, adm, imp, ut, p
       const pu = isLeaf ? (sourceItem.p !== undefined ? sourceItem.p : it.p || 0) : null;
       const hasVal = isLeaf && qty > 0;
 
-      // Descripción personalizada según parámetros (máquina/manual)
       let desc = sourceItem.d || it.d || '';
       if (code === "2.01.01" && P.nombreExcMaquina) desc = P.nombreExcMaquina.replace('%', '').trim();
       else if (desc.toLowerCase().includes("sin acarreo libre") && P.nombreExcMaquina) desc = desc.replace(/sin acarreo libre/ig, P.nombreExcMaquina.replace('%', '').trim());
@@ -281,13 +273,13 @@ export async function exportBancoExcel(P, usedItems, capTot, cd, adm, imp, ut, p
       cellF.alignment = { horizontal: 'right', vertical: 'middle' };
       cellF.numFmt = '"$"#,##0.00';
 
-      // Col H: Flag de Estado / Macro
+      // Col H: Flag de Estado
       const cellH = row.getCell(8);
       cellH.value = isLeaf ? (hasVal ? 1 : 0) : 1;
       cellH.alignment = { horizontal: 'center', vertical: 'middle' };
       cellH.font = fontData(false, 8);
 
-      // Estilos según jerarquía
+      // Estilos según nivel jerárquico
       if (!isLeaf) {
         if (lv === 1) {
           row.eachCell({ includeEmpty: true }, (c, col) => {
@@ -318,32 +310,26 @@ export async function exportBancoExcel(P, usedItems, capTot, cd, adm, imp, ut, p
           c.border = borderThin;
         });
         row.height = 16;
-
-        // Si la hoja tiene auto-ocultación de ceros y este ítem no se usó, se oculta
-        if (autoHideZeroRows && !hasVal) {
-          row.hidden = true;
-        }
       }
 
       currentRow++;
     });
 
-    // Inyección de Fórmulas Dinámicas en Subcapítulos y Capítulos
-    // De abajo hacia arriba para que cada grupo sume a sus hijos directos
+    // Inyección de fórmulas dinámicas en grupos y capítulos
     baseCatalog.slice().reverse().forEach(it => {
       const code = it.c;
       const isLeaf = isLeafMap[code];
       if (!isLeaf) {
         const parentRow = rowMap[code];
-        // Buscar hijos directos en el catálogo
         const directChildren = baseCatalog.filter(child => {
           const p = child.c.split('.');
           p.pop();
           return p.join('.') === code;
         });
 
-        if (directChildren.length > 0) {
-          const sumFormula = directChildren.map(child => `F${rowMap[child.c]}`).join('+');
+        const validChildren = directChildren.filter(c => rowMap[c.c] !== undefined);
+        if (validChildren.length > 0 && parentRow !== undefined) {
+          const sumFormula = validChildren.map(c => `F${rowMap[c.c]}`).join('+');
           const cellF = ws.getCell(`F${parentRow}`);
           cellF.value = { formula: sumFormula };
           cellF.numFmt = '"$"#,##0.00';
@@ -351,7 +337,7 @@ export async function exportBancoExcel(P, usedItems, capTot, cd, adm, imp, ut, p
       }
     });
 
-    // Fila separadora antes del resumen financiero
+    // Fila separadora
     ws.addRow([]);
     currentRow++;
 
@@ -367,12 +353,10 @@ export async function exportBancoExcel(P, usedItems, capTot, cd, adm, imp, ut, p
         cell.font = isMain ? fontWhiteBold(10) : fontData(isBold, 10);
       }
 
-      // Col B: Etiqueta
       const cellB = r.getCell(2);
       cellB.value = label;
       cellB.alignment = { horizontal: 'left', vertical: 'middle', indent: isMain ? 1 : 2 };
 
-      // Col C: Porcentaje
       const cellC = r.getCell(3);
       if (pctVal !== null && pctVal !== undefined) {
         cellC.value = pctVal;
@@ -380,7 +364,6 @@ export async function exportBancoExcel(P, usedItems, capTot, cd, adm, imp, ut, p
         cellC.alignment = { horizontal: 'center', vertical: 'middle' };
       }
 
-      // Col F: Total
       const cellF = r.getCell(6);
       if (formulaStr) {
         cellF.value = { formula: formulaStr, result: hardResult };
@@ -395,7 +378,6 @@ export async function exportBancoExcel(P, usedItems, capTot, cd, adm, imp, ut, p
       return retRow;
     };
 
-    // Capítulos de obra civil para fórmula de Costo Directo
     const capRoots = ['1', '2', '3', '4', '5'].filter(ch => rowMap[ch] !== undefined);
     const cdFormula = capRoots.length > 0 ? capRoots.map(ch => `F${rowMap[ch]}`).join('+') : `${cd}`;
 
@@ -438,20 +420,20 @@ export async function exportBancoExcel(P, usedItems, capTot, cd, adm, imp, ut, p
     const costoTotalProyecto = costoObra + interObra + sumDirecto + aiuSum + intSum;
     const rTotProy = addResumenRow('COSTO TOTAL DEL PROYECTO', null, totProyFormula, costoTotalProyecto, true, true);
 
-    if (lt && lt > 0) {
-      addResumenRow('Valor por Metro Lineal [$/ml]', null, `F${rTotProy}/${lt.toFixed(2)}`, Math.round(costoTotalProyecto / lt), false, true);
+    const ltNum = parseFloat(lt);
+    if (!isNaN(ltNum) && ltNum > 0) {
+      addResumenRow('Valor por Metro Lineal [$/ml]', null, `F${rTotProy}/${ltNum.toFixed(2)}`, Math.round(costoTotalProyecto / ltNum), false, true);
     }
-  };
 
-  // Hoja 1: Oficial EMPAS 2026 (con ocultación de filas en cero, tal como genera el macro EMPAS)
-  buildSheet('10.Presupuesto2026', true);
-
-  // Hoja 2: Catálogo Completo Visible (todas las filas expandidas con fórmulas para consulta)
-  buildSheet('10.Presupuesto_Completo', false);
-
-  // Generación y descarga del archivo Excel
-  const buffer = await wb.xlsx.writeBuffer();
-  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-  const filename = (P.proyecto || 'Proyecto').replace(/\s+/g, '_') + '_Presupuesto_EMPAS_2026.xlsx';
-  saveFileWithDialog(blob, filename);
+    // Generar buffer XLSX y descargar de forma segura
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const filename = (P.proyecto || 'Proyecto').replace(/\s+/g, '_') + '_Presupuesto_EMPAS_2026.xlsx';
+    await saveFileWithDialog(blob, filename);
+    return true;
+  } catch (error) {
+    console.error("Error al exportar Presupuesto EMPAS:", error);
+    alert("Hubo un error al generar el archivo Excel: " + error.message);
+    return false;
+  }
 }
