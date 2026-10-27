@@ -378,6 +378,7 @@ export async function exportBancoExcel(P = {}, usedItems = [], capTot = {}, cd =
       return retRow;
     };
 
+    const iva = Math.round(ut * pIva);
     const capRoots = ['1', '2', '3', '4', '5'].filter(ch => rowMap[ch] !== undefined);
     const cdFormula = capRoots.length > 0 ? capRoots.map(ch => `F${rowMap[ch]}`).join('+') : `${cd}`;
 
