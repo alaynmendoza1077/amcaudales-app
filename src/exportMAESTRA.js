@@ -674,13 +674,19 @@ async function exportMAESTRA(P,R,T,sumLat,sumTrans,pbItems,inpData,estSepData, u
     var rPma = -1, rPmt = -1, rSum = -1, rInt = -1;
     if(pmaPb2 > 0) { rPma = curRow; addFR('Plan Manejo Ambiental (PMA)', pmaPb2, pPma, false, `F${rCD}*C${rPma}`); }
     if(pmtPb2 > 0) { rPmt = curRow; addFR('Plan Manejo Transito (PMT)',  pmtPb2, pPmt, false, `F${rCD}*C${rPmt}`); }
-    if(interPb2 > 0) { rInt = curRow; addFR('Interventoria', interPb2, pInt, false); }
+    var ctoObF = `F${rCD}+F${rAdm}+F${rImp}+F${rUt}+F${rIva}` + (rPma > -1 ? `+F${rPma}` : '') + (rPmt > -1 ? `+F${rPmt}` : '');
+    var rCtoOb = curRow; addFR('COSTO TOTAL OBRA', costoObraPb2, null, true, ctoObF);
+    if(interPb2 > 0) { 
+      var sumSubInt = sumPb2 > 0 ? `+F${curRow+1}+F${curRow+2}` : '';
+      var intFormula = `(F${rCtoOb}${sumSubInt})*C${curRow}`;
+      rInt = curRow; addFR('Interventoria', interPb2, pInt, false, intFormula); 
+    }
     if(sumPb2 > 0) {
       rSum = curRow; addFR('Suministros (Costo Directo)', sumPb2, null, false, sumFormula);
       addFR('A.I.U Suministros (29.1%)', aiuSumPb2, 0.291, false, `F${rSum}*0.291`);
     }
     
-    var totF = `F${rCD}+F${rAdm}+F${rImp}+F${rUt}+F${rIva}` + (rPma > -1 ? `+F${rPma}` : '') + (rPmt > -1 ? `+F${rPmt}` : '') + (rInt > -1 ? `+F${rInt}` : '') + (rSum > -1 ? `+F${rSum}+F${rSum+1}` : '');
+    var totF = `F${rCtoOb}` + (rInt > -1 ? `+F${rInt}` : '') + (rSum > -1 ? `+F${rSum}+F${rSum+1}` : '');
     var rTot = curRow; addFR('COSTO TOTAL DEL PROYECTO',      totPb2, null, true, totF);
     addFR('Valor por Metro Lineal [$/ml]', mlPb2, null, false, `F${rTot}/${lt}`);
   }

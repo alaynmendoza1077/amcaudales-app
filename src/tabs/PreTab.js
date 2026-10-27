@@ -459,7 +459,7 @@ function PreTab(props){
         <button className={"stab"+(filt==="all"?" a":"")} onClick={function(){setFilt("all");}}>Todos ({leafs.length})</button>
       </div>
       <input type="text" placeholder="Buscar codigo o descripcion..." value={search} onChange={function(e){setSearch(e.target.value);}} style={{flex:1,background:"#0C1122",border:"1px solid #1C2E4A",borderRadius:3,padding:"5px 8px",color:"#D8E2F0",fontSize:12,minWidth:160}}/>
-      {used.length>0 && (
+      {(used.length > 0 || leafs.length > 0) && (
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
           <button className="btn" onClick={handleExportPre} style={{fontSize:12,padding:"6px 14px",fontWeight:700,background:"linear-gradient(135deg, #10b981 0%, #047857 100%)",border:"1px solid #34d399",borderRadius:5,display:"flex",alignItems:"center",gap:6,color:"#fff",cursor:"pointer",boxShadow:"0 2px 6px rgba(0,0,0,0.3)"}} title="Descargar Presupuesto Oficial en formato EMPAS (Excel)">
             📥 Descargar Presupuesto EMPAS (Excel)
