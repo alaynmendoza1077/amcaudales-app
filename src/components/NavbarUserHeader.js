@@ -11,8 +11,11 @@ export default function NavbarUserHeader({ onSaveCloud, onLoadCloud }) {
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   const handleLogout = async () => {
-    await logout();
-    setShowAuthModal(true);
+    try {
+      await logout();
+    } catch (e) {
+      console.warn('Error al cerrar sesión:', e);
+    }
   };
 
   return (

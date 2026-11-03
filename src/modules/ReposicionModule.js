@@ -426,6 +426,10 @@ export default function ReposicionModule({ onBack, initialData }){
       });
     }
       setR(results);
+      try {
+        var draftData = { v: "v36", P: P, T: T, sumLat: sumLat, sumTrans: sumTrans, alivData: alivData, sumData: sumData, estSepData: estSepData, urbanismoData: urbanismoData, inpData: inpData, flowStage: flowStage, tab: tab, autoAreasPoly: autoAreasPoly, selMap: selMap, outfalls: outfalls, filterSel: filterSel, R: results, timestamp: new Date().toISOString() };
+        localStorage.setItem('AMC_current_project_state', JSON.stringify(draftData));
+      } catch(e){}
       import('../tabs/ProjectConsolidatorTab').then(({ recalcPbItems }) => {
         setPbItems(prevPb => {
           var basePb = (prevPb && prevPb.length > 0) ? prevPb : (PTOBASE_DATA || []).map(it => ({ c: it.c, d: it.d, u: it.u, p: it.p, lv: it.lv, q: 0, auto: 0 }));
@@ -1121,7 +1125,33 @@ const handleBack = () => {
             alert("Error al restaurar proyecto desde la Nube.");
           }
         }}
-        onSaveCurrentProject={(title) => saveProjectToCloud(P, title)}
+        onSaveCurrentProject={(title) => {
+          return import('../tabs/ProjectConsolidatorTab').then(({ recalcPbItems }) => {
+            var fullData = {
+              v: "v36",
+              P: { ...P, proyecto: title },
+              T: T,
+              sumLat: sumLat,
+              sumTrans: sumTrans,
+              pbItems: pbItems,
+              alivData: alivData,
+              sumData: sumData,
+              estSepData: estSepData,
+              urbanismoData: urbanismoData,
+              inpData: inpData,
+              flowStage: flowStage,
+              tab: tab,
+              autoAreasPoly: autoAreasPoly,
+              selMap: selMap,
+              outfalls: outfalls,
+              filterSel: filterSel,
+              R: R
+            };
+            var freshPbItems = recalcPbItems(fullData);
+            fullData.pbItems = freshPbItems;
+            return saveProjectToCloud(fullData, title);
+          });
+        }}
       />
     </div>
   </div>;

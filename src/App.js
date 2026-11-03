@@ -3,6 +3,7 @@ import HomeDashboard from './components/HomeDashboard';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import NavbarUserHeader from './components/NavbarUserHeader';
 import StartLoginPortal from './components/StartLoginPortal';
+import AuthModal from './components/AuthModal';
 import LandingPage from './components/LandingPage';
 import NewProjectModal from './components/NewProjectModal';
 import UpgradeProModal from './components/UpgradeProModal';
@@ -187,30 +188,26 @@ function AppContent() {
     return <Loader />;
   }
 
-  // ── Si NO hay usuario autenticado: Mostrar Landing Page ──
+  // ── Si NO hay usuario autenticado: Mostrar Landing Page con Modal de Acceso ──
   if (!user) {
     return (
       <>
-        {showLoginPortal ? (
-          <StartLoginPortal
-            onGuestAccess={() => {
-              loginAsGuest();
-              setShowLoginPortal(false);
-            }}
-          />
-        ) : (
-          <LandingPage
-            onStartTrial={() => {
-              loginAsGuest();
-            }}
-            onOpenExpress={() => {
-              loginAsGuest();
-              setActiveModule('express');
-            }}
-            onOpenLogin={() => setShowLoginPortal(true)}
-            onOpenProModal={() => setShowUpgradeModal(true)}
-          />
-        )}
+        <LandingPage
+          onStartTrial={() => {
+            loginAsGuest();
+          }}
+          onOpenExpress={() => {
+            loginAsGuest();
+            setActiveModule('express');
+          }}
+          onOpenLogin={() => setShowLoginPortal(true)}
+          onOpenProModal={() => setShowUpgradeModal(true)}
+        />
+
+        <AuthModal
+          isOpen={showLoginPortal}
+          onClose={() => setShowLoginPortal(false)}
+        />
 
         <UpgradeProModal
           isOpen={showUpgradeModal}

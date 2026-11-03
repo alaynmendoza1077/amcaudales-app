@@ -7,6 +7,21 @@ export default function LandingPage({ onStartTrial, onOpenExpress, onOpenLogin, 
 
   return (
     <div style={containerStyle}>
+      {/* ── BARRA SUPERIOR DE ACCESO RÁPIDO ── */}
+      <header style={landingNavStyle}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={navLogoIconStyle}>AMC</div>
+          <div>
+            <span style={{ fontWeight: 800, fontSize: '1.05rem', color: '#ffffff', letterSpacing: '-0.02em' }}>AMCaudales Pro</span>
+            <span style={{ display: 'block', fontSize: '0.7rem', color: '#60a5fa' }}>Ingeniería Hidráulica & Presupuestos</span>
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          <button onClick={onOpenExpress} style={navExpressBtnStyle}>🧮 Calc Express</button>
+          <button onClick={onOpenLogin} style={navLoginBtnStyle}>🔑 Iniciar Sesión</button>
+          <button onClick={onStartTrial} style={navRegisterBtnStyle}>⚡ Empezar Gratis</button>
+        </div>
+      </header>
       
       {/* ── HERO SECTION ── */}
       <section style={heroSectionStyle}>
@@ -605,4 +620,64 @@ const footerStyle = {
   background: '#020617',
   borderTop: '1px solid rgba(255,255,255,0.05)',
   marginTop: 'auto'
+};
+
+const landingNavStyle = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  padding: '14px 28px',
+  background: 'rgba(10, 17, 40, 0.85)',
+  backdropFilter: 'blur(12px)',
+  borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+  position: 'sticky',
+  top: 0,
+  zIndex: 1000
+};
+
+const navLogoIconStyle = {
+  width: '36px',
+  height: '36px',
+  background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
+  borderRadius: '8px',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  fontWeight: '800',
+  fontSize: '13px',
+  color: '#ffffff'
+};
+
+const navExpressBtnStyle = {
+  background: 'transparent',
+  border: '1px solid rgba(255,255,255,0.15)',
+  color: '#cbd5e1',
+  padding: '8px 14px',
+  borderRadius: '8px',
+  fontSize: '0.82rem',
+  fontWeight: '600',
+  cursor: 'pointer'
+};
+
+const navLoginBtnStyle = {
+  background: 'rgba(59, 130, 246, 0.15)',
+  border: '1px solid rgba(59, 130, 246, 0.4)',
+  color: '#60a5fa',
+  padding: '8px 16px',
+  borderRadius: '8px',
+  fontSize: '0.82rem',
+  fontWeight: '700',
+  cursor: 'pointer'
+};
+
+const navRegisterBtnStyle = {
+  background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+  border: 'none',
+  color: '#ffffff',
+  padding: '8px 18px',
+  borderRadius: '8px',
+  fontSize: '0.82rem',
+  fontWeight: '700',
+  cursor: 'pointer',
+  boxShadow: '0 2px 10px rgba(59, 130, 246, 0.4)'
 };
