@@ -192,8 +192,8 @@ export default function HomeDashboard({ setModule }) {
       return;
     }
 
-    // 3. Límite del Plan Gratis (1 Proyecto / 5 Proyectos Cloud max)
-    if ((mod.id === 'nuevo_proyecto' || mod.id === 'reposicion' || mod.id === 'swmm') && userPlan === 'free' && cloudProjects.length >= 5) {
+    // 3. Módulos de diseño (El límite del Plan Gratis se gestiona al guardar en la nube con opción de sobreescritura)
+    if (false && (mod.id === 'nuevo_proyecto' || mod.id === 'reposicion' || mod.id === 'swmm') && userPlan === 'free' && cloudProjects.length >= 5) {
       setBlockedFeature('Límite del Plan Gratis (1 Diseño Completo / 5 Proyectos).');
       setShowUpgradeModal(true);
       return;

@@ -5,10 +5,13 @@ import UserProjectsModal from './UserProjectsModal';
 import UpgradeProModal from './UpgradeProModal';
 
 export default function NavbarUserHeader({ onSaveCloud, onLoadCloud }) {
-  const { user, logout, isCloudConfigured, userPlan } = useAuth();
+  const { user, logout, isCloudConfigured, userPlan, cloudProjects } = useAuth();
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showProjectsModal, setShowProjectsModal] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+
+  const isGuest = Boolean(!user || user.isGuest || user.id === 'usr_guest' || user.email === 'invitado@amcaudales.com');
+  const cloudCount = cloudProjects.filter(p => p.isCloud).length;
 
   const handleLogout = async () => {
     try {
@@ -21,6 +24,7 @@ export default function NavbarUserHeader({ onSaveCloud, onLoadCloud }) {
   return (
     <>
       <header style={headerContainerStyle}>
+        {/* LOGO & NOMBRE DEL SOFTWARE */}
         <div style={logoSectionStyle}>
           <div style={logoBadgeStyle}>AMC</div>
           <div>
@@ -29,80 +33,117 @@ export default function NavbarUserHeader({ onSaveCloud, onLoadCloud }) {
           </div>
         </div>
 
+        {/* ACCIONES DE SESIÓN Y NAVEGACIÓN */}
         <div style={actionsSectionStyle}>
-          {/* Badge del Plan (Pro vs Free vs Admin) */}
-          {user?.id === 'usr_super_admin' || user?.email === 'admin@amcaudales.com' ? (
-            <span style={adminBadgeStyle} title="Modo Super Administrador Master">
-              👑 Super Admin
-            </span>
-          ) : userPlan === 'pro' ? (
-            <span style={proBadgeStyle} title="Tienes acceso ilimitado a todas las herramientas Pro">
-              👑 Plan Pro Activo
-            </span>
-          ) : (
-            <button
-              onClick={() => setShowUpgradeModal(true)}
-              style={freeBadgeStyle}
-              title="Haz clic para actualizar a Plan Pro y desbloquear proyectos ilimitados"
-            >
-              ⚡ 1er Proyecto Gratis • Pasar a Pro 👑
-            </button>
-          )}
+          {/* Botón de Mis Proyectos con Contador */}
+          <button
+            onClick={() => setShowProjectsModal(true)}
+            style={cloudProjectsBtnStyle}
+            title="Ver tus proyectos guardados (Locales y en la Nube)"
+          >
+            📂 Mis Proyectos
+            {cloudProjects.length > 0 && (
+              <span style={projectCountPillStyle}>{cloudProjects.length}</span>
+            )}
+          </button>
 
-          {user && !user.isGuest && user.email !== 'invitado@amcaudales.com' ? (
+          {/* ESTADO 1: USUARIO AUTENTICADO (CON CUENTA) */}
+          {!isGuest ? (
             <div style={userControlStyle}>
-              <button
-                onClick={() => setShowProjectsModal(true)}
-                style={cloudProjectsBtnStyle}
-                title="Ver tus proyectos alojados en la Nube"
+              {/* Tarjeta de Bienvenida con Nombre Completo y Correo */}
+              <div
+                style={welcomeCardStyle}
+                title={`Sesión iniciada como: ${user.user_metadata?.full_name || user.email} (${user.email})`}
               >
-                📂 Mis Proyectos
-              </button>
-
-              <div style={userAvatarStyle}>
-                <span style={userInitialStyle}>
+                <div style={userInitialStyle}>
                   {(user.user_metadata?.full_name || user.email || 'U')[0].toUpperCase()}
-                </span>
-                <span style={userNameStyle}>
-                  {user.user_metadata?.full_name || user.email.split('@')[0]}
-                </span>
+                </div>
+                <div style={userTextColStyle}>
+                  <div style={welcomeGreetingStyle}>
+                    👋 ¡Bienvenido,{' '}
+                    <strong style={{ color: '#38bdf8' }}>
+                      {user.user_metadata?.full_name || user.email.split('@')[0]}
+                    </strong>!
+                  </div>
+                  <div style={userPlanSubtextStyle}>
+                    {user?.isAdmin || user?.id === 'usr_super_admin' ? (
+                      <span style={{ color: '#c084fc', fontWeight: 'bold' }}>👑 Super Administrador Master</span>
+                    ) : userPlan === 'pro' ? (
+                      <span style={{ color: '#34d399', fontWeight: 'bold' }}>
+                        👑 Plan Pro ({cloudCount}/20 Proyectos al mes)
+                      </span>
+                    ) : (
+                      <span style={{ color: '#fbbf24', fontWeight: '600' }}>
+                        ⚡ Plan Gratis ({cloudCount}/1 Proyecto Nube)
+                      </span>
+                    )}
+                  </div>
+                </div>
               </div>
 
-              <button onClick={handleLogout} style={logoutBtnStyle} title="Cerrar Sesión e Iniciar Sesión con Otra Cuenta">
-                🚪 Cerrar Sesión
+              {/* Botón para pasar a Pro si está en Plan Gratis */}
+              {userPlan === 'free' && !user?.isAdmin && (
+                <button
+                  onClick={() => setShowUpgradeModal(true)}
+                  style={upgradeHeaderBtnStyle}
+                  title="Actualizar a Plan Pro para guardar hasta 20 proyectos al mes y exportar presupuestos oficiales"
+                >
+                  👑 Pasar a Pro
+                </button>
+              )}
+
+              {/* Botón Cerrar Sesión */}
+              <button
+                onClick={handleLogout}
+                style={logoutBtnStyle}
+                title="Cerrar Sesión e ingresar con otra cuenta"
+              >
+                🚪 Salir
               </button>
             </div>
           ) : (
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-              <button
-                onClick={() => setShowProjectsModal(true)}
-                style={cloudProjectsBtnStyle}
-                title="Ver proyectos en la nube"
-              >
-                📂 Mis Proyectos
-              </button>
-              
-              <div 
+            /* ESTADO 2: MODO INVITADO (SIN CUENTA) */
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+              {/* Indicador llamativo de Modo Invitado */}
+              <div
                 onClick={() => setShowAuthModal(true)}
-                style={{ ...userAvatarStyle, cursor: 'pointer', background: 'rgba(255, 255, 255, 0.05)', border: '1px solid #334155' }}
-                title="Haz clic para iniciar sesión con tu cuenta"
+                style={guestCardStyle}
+                title="Estás en Modo Invitado. Los cambios solo se guardan en este computador. Haz clic para Iniciar Sesión o Registrarte."
               >
-                <span style={userInitialStyle}>👤</span>
-                <span style={userNameStyle}>Invitado</span>
+                <span style={{ fontSize: '1.1rem' }}>👤</span>
+                <div style={{ display: 'flex', flexDirection: 'column', lineHeight: '1.2', textAlign: 'left' }}>
+                  <span style={{ fontSize: '0.8rem', fontWeight: '800', color: '#fbbf24' }}>
+                    Modo Invitado (Sin Cuenta)
+                  </span>
+                  <span style={{ fontSize: '0.68rem', color: '#94a3b8' }}>
+                    Proyectos solo en este PC
+                  </span>
+                </div>
               </div>
 
+              {/* Botón Iniciar Sesión / Registrarse */}
               <button
                 onClick={() => setShowAuthModal(true)}
                 style={loginBtnStyle}
+                title="Inicia sesión o crea tu cuenta para guardar en la Nube y abrir desde cualquier PC"
               >
                 🔑 Iniciar Sesión / Registrarse
+              </button>
+
+              {/* Botón de acceso a Pro */}
+              <button
+                onClick={() => setShowUpgradeModal(true)}
+                style={freeBadgeStyle}
+                title="Conoce las ventajas del Plan Pro de AMCaudales"
+              >
+                ⚡ 1er Proy Gratis • Pro 👑
               </button>
             </div>
           )}
         </div>
       </header>
 
-      {/* Modales de Autenticación, Proyectos y Plan Pro */}
+      {/* Modales Globales */}
       <AuthModal
         isOpen={showAuthModal}
         onClose={() => setShowAuthModal(false)}
@@ -125,16 +166,18 @@ export default function NavbarUserHeader({ onSaveCloud, onLoadCloud }) {
 
 // ── ESTILOS CSS-IN-JS DE LA BARRA DE NAVEGACIÓN ──
 const headerContainerStyle = {
-  height: '60px',
+  minHeight: '64px',
   backgroundColor: '#0a1128',
-  borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+  borderBottom: '1px solid rgba(59, 130, 246, 0.25)',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'space-between',
   padding: '0 24px',
   color: '#ffffff',
-  boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
-  zIndex: 100
+  boxShadow: '0 4px 20px rgba(0, 0, 0, 0.4)',
+  zIndex: 100,
+  flexWrap: 'wrap',
+  gap: '12px'
 };
 
 const logoSectionStyle = {
@@ -144,21 +187,21 @@ const logoSectionStyle = {
 };
 
 const logoBadgeStyle = {
-  width: '36px',
-  height: '36px',
+  width: '38px',
+  height: '38px',
   background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
-  borderRadius: '8px',
+  borderRadius: '10px',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
   fontWeight: '800',
-  fontSize: '0.9rem',
+  fontSize: '0.95rem',
   color: '#ffffff',
-  boxShadow: '0 0 12px rgba(59, 130, 246, 0.4)'
+  boxShadow: '0 0 14px rgba(59, 130, 246, 0.45)'
 };
 
 const appTitleStyle = {
-  fontSize: '1.1rem',
+  fontSize: '1.15rem',
   fontWeight: '800',
   margin: 0,
   background: 'linear-gradient(to right, #60a5fa, #a78bfa)',
@@ -177,117 +220,142 @@ const appTaglineStyle = {
 const actionsSectionStyle = {
   display: 'flex',
   alignItems: 'center',
-  gap: '12px'
-};
-
-const proBadgeStyle = {
-  background: 'rgba(16, 185, 129, 0.15)',
-  border: '1px solid #10b981',
-  color: '#10b981',
-  padding: '4px 10px',
-  borderRadius: '20px',
-  fontSize: '0.78rem',
-  fontWeight: '700'
-};
-
-const adminBadgeStyle = {
-  background: 'rgba(168, 85, 247, 0.2)',
-  border: '1px solid #a855f7',
-  color: '#c084fc',
-  padding: '4px 10px',
-  borderRadius: '20px',
-  fontSize: '0.78rem',
-  fontWeight: '700'
-};
-
-const freeBadgeStyle = {
-  background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(217, 119, 6, 0.3))',
-  border: '1px solid #f59e0b',
-  color: '#fbbf24',
-  padding: '5px 12px',
-  borderRadius: '20px',
-  fontSize: '0.78rem',
-  fontWeight: '700',
-  cursor: 'pointer',
-  transition: 'transform 0.2s'
-};
-
-const offlineBadgeStyle = {
-  background: 'rgba(148, 163, 184, 0.15)',
-  border: '1px solid #64748b',
-  color: '#cbd5e1',
-  padding: '4px 8px',
-  borderRadius: '6px',
-  fontSize: '0.72rem'
+  gap: '10px',
+  flexWrap: 'wrap'
 };
 
 const userControlStyle = {
   display: 'flex',
   alignItems: 'center',
-  gap: '10px'
+  gap: '10px',
+  flexWrap: 'wrap'
 };
 
 const cloudProjectsBtnStyle = {
   background: 'rgba(59, 130, 246, 0.15)',
   border: '1px solid #3b82f6',
   color: '#60a5fa',
-  padding: '6px 12px',
+  padding: '7px 14px',
   borderRadius: '8px',
   fontWeight: '700',
-  fontSize: '0.82rem',
+  fontSize: '0.84rem',
   cursor: 'pointer',
   display: 'flex',
   alignItems: 'center',
-  gap: '4px'
+  gap: '6px',
+  boxShadow: '0 2px 6px rgba(59, 130, 246, 0.2)'
 };
 
-const userAvatarStyle = {
+const projectCountPillStyle = {
+  backgroundColor: '#3b82f6',
+  color: '#ffffff',
+  fontSize: '0.72rem',
+  padding: '1px 6px',
+  borderRadius: '10px',
+  fontWeight: '800'
+};
+
+const welcomeCardStyle = {
   display: 'flex',
   alignItems: 'center',
-  gap: '8px',
-  background: 'rgba(255, 255, 255, 0.05)',
-  padding: '4px 10px',
-  borderRadius: '20px',
-  border: '1px solid rgba(255, 255, 255, 0.1)'
+  gap: '10px',
+  backgroundColor: 'rgba(15, 23, 42, 0.85)',
+  border: '1px solid rgba(59, 130, 246, 0.35)',
+  padding: '5px 14px',
+  borderRadius: '12px',
+  boxShadow: '0 2px 10px rgba(0, 0, 0, 0.3)'
 };
 
 const userInitialStyle = {
-  width: '24px',
-  height: '24px',
+  width: '32px',
+  height: '32px',
   borderRadius: '50%',
-  background: '#3b82f6',
-  color: 'white',
+  background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+  color: '#ffffff',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  fontWeight: 'bold',
-  fontSize: '0.75rem'
+  fontWeight: '800',
+  fontSize: '0.9rem',
+  boxShadow: '0 2px 6px rgba(59, 130, 246, 0.4)'
 };
 
-const userNameStyle = {
-  fontSize: '0.82rem',
+const userTextColStyle = {
+  display: 'flex',
+  flexDirection: 'column',
+  textAlign: 'left',
+  lineHeight: '1.25'
+};
+
+const welcomeGreetingStyle = {
+  fontSize: '0.84rem',
   fontWeight: '600',
   color: '#f8fafc'
+};
+
+const userPlanSubtextStyle = {
+  fontSize: '0.7rem',
+  marginTop: '1px'
+};
+
+const guestCardStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '8px',
+  backgroundColor: 'rgba(245, 158, 11, 0.12)',
+  border: '1px solid rgba(245, 158, 11, 0.4)',
+  padding: '6px 12px',
+  borderRadius: '10px',
+  cursor: 'pointer',
+  transition: 'border 0.2s'
+};
+
+const loginBtnStyle = {
+  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+  color: '#ffffff',
+  border: 'none',
+  padding: '8px 16px',
+  borderRadius: '8px',
+  fontWeight: '700',
+  fontSize: '0.84rem',
+  cursor: 'pointer',
+  boxShadow: '0 2px 8px rgba(16, 185, 129, 0.35)',
+  whiteSpace: 'nowrap'
+};
+
+const upgradeHeaderBtnStyle = {
+  background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+  color: '#ffffff',
+  border: 'none',
+  padding: '7px 12px',
+  borderRadius: '8px',
+  fontWeight: '700',
+  fontSize: '0.78rem',
+  cursor: 'pointer',
+  boxShadow: '0 2px 8px rgba(245, 158, 11, 0.3)',
+  whiteSpace: 'nowrap'
 };
 
 const logoutBtnStyle = {
   background: 'rgba(239, 68, 68, 0.15)',
   border: '1px solid #ef4444',
   color: '#fca5a5',
-  padding: '6px 12px',
+  padding: '7px 12px',
   borderRadius: '8px',
   fontWeight: '700',
   fontSize: '0.82rem',
-  cursor: 'pointer'
+  cursor: 'pointer',
+  whiteSpace: 'nowrap'
 };
 
-const loginBtnStyle = {
-  background: 'linear-gradient(135deg, #3b82f6, #2563eb)',
-  color: 'white',
-  border: 'none',
-  padding: '7px 14px',
+const freeBadgeStyle = {
+  background: 'rgba(245, 158, 11, 0.15)',
+  border: '1px solid #f59e0b',
+  color: '#fbbf24',
+  padding: '6px 12px',
   borderRadius: '8px',
+  fontSize: '0.78rem',
   fontWeight: '700',
-  fontSize: '0.85rem',
-  cursor: 'pointer'
+  cursor: 'pointer',
+  whiteSpace: 'nowrap'
 };

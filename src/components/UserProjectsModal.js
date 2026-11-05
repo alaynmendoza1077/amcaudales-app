@@ -1,47 +1,152 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { saveFileWithDialog } from '../utils/fileSaver';
+import AuthModal from './AuthModal';
+import UpgradeProModal from './UpgradeProModal';
 
 export default function UserProjectsModal({ isOpen, onClose, onLoadProject, onSaveCurrentProject }) {
-  const { cloudProjects, loadProjectFromCloud, saveProjectToCloud, deleteProjectFromCloud, user, isCloudConfigured } = useAuth();
+  const {
+    cloudProjects,
+    loadProjectFromCloud,
+    deleteProjectFromCloud,
+    user,
+    userPlan,
+    isCloudConfigured,
+    auditCloudConnection
+  } = useAuth();
+
   const [newProjectTitle, setNewProjectTitle] = useState('Nuevo Proyecto AMC');
   const [loading, setLoading] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
+  const [downloadingId, setDownloadingId] = useState(null);
   const [msg, setMsg] = useState('');
+  const [msgType, setMsgType] = useState('info'); // 'info' | 'success' | 'warning' | 'error'
+
+  // Modales anidados
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+
+  // Estados de diálogo de advertencia
+  const [guestConfirm, setGuestConfirm] = useState(false);
+  const [overwriteConfirm, setOverwriteConfirm] = useState(null); // { existingProject, title }
+  const [auditResult, setAuditResult] = useState(null);
 
   if (!isOpen) return null;
 
+  const isGuest = Boolean(!user || user.isGuest || user.id === 'usr_guest' || user.email === 'invitado@amcaudales.com');
+  const cloudCount = cloudProjects.filter(p => p.isCloud).length;
+  const localCount = cloudProjects.filter(p => !p.isCloud).length;
+
+  const showNotification = (text, type = 'info', duration = 3500) => {
+    setMsg(text);
+    setMsgType(type);
+    if (duration > 0) {
+      setTimeout(() => setMsg(''), duration);
+    }
+  };
+
   const handleSelectProject = async (projectId) => {
     setLoading(true);
-    setMsg('Cargando datos del proyecto...');
+    showNotification('Cargando datos del proyecto...', 'info', 0);
     try {
       const projectDataPayload = await loadProjectFromCloud(projectId);
       onLoadProject(projectDataPayload);
-      setMsg('¡Proyecto cargado con éxito!');
+      showNotification('¡Proyecto cargado con éxito!', 'success', 2000);
       setTimeout(() => {
         onClose();
       }, 700);
     } catch (err) {
-      setMsg(`Error: ${err.message}`);
+      showNotification(`Error: ${err.message}`, 'error', 4000);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSaveCurrent = async () => {
-    if (!newProjectTitle.trim()) return;
-    setLoading(true);
-    setMsg('Guardando proyecto...');
+  const handleDownloadAMC = async (p) => {
+    setDownloadingId(p.id);
+    showNotification(`Preparando archivo .AMC de "${p.title}"...`, 'info', 2000);
     try {
-      await onSaveCurrentProject(newProjectTitle.trim());
-      setMsg('¡Proyecto guardado exitosamente!');
-      setTimeout(() => {
-        setMsg('');
-      }, 2500);
+      let payload = null;
+      if (p.project_data) {
+        payload = p.project_data;
+      } else {
+        payload = await loadProjectFromCloud(p.id);
+      }
+
+      const fileName = `${(p.title || 'Proyecto_AMC').replace(/[^a-zA-Z0-9_\-]/g, '_')}.amc`;
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      await saveFileWithDialog(blob, fileName);
+      showNotification(`¡Archivo "${fileName}" descargado con éxito a tu computador! 📥`, 'success');
     } catch (err) {
-      setMsg(`Error al guardar: ${err.message}`);
+      showNotification(`Error al descargar .AMC: ${err.message}`, 'error');
+    } finally {
+      setDownloadingId(null);
+    }
+  };
+
+  const executeSave = async (title, forceOverwrite = false) => {
+    setLoading(true);
+    showNotification('Guardando proyecto...', 'info', 0);
+    try {
+      const res = await onSaveCurrentProject(title, forceOverwrite);
+
+      // Si el backend reporta que se superó el límite del plan
+      if (res && res.limitReached) {
+        if (res.plan === 'free') {
+          setOverwriteConfirm({
+            existingProject: res.existingProject,
+            title: title
+          });
+          showNotification('⚠️ Límite de Plan Gratis: Solo 1 proyecto en la nube. Confirma si deseas sobreescribir.', 'warning', 0);
+          setLoading(false);
+          return;
+        } else if (res.plan === 'pro') {
+          showNotification('Has alcanzado el límite mensual de 20 proyectos en la nube de tu Plan Pro.', 'warning', 5000);
+          setLoading(false);
+          return;
+        }
+      }
+
+      // Si se guardó en la nube con éxito
+      if (res && res.isCloud) {
+        setOverwriteConfirm(null);
+        showNotification(`✅ ¡Proyecto "${title}" guardado con éxito en la Nube de Supabase! Ahora podrás abrirlo desde cualquier PC.`, 'success', 4000);
+      } else {
+        // Guardado local (invitado o contingencia)
+        showNotification(`💾 Proyecto "${title}" guardado en este computador (Local). Para sincronizar entre PCs, inicia sesión en la Nube.`, 'info', 4000);
+      }
+    } catch (err) {
+      showNotification(`Error al guardar: ${err.message}`, 'error', 5000);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSaveClick = async () => {
+    const title = newProjectTitle.trim();
+    if (!title) {
+      showNotification('Por favor introduce un nombre para el proyecto.', 'warning');
+      return;
+    }
+
+    // 1. Si es modo invitado, advertir que solo se guarda local y ofrecer registrarse
+    if (isGuest) {
+      setGuestConfirm(true);
+      return;
+    }
+
+    // 2. Si es usuario autenticado con Plan Gratis, verificar límite de 1 proyecto
+    if (userPlan === 'free' && !user?.isAdmin && cloudCount >= 1) {
+      const existing = cloudProjects.find(p => p.isCloud);
+      setOverwriteConfirm({
+        existingProject: existing,
+        title: title
+      });
+      return;
+    }
+
+    // 3. Proceder normalmente
+    await executeSave(title, false);
   };
 
   const handleDelete = async (projectId, projectTitle) => {
@@ -51,142 +156,411 @@ export default function UserProjectsModal({ isOpen, onClose, onLoadProject, onSa
     setDeletingId(projectId);
     try {
       await deleteProjectFromCloud(projectId);
-      setMsg(`Proyecto "${projectTitle}" eliminado correctamente.`);
-      setTimeout(() => setMsg(''), 2500);
+      showNotification(`Proyecto "${projectTitle}" eliminado correctamente.`, 'info');
     } catch (err) {
-      setMsg(`Error al eliminar: ${err.message}`);
+      showNotification(`Error al eliminar: ${err.message}`, 'error');
     } finally {
       setDeletingId(null);
     }
   };
 
+  const handleRunAudit = async () => {
+    setLoading(true);
+    showNotification('Ejecutando auto-auditoría de Nube y Sesión...', 'info', 0);
+    try {
+      const report = await auditCloudConnection();
+      setAuditResult(report);
+      showNotification('Auditoría completada con éxito.', 'success', 2000);
+    } catch (err) {
+      showNotification('Error al auditar: ' + err.message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <div style={overlayStyle}>
-      <div style={cardStyle}>
-        
-        {/* Header */}
-        <div style={headerStyle}>
-          <div>
-            <h2 style={titleStyle}>📁 Mis Proyectos en la Plataforma</h2>
-            <p style={subtitleStyle}>
-              Usuario: <strong>{user?.user_metadata?.full_name || user?.email || 'Invitado'}</strong>
-              <span style={{ marginLeft: '10px', color: isCloudConfigured ? '#34d399' : '#fbbf24' }}>
-                {isCloudConfigured ? '• ☁️ Nube Supabase' : '• 💾 Almacenamiento Local'}
-              </span>
-            </p>
-          </div>
-          <button style={closeBtnStyle} onClick={onClose} aria-label="Cerrar">✕</button>
-        </div>
+    <>
+      <div style={overlayStyle}>
+        <div style={cardStyle}>
+          
+          {/* Header */}
+          <div style={headerStyle}>
+            <div>
+              <h2 style={titleStyle}>📁 Mis Proyectos en la Plataforma</h2>
+              <div style={sessionInfoStyle}>
+                {isGuest ? (
+                  <span style={{ color: '#fbbf24', fontWeight: '700' }}>
+                    👤 Usuario: Modo Invitado (Sin Cuenta Conectada)
+                  </span>
+                ) : (
+                  <span>
+                    👋 Conectado como: <strong>{user?.user_metadata?.full_name || user?.email?.split('@')[0]}</strong>{' '}
+                    <span style={{ color: '#94a3b8', fontSize: '0.78rem' }}>({user?.email})</span>
+                  </span>
+                )}
+                <div style={{ marginTop: '4px', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  {isCloudConfigured ? (
+                    <span style={cloudStatusBadge}>☁️ Nube Supabase Sincronizada</span>
+                  ) : (
+                    <span style={localStatusBadge}>💾 Almacenamiento Local</span>
+                  )}
 
-        {msg && <div style={msgBannerStyle}>{msg}</div>}
-
-        {/* Sección Guardar Proyecto Actual */}
-        <div style={saveBoxStyle}>
-          <h4 style={{ margin: '0 0 8px 0', fontSize: '0.85rem', color: '#e2e8f0', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-            💾 Guardar Diseño Actual
-          </h4>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <input
-              type="text"
-              value={newProjectTitle}
-              onChange={(e) => setNewProjectTitle(e.target.value)}
-              placeholder="Nombre del Proyecto (ej. Alcantarillado Sector Norte)"
-              style={inputStyle}
-            />
-            <button
-              onClick={handleSaveCurrent}
-              disabled={loading}
-              style={saveBtnStyle}
-            >
-              ☁️ Guardar
-            </button>
-          </div>
-        </div>
-
-        {/* Lista de Proyectos Guardados */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '16px 0 10px 0' }}>
-          <h4 style={{ margin: 0, fontSize: '0.88rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-            Proyectos Almacenados ({cloudProjects.length})
-          </h4>
-        </div>
-
-        <div style={projectListContainerStyle}>
-          {cloudProjects.length === 0 ? (
-            <div style={emptyStyle}>
-              No tienes proyectos guardados aún en la plataforma. ¡Guarda tu primer diseño arriba!
-            </div>
-          ) : (
-            cloudProjects.map((p) => (
-              <div key={p.id} style={projectCardStyle}>
-                <div style={{ flex: 1, minWidth: 0, paddingRight: '12px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={projTitleStyle}>{p.title}</span>
-                    {p.isCloud ? (
-                      <span style={cloudBadgeTag}>☁️ Nube</span>
-                    ) : (
-                      <span style={localBadgeTag}>💾 Local</span>
-                    )}
-                  </div>
-                  <div style={projDateStyle}>
-                    Última actualización: {new Date(p.updated_at).toLocaleString('es-CO')}
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  <button
-                    onClick={() => handleSelectProject(p.id)}
-                    disabled={loading || deletingId === p.id}
-                    style={loadBtnStyle}
-                    title="Cargar y abrir este proyecto"
-                  >
-                    Abrir 📂
-                  </button>
-
-                  <button
-                    onClick={() => handleDelete(p.id, p.title)}
-                    disabled={loading || deletingId === p.id}
-                    style={deleteBtnStyle}
-                    title="Eliminar este proyecto"
-                  >
-                    {deletingId === p.id ? '...' : '🗑️'}
-                  </button>
+                  {!isGuest && (
+                    <span style={userPlan === 'pro' || user?.isAdmin ? proPlanBadge : freePlanBadge}>
+                      {user?.isAdmin
+                        ? '👑 Super Admin Master (Ilimitado)'
+                        : userPlan === 'pro'
+                        ? `👑 Plan Pro (${cloudCount}/20 Proyectos al mes)`
+                        : `⚡ Plan Gratis (${cloudCount}/1 Proyecto Nube)`}
+                    </span>
+                  )}
                 </div>
               </div>
-            ))
+            </div>
+            <button style={closeBtnStyle} onClick={onClose} aria-label="Cerrar ventana">✕</button>
+          </div>
+
+          {/* Notificaciones / Mensajes */}
+          {msg && (
+            <div style={
+              msgType === 'success' ? successBannerStyle :
+              msgType === 'warning' ? warningBannerStyle :
+              msgType === 'error' ? errorBannerStyle : msgBannerStyle
+            }>
+              {msg}
+            </div>
           )}
+
+          {/* Banner de Advertencia de Modo Invitado */}
+          {isGuest && (
+            <div style={guestNoticeBannerStyle}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                <span style={{ fontSize: '1.2rem' }}>⚠️</span>
+                <div style={{ flex: 1, fontSize: '0.82rem', lineHeight: '1.4' }}>
+                  <strong>Estás trabajando como Invitado.</strong> Los proyectos guardados en este modo solo existen en el navegador de este computador (Local). Si quieres abrir tu diseño en otro PC o compartirlo, inicia sesión o crea tu cuenta gratis.
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                <button
+                  onClick={() => setShowAuthModal(true)}
+                  style={loginActionBtnStyle}
+                >
+                  🔑 Iniciar Sesión / Registrarme Gratis
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Diálogo de Confirmación para Modo Invitado (cuando hace clic en Guardar) */}
+          {guestConfirm && (
+            <div style={confirmBoxStyle}>
+              <h4 style={{ margin: '0 0 6px 0', color: '#fbbf24', fontSize: '0.9rem' }}>
+                ⚠️ Advertencia de Guardado en Modo Invitado
+              </h4>
+              <p style={{ margin: '0 0 12px 0', fontSize: '0.82rem', color: '#cbd5e1', lineHeight: '1.4' }}>
+                Si guardas como invitado, el proyecto <strong>NO se sincronizará en la nube</strong> y no podrás abrirlo en otros computadores. Tu diseño actual no se perderá si decides registrarte ahora.
+              </p>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button
+                  onClick={() => {
+                    setGuestConfirm(false);
+                    setShowAuthModal(true);
+                  }}
+                  style={primaryConfirmBtnStyle}
+                >
+                  🔑 Registrarme / Iniciar Sesión para Guardar en la Nube
+                </button>
+                <button
+                  onClick={() => {
+                    setGuestConfirm(false);
+                    executeSave(newProjectTitle.trim(), false);
+                  }}
+                  style={secondaryConfirmBtnStyle}
+                >
+                  💾 Guardar solo en este PC (Local)
+                </button>
+                <button
+                  onClick={() => {
+                    setGuestConfirm(false);
+                    // Descargar .AMC directo
+                    try {
+                      const raw = localStorage.getItem('AMC_current_project_state');
+                      const payload = raw ? JSON.parse(raw) : { title: newProjectTitle.trim() };
+                      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+                      saveFileWithDialog(blob, `${newProjectTitle.trim().replace(/\s+/g, '_')}.amc`);
+                      showNotification('¡Archivo .AMC descargado con éxito! Puedes llevarlo en USB a otro PC.', 'success');
+                    } catch (e) {
+                      showNotification('Error descargando .AMC: ' + e.message, 'error');
+                    }
+                  }}
+                  style={neutralConfirmBtnStyle}
+                >
+                  📥 Descargar .AMC al Computador
+                </button>
+                <button
+                  onClick={() => setGuestConfirm(false)}
+                  style={cancelConfirmBtnStyle}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Diálogo de Confirmación de Sobreescritura (Plan Gratis: 1 Proyecto Nube) */}
+          {overwriteConfirm && (
+            <div style={overwriteBoxStyle}>
+              <h4 style={{ margin: '0 0 6px 0', color: '#f59e0b', fontSize: '0.92rem' }}>
+                ⚡ Límite del Plan Gratis (1 Proyecto en la Nube)
+              </h4>
+              <p style={{ margin: '0 0 10px 0', fontSize: '0.83rem', color: '#e2e8f0', lineHeight: '1.4' }}>
+                Tu cuenta tiene el <strong>Plan Gratis</strong>, que permite almacenar <strong>1 proyecto en la nube</strong>. Ya tienes guardado el proyecto:
+                <br />
+                <span style={{ color: '#38bdf8', fontWeight: 'bold' }}>
+                  "{overwriteConfirm.existingProject?.title || 'Proyecto Existente'}"
+                </span>
+                <br /><br />
+                ¿Deseas <strong>SOBREESCRIBIRLO</strong> con tu nuevo diseño "{overwriteConfirm.title}", o actualizar a Plan Pro para guardar hasta 20 proyectos al mes?
+              </p>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button
+                  onClick={() => {
+                    const titleToSave = overwriteConfirm.title;
+                    setOverwriteConfirm(null);
+                    executeSave(titleToSave, true);
+                  }}
+                  style={overwriteBtnStyle}
+                >
+                  🔄 Sí, Sobreescribir Proyecto en la Nube
+                </button>
+                <button
+                  onClick={() => {
+                    setOverwriteConfirm(null);
+                    setShowUpgradeModal(true);
+                  }}
+                  style={upgradeConfirmBtnStyle}
+                >
+                  👑 Pasar a Plan Pro (20 Proyectos/mes)
+                </button>
+                <button
+                  onClick={() => {
+                    const titleToSave = overwriteConfirm.title;
+                    setOverwriteConfirm(null);
+                    // Descargar .AMC para no perderlo sin sobreescribir
+                    try {
+                      const raw = localStorage.getItem('AMC_current_project_state');
+                      const payload = raw ? JSON.parse(raw) : { title: titleToSave };
+                      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+                      saveFileWithDialog(blob, `${titleToSave.replace(/\s+/g, '_')}.amc`);
+                      showNotification('¡Diseño descargado como archivo .AMC local! Tu proyecto en la nube permanece intacto.', 'success');
+                    } catch (e) {
+                      showNotification('Error descargando: ' + e.message, 'error');
+                    }
+                  }}
+                  style={neutralConfirmBtnStyle}
+                >
+                  📥 Descargar como .AMC local (Gratis)
+                </button>
+                <button
+                  onClick={() => setOverwriteConfirm(null)}
+                  style={cancelConfirmBtnStyle}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Sección Guardar Proyecto Actual */}
+          <div style={saveBoxStyle}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+              <h4 style={{ margin: 0, fontSize: '0.85rem', color: '#e2e8f0', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                💾 Guardar Diseño Actual
+              </h4>
+              <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                {isGuest ? 'Modo Local' : (userPlan === 'pro' ? 'Sincronización Pro' : 'Sincronización Gratis (1 Proj)')}
+              </span>
+            </div>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <input
+                type="text"
+                value={newProjectTitle}
+                onChange={(e) => setNewProjectTitle(e.target.value)}
+                placeholder="Nombre del Proyecto (ej. Alcantarillado Sector Norte)"
+                style={inputStyle}
+              />
+              <button
+                onClick={handleSaveClick}
+                disabled={loading}
+                style={saveBtnStyle}
+                title={isGuest ? 'Guardar proyecto (Local / Opción Nube)' : 'Guardar y sincronizar en la Nube'}
+              >
+                {isGuest ? '💾 Guardar' : '☁️ Guardar en Nube'}
+              </button>
+            </div>
+          </div>
+
+          {/* Encabezado Lista de Proyectos y Contador */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '16px 0 10px 0', flexWrap: 'wrap', gap: '8px' }}>
+            <h4 style={{ margin: 0, fontSize: '0.88rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+              Proyectos Disponibles ({cloudProjects.length})
+              <span style={{ fontSize: '0.75rem', textTransform: 'none', marginLeft: '8px', color: '#64748b' }}>
+                ({cloudCount} en Nube • {localCount} Locales)
+              </span>
+            </h4>
+            <div style={{ display: 'flex', gap: '6px' }}>
+              <button
+                onClick={handleRunAudit}
+                style={auditBtnStyle}
+                title="Verificar estado de conexión con la Nube de Supabase"
+              >
+                🔍 Auditar Nube & Sesión
+              </button>
+            </div>
+          </div>
+
+          {/* Panel de Resultado de Auditoría */}
+          {auditResult && (
+            <div style={auditPanelStyle}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                <strong style={{ color: auditResult.canReadProjects ? '#34d399' : '#f87171', fontSize: '0.82rem' }}>
+                  {auditResult.canReadProjects ? '✔ Diagnóstico de Nube: OPERATIVO' : '⚠️ Diagnóstico de Nube: ATENCIÓN'}
+                </strong>
+                <button onClick={() => setAuditResult(null)} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '0.8rem' }}>✕</button>
+              </div>
+              <div style={{ fontSize: '0.75rem', color: '#cbd5e1', lineHeight: '1.4' }}>
+                <div>• Supabase: <strong>{auditResult.supabaseStatus}</strong></div>
+                <div>• Sesión Activa: <strong>{auditResult.hasValidSession ? `Sí (${auditResult.sessionUser})` : (auditResult.isGuest ? 'Modo Invitado' : 'No')}</strong></div>
+                <div>• Plan Actual: <strong>{auditResult.userPlan}</strong></div>
+                <div>• Proyectos en Nube: <strong>{auditResult.cloudProjectsCount}</strong> | Locales: <strong>{auditResult.localProjectsCount}</strong></div>
+                {auditResult.details && <div style={{ color: '#fca5a5', marginTop: '4px' }}>Detalles: {auditResult.details}</div>}
+              </div>
+            </div>
+          )}
+
+          {/* Lista de Proyectos Guardados */}
+          <div style={projectListContainerStyle}>
+            {cloudProjects.length === 0 ? (
+              <div style={emptyStyle}>
+                No tienes proyectos guardados aún en la plataforma. ¡Ingresa un nombre arriba y haz clic en Guardar!
+              </div>
+            ) : (
+              cloudProjects.map((p) => (
+                <div key={p.id} style={projectCardStyle}>
+                  {/* Título y Detalles del Proyecto (Sin truncar, wrap completo) */}
+                  <div style={{ flex: 1, minWidth: 0, paddingRight: '14px' }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
+                      <span style={projTitleStyle} title={p.title}>
+                        {p.title}
+                      </span>
+                      <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                        {p.isCloud ? (
+                          <span style={cloudBadgeTag} title="Alojado en Supabase. Accesible desde cualquier computador.">
+                            ☁️ Nube
+                          </span>
+                        ) : (
+                          <span style={localBadgeTag} title="Alojado únicamente en este computador y navegador.">
+                            💾 Local
+                          </span>
+                        )}
+                        {p.isDraft && (
+                          <span style={draftBadgeTag} title="Borrador en memoria de trabajo activa">
+                            📝 Borrador
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div style={projDateStyle}>
+                      Última actualización: {new Date(p.updated_at).toLocaleString('es-CO')}
+                    </div>
+                  </div>
+
+                  {/* Acciones del Proyecto */}
+                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexShrink: 0 }}>
+                    <button
+                      onClick={() => handleSelectProject(p.id)}
+                      disabled={loading || deletingId === p.id}
+                      style={loadBtnStyle}
+                      title="Cargar y abrir este proyecto en el módulo de cálculo"
+                    >
+                      Abrir 📂
+                    </button>
+
+                    <button
+                      onClick={() => handleDownloadAMC(p)}
+                      disabled={loading || downloadingId === p.id}
+                      style={amcDownloadBtnStyle}
+                      title="Descargar archivo .AMC directamente a tu computador"
+                    >
+                      {downloadingId === p.id ? '...' : '📥 .AMC'}
+                    </button>
+
+                    <button
+                      onClick={() => handleDelete(p.id, p.title)}
+                      disabled={loading || deletingId === p.id}
+                      style={deleteBtnStyle}
+                      title="Eliminar este proyecto permanentemente"
+                    >
+                      {deletingId === p.id ? '...' : '🗑️'}
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
         </div>
       </div>
-    </div>
+
+      {/* Modales de Autenticación y Plan Pro */}
+      <AuthModal
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        onAuthSuccess={() => {
+          setShowAuthModal(false);
+          // Si el usuario tenía un nombre pendiente para guardar, ofrecer guardar de inmediato
+          const title = newProjectTitle.trim();
+          if (title) {
+            executeSave(title, false);
+          }
+        }}
+      />
+
+      <UpgradeProModal
+        isOpen={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+        featureName="Almacenamiento de hasta 20 Proyectos en la Nube"
+      />
+    </>
   );
 }
 
-// ── ESTILOS DEL MODAL DE PROYECTOS ──
+// ── ESTILOS DEL MODAL DE PROYECTOS (DARK GLASSMORPHIC) ──
 const overlayStyle = {
   position: 'fixed',
   top: 0,
   left: 0,
   width: '100vw',
   height: '100vh',
-  backgroundColor: 'rgba(3, 7, 18, 0.85)',
+  backgroundColor: 'rgba(3, 7, 18, 0.88)',
   backdropFilter: 'blur(10px)',
   zIndex: 100000,
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  padding: '20px'
+  padding: '16px'
 };
 
 const cardStyle = {
   width: '100%',
-  maxWidth: '580px',
-  maxHeight: '85vh',
+  maxWidth: '680px',
+  maxHeight: '90vh',
   backgroundColor: '#0a1128',
   border: '1px solid rgba(59, 130, 246, 0.35)',
   borderRadius: '20px',
-  boxShadow: '0 25px 60px rgba(0, 0, 0, 0.75)',
+  boxShadow: '0 25px 60px rgba(0, 0, 0, 0.85), 0 0 40px rgba(59, 130, 246, 0.15)',
   padding: '24px',
   color: '#f0f4f8',
-  fontFamily: "'Inter', sans-serif",
+  fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
   display: 'flex',
   flexDirection: 'column'
 };
@@ -195,30 +569,63 @@ const headerStyle = {
   display: 'flex',
   justifyContent: 'space-between',
   alignItems: 'flex-start',
-  marginBottom: '16px'
+  marginBottom: '14px'
 };
 
 const titleStyle = {
   fontSize: '1.25rem',
   fontWeight: '800',
   margin: 0,
-  color: '#ffffff'
+  color: '#ffffff',
+  letterSpacing: '-0.02em'
 };
 
-const subtitleStyle = {
+const sessionInfoStyle = {
   fontSize: '0.82rem',
-  color: '#94a3b8',
-  marginTop: '4px',
-  marginBottom: 0
+  color: '#cbd5e1',
+  marginTop: '4px'
+};
+
+const cloudStatusBadge = {
+  fontSize: '0.72rem',
+  color: '#34d399',
+  fontWeight: '600'
+};
+
+const localStatusBadge = {
+  fontSize: '0.72rem',
+  color: '#fbbf24',
+  fontWeight: '600'
+};
+
+const freePlanBadge = {
+  fontSize: '0.72rem',
+  padding: '2px 8px',
+  borderRadius: '10px',
+  backgroundColor: 'rgba(59, 130, 246, 0.15)',
+  border: '1px solid #3b82f6',
+  color: '#93c5fd',
+  fontWeight: '600'
+};
+
+const proPlanBadge = {
+  fontSize: '0.72rem',
+  padding: '2px 8px',
+  borderRadius: '10px',
+  backgroundColor: 'rgba(16, 185, 129, 0.15)',
+  border: '1px solid #10b981',
+  color: '#34d399',
+  fontWeight: '700'
 };
 
 const closeBtnStyle = {
   background: 'none',
   border: 'none',
   color: '#94a3b8',
-  fontSize: '1.3rem',
+  fontSize: '1.4rem',
   cursor: 'pointer',
-  padding: '4px'
+  padding: '4px 8px',
+  borderRadius: '6px'
 };
 
 const msgBannerStyle = {
@@ -228,7 +635,146 @@ const msgBannerStyle = {
   borderRadius: '8px',
   padding: '10px 14px',
   fontSize: '0.85rem',
+  marginBottom: '12px',
+  lineHeight: '1.4'
+};
+
+const successBannerStyle = {
+  backgroundColor: 'rgba(16, 185, 129, 0.18)',
+  border: '1px solid #10b981',
+  color: '#6ee7b7',
+  borderRadius: '8px',
+  padding: '10px 14px',
+  fontSize: '0.85rem',
+  marginBottom: '12px',
+  lineHeight: '1.4'
+};
+
+const warningBannerStyle = {
+  backgroundColor: 'rgba(245, 158, 11, 0.18)',
+  border: '1px solid #f59e0b',
+  color: '#fcd34d',
+  borderRadius: '8px',
+  padding: '10px 14px',
+  fontSize: '0.85rem',
+  marginBottom: '12px',
+  lineHeight: '1.4'
+};
+
+const errorBannerStyle = {
+  backgroundColor: 'rgba(239, 68, 68, 0.18)',
+  border: '1px solid #ef4444',
+  color: '#fca5a5',
+  borderRadius: '8px',
+  padding: '10px 14px',
+  fontSize: '0.85rem',
+  marginBottom: '12px',
+  lineHeight: '1.4'
+};
+
+const guestNoticeBannerStyle = {
+  backgroundColor: 'rgba(245, 158, 11, 0.12)',
+  border: '1px solid rgba(245, 158, 11, 0.35)',
+  color: '#fde68a',
+  borderRadius: '12px',
+  padding: '12px 14px',
   marginBottom: '14px'
+};
+
+const loginActionBtnStyle = {
+  padding: '8px 16px',
+  backgroundColor: '#3b82f6',
+  backgroundImage: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+  border: 'none',
+  borderRadius: '8px',
+  color: '#ffffff',
+  fontWeight: '700',
+  fontSize: '0.82rem',
+  cursor: 'pointer',
+  boxShadow: '0 2px 8px rgba(59, 130, 246, 0.4)'
+};
+
+const confirmBoxStyle = {
+  backgroundColor: 'rgba(30, 41, 59, 0.95)',
+  border: '1px solid #fbbf24',
+  borderRadius: '12px',
+  padding: '14px',
+  marginBottom: '14px'
+};
+
+const overwriteBoxStyle = {
+  backgroundColor: 'rgba(30, 41, 59, 0.95)',
+  border: '1px solid #f59e0b',
+  borderRadius: '12px',
+  padding: '14px',
+  marginBottom: '14px'
+};
+
+const primaryConfirmBtnStyle = {
+  padding: '8px 14px',
+  backgroundColor: '#3b82f6',
+  border: 'none',
+  borderRadius: '7px',
+  color: 'white',
+  fontWeight: '700',
+  fontSize: '0.8rem',
+  cursor: 'pointer'
+};
+
+const secondaryConfirmBtnStyle = {
+  padding: '8px 14px',
+  backgroundColor: 'rgba(245, 158, 11, 0.2)',
+  border: '1px solid #f59e0b',
+  borderRadius: '7px',
+  color: '#fbbf24',
+  fontWeight: '700',
+  fontSize: '0.8rem',
+  cursor: 'pointer'
+};
+
+const neutralConfirmBtnStyle = {
+  padding: '8px 14px',
+  backgroundColor: 'rgba(100, 116, 139, 0.3)',
+  border: '1px solid #64748b',
+  borderRadius: '7px',
+  color: '#e2e8f0',
+  fontWeight: '600',
+  fontSize: '0.8rem',
+  cursor: 'pointer'
+};
+
+const cancelConfirmBtnStyle = {
+  padding: '8px 12px',
+  backgroundColor: 'transparent',
+  border: '1px solid rgba(255, 255, 255, 0.2)',
+  borderRadius: '7px',
+  color: '#94a3b8',
+  fontSize: '0.8rem',
+  cursor: 'pointer'
+};
+
+const overwriteBtnStyle = {
+  padding: '8px 14px',
+  backgroundColor: '#f59e0b',
+  backgroundImage: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+  border: 'none',
+  borderRadius: '7px',
+  color: '#ffffff',
+  fontWeight: '700',
+  fontSize: '0.8rem',
+  cursor: 'pointer'
+};
+
+const upgradeConfirmBtnStyle = {
+  padding: '8px 14px',
+  backgroundColor: '#10b981',
+  backgroundImage: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+  border: 'none',
+  borderRadius: '7px',
+  color: '#ffffff',
+  fontWeight: '700',
+  fontSize: '0.8rem',
+  cursor: 'pointer'
 };
 
 const saveBoxStyle = {
@@ -259,7 +805,27 @@ const saveBtnStyle = {
   fontWeight: '700',
   cursor: 'pointer',
   fontSize: '0.88rem',
-  boxShadow: '0 2px 8px rgba(16, 185, 129, 0.3)'
+  boxShadow: '0 2px 8px rgba(16, 185, 129, 0.3)',
+  whiteSpace: 'nowrap'
+};
+
+const auditBtnStyle = {
+  padding: '4px 10px',
+  backgroundColor: 'rgba(59, 130, 246, 0.15)',
+  border: '1px solid rgba(59, 130, 246, 0.35)',
+  borderRadius: '6px',
+  color: '#93c5fd',
+  fontSize: '0.74rem',
+  fontWeight: '600',
+  cursor: 'pointer'
+};
+
+const auditPanelStyle = {
+  backgroundColor: 'rgba(15, 23, 42, 0.95)',
+  border: '1px solid rgba(59, 130, 246, 0.3)',
+  borderRadius: '10px',
+  padding: '10px 14px',
+  marginBottom: '10px'
 };
 
 const projectListContainerStyle = {
@@ -267,14 +833,14 @@ const projectListContainerStyle = {
   overflowY: 'auto',
   display: 'flex',
   flexDirection: 'column',
-  gap: '8px',
+  gap: '10px',
   marginTop: '4px',
   paddingRight: '4px'
 };
 
 const emptyStyle = {
   textAlign: 'center',
-  padding: '30px 20px',
+  padding: '36px 20px',
   color: '#64748b',
   fontSize: '0.85rem',
   background: 'rgba(15, 23, 42, 0.4)',
@@ -289,46 +855,59 @@ const projectCardStyle = {
   backgroundColor: 'rgba(15, 23, 42, 0.85)',
   padding: '12px 14px',
   borderRadius: '10px',
-  border: '1px solid rgba(255, 255, 255, 0.08)'
+  border: '1px solid rgba(255, 255, 255, 0.08)',
+  transition: 'border 0.2s',
+  gap: '10px'
 };
 
 const projTitleStyle = {
   fontWeight: '700',
   color: '#f8fafc',
-  fontSize: '0.9rem',
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-  whiteSpace: 'nowrap'
+  fontSize: '0.95rem',
+  wordBreak: 'break-word',
+  whiteSpace: 'normal',
+  lineHeight: '1.4',
+  flex: 1
 };
 
 const projDateStyle = {
   fontSize: '0.74rem',
   color: '#64748b',
-  marginTop: '3px'
+  marginTop: '4px'
 };
 
 const cloudBadgeTag = {
   fontSize: '0.68rem',
-  padding: '2px 6px',
+  padding: '2px 8px',
   borderRadius: '6px',
   background: 'rgba(59, 130, 246, 0.2)',
   color: '#60a5fa',
   border: '1px solid rgba(59, 130, 246, 0.4)',
-  fontWeight: '600'
+  fontWeight: '700'
 };
 
 const localBadgeTag = {
   fontSize: '0.68rem',
-  padding: '2px 6px',
+  padding: '2px 8px',
   borderRadius: '6px',
   background: 'rgba(245, 158, 11, 0.15)',
   color: '#fbbf24',
   border: '1px solid rgba(245, 158, 11, 0.3)',
+  fontWeight: '700'
+};
+
+const draftBadgeTag = {
+  fontSize: '0.68rem',
+  padding: '2px 6px',
+  borderRadius: '6px',
+  background: 'rgba(139, 92, 246, 0.2)',
+  color: '#c4b5fd',
+  border: '1px solid rgba(139, 92, 246, 0.4)',
   fontWeight: '600'
 };
 
 const loadBtnStyle = {
-  padding: '7px 14px',
+  padding: '7px 12px',
   backgroundColor: '#3b82f6',
   backgroundImage: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
   border: 'none',
@@ -336,7 +915,20 @@ const loadBtnStyle = {
   color: '#ffffff',
   fontWeight: '700',
   fontSize: '0.8rem',
-  cursor: 'pointer'
+  cursor: 'pointer',
+  whiteSpace: 'nowrap'
+};
+
+const amcDownloadBtnStyle = {
+  padding: '7px 10px',
+  backgroundColor: 'rgba(59, 130, 246, 0.15)',
+  border: '1px solid rgba(59, 130, 246, 0.4)',
+  borderRadius: '7px',
+  color: '#93c5fd',
+  fontWeight: '600',
+  fontSize: '0.8rem',
+  cursor: 'pointer',
+  whiteSpace: 'nowrap'
 };
 
 const deleteBtnStyle = {

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 
-export default function AuthModal({ isOpen, onClose, initialTab = 'login' }) {
+export default function AuthModal({ isOpen, onClose, initialTab = 'login', onAuthSuccess }) {
   const { login, register, loginAsAdmin, loginWithGoogle, resetPassword, loginAsGuest, isCloudConfigured } = useAuth();
   const [tab, setTab] = useState(initialTab); // 'login' | 'register' | 'recover' | 'admin'
   
@@ -46,6 +46,7 @@ export default function AuthModal({ isOpen, onClose, initialTab = 'login' }) {
         setSuccessMsg('¡Modo Super Admin Activado! Acceso Pro completo desbloqueado.');
         setTimeout(() => {
           onClose();
+          onAuthSuccess?.();
         }, 1200);
       } else if (tab === 'recover') {
         if (!email) {
@@ -64,9 +65,10 @@ export default function AuthModal({ isOpen, onClose, initialTab = 'login' }) {
           throw new Error('Las contraseñas no coinciden. Por favor verifique.');
         }
         await register(email, password, fullName, company);
-        setSuccessMsg('¡Cuenta registrada exitosamente en AMCaudales!');
+        setSuccessMsg('¡Cuenta registrada exitosamente! Plan Gratis activado (1 proyecto en la nube).');
         setTimeout(() => {
           onClose();
+          onAuthSuccess?.();
         }, 1200);
       } else {
         // Tab Login
@@ -77,6 +79,7 @@ export default function AuthModal({ isOpen, onClose, initialTab = 'login' }) {
         setSuccessMsg('¡Inicio de sesión exitoso! Bienvenido a AMCaudales.');
         setTimeout(() => {
           onClose();
+          onAuthSuccess?.();
         }, 1000);
       }
     } catch (err) {
@@ -94,6 +97,7 @@ export default function AuthModal({ isOpen, onClose, initialTab = 'login' }) {
       setSuccessMsg('¡Autenticado correctamente con Google!');
       setTimeout(() => {
         onClose();
+        onAuthSuccess?.();
       }, 1000);
     } catch (err) {
       setErrorMsg(err.message || 'No fue posible iniciar con Google.');
@@ -181,6 +185,22 @@ export default function AuthModal({ isOpen, onClose, initialTab = 'login' }) {
         {/* Mensajes de Error y Éxito */}
         {errorMsg && <div style={errorBannerStyle}>⚠️ {errorMsg}</div>}
         {successMsg && <div style={successBannerStyle}>✔ {successMsg}</div>}
+
+        {/* Banner Informativo de Plan según pestaña */}
+        {tab === 'register' && (
+          <div style={{ backgroundColor: 'rgba(59, 130, 246, 0.12)', border: '1px solid rgba(59, 130, 246, 0.35)', borderRadius: '10px', padding: '10px 14px', fontSize: '0.8rem', color: '#93c5fd', lineHeight: '1.45', marginBottom: '12px' }}>
+            ⚡ <strong>Plan Gratis Incluido:</strong> Tu registro incluye <strong>1 proyecto en la Nube</strong> para sincronizar y abrir desde cualquier computador. Tu diseño actual no se perderá.
+            <div style={{ fontSize: '0.74rem', color: '#cbd5e1', marginTop: '4px' }}>
+              👑 Si requieres almacenar hasta 20 proyectos al mes y exportar presupuestos oficiales, podrás activar Plan Pro.
+            </div>
+          </div>
+        )}
+
+        {tab === 'login' && (
+          <div style={{ backgroundColor: 'rgba(16, 185, 129, 0.12)', border: '1px solid rgba(16, 185, 129, 0.35)', borderRadius: '10px', padding: '8px 14px', fontSize: '0.8rem', color: '#6ee7b7', lineHeight: '1.4', marginBottom: '12px' }}>
+            ☁️ <strong>Sincronización en la Nube:</strong> Inicia sesión para recuperar tus proyectos guardados o almacenar tu diseño actual en tu cuenta personal.
+          </div>
+        )}
 
         {/* Formulario */}
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>

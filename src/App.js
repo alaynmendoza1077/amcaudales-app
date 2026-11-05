@@ -124,10 +124,15 @@ function AppContent() {
   const [blockedFeatureName, setBlockedFeatureName] = useState('');
   const [showLoginPortal, setShowLoginPortal] = useState(false);
 
+  const prevUserRef = React.useRef(user);
   React.useEffect(() => {
-    setActiveModule('home');
-    setInitialData(null);
-  }, [user?.id]);
+    // Solo regresar a 'home' si el usuario cerró sesión expresamente (pasó de tener usuario a null)
+    if (prevUserRef.current && !user) {
+      setActiveModule('home');
+      setInitialData(null);
+    }
+    prevUserRef.current = user;
+  }, [user]);
 
   const handleSetModule = (mod, data = null) => {
     if ((mod === 'presupuesto') && userPlan === 'free') {
@@ -149,7 +154,7 @@ function AppContent() {
     handleSetModule('reposicion', { type: 'setup', projectSetup });
   };
 
-  const handleSaveCloud = async (title) => {
+  const handleSaveCloud = async (title, forceOverwrite = false) => {
     let currentPayload = null;
     try {
       const raw = localStorage.getItem('AMC_current_project_state');
@@ -161,8 +166,11 @@ function AppContent() {
     if (!currentPayload) {
       currentPayload = { title, created_at: new Date().toISOString(), version: '3.0' };
     }
+    if (currentPayload.P) {
+      currentPayload.P.proyecto = title;
+    }
 
-    await saveProjectToCloud(currentPayload, title);
+    return await saveProjectToCloud(currentPayload, title, null, forceOverwrite);
   };
 
   const handleLoadCloud = (projectDataPayload) => {

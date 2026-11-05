@@ -60,8 +60,8 @@ export default function UpgradeProModal({ isOpen, onClose, featureName }) {
           <div style={benefitItemStyle}>
             <span>☁️</span>
             <div>
-              <strong>Proyectos Ilimitados en la Nube</strong>
-              <p style={benefitDescStyle}>Almacena y sincroniza todos tus diseños en tu cuenta personal.</p>
+              <strong>Hasta 20 Proyectos en la Nube al mes</strong>
+              <p style={benefitDescStyle}>Almacena y sincroniza hasta 20 diseños en tu cuenta personal para abrirlos desde cualquier computador.</p>
             </div>
           </div>
         </div>

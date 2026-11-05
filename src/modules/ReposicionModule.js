@@ -99,10 +99,11 @@ export default function ReposicionModule({ onBack, initialData }){
   useEffect(() => {
     if (P && ((T && T.length > 0) || P.proyecto)) {
       try {
-        localStorage.setItem('AMC_current_project_state', JSON.stringify({ P, T, R, inpData, urbanismoData, estSepData, timestamp: new Date().toISOString() }));
+        var fullDraft = { v: "v36", P, T, R, sumLat, sumTrans, pbItems, pbBancoItems, alivData, sumData, estSepData, urbanismoData, inpData, flowStage, tab, autoAreasPoly, selMap, outfalls, filterSel, timestamp: new Date().toISOString() };
+        localStorage.setItem('AMC_current_project_state', JSON.stringify(fullDraft));
       } catch(e){}
     }
-  }, [P, T, R, inpData, urbanismoData, estSepData]);
+  }, [P, T, R, inpData, urbanismoData, estSepData, sumLat, sumTrans, pbItems, pbBancoItems, alivData, sumData, flowStage, tab, autoAreasPoly, selMap, outfalls, filterSel]);
 
   useEffect(function(){
     // Solo inicializar sumLat/sumTrans si NO hay datos AMC que cargar
@@ -474,6 +475,21 @@ export default function ReposicionModule({ onBack, initialData }){
       if (saveProjectToCloud) {
         saveProjectToCloud(data, projTitle, activeId)
           .then((savedRes) => {
+            if (savedRes && savedRes.limitReached) {
+              if (savedRes.plan === 'free') {
+                const conf = window.confirm(`⚡ Límite del Plan Gratis (1 Proyecto en la Nube):\n\nYa tienes guardado el proyecto "${savedRes.existingProject?.title}".\n\n¿Deseas SOBREESCRIBIRLO con este nuevo diseño "${projTitle}"?`);
+                if (conf) {
+                  return saveProjectToCloud(data, projTitle, activeId, true).then((ovRes) => {
+                    if (ovRes && ovRes.id) setP(prevP => ({ ...prevP, cloudProjectId: ovRes.id, proyecto: projTitle }));
+                    alert(`¡Proyecto sobrescrito y sincronizado exitosamente en la Nube! ☁️`);
+                  });
+                }
+                return;
+              } else if (savedRes.plan === 'pro') {
+                alert("Has alcanzado el límite mensual de 20 proyectos en la nube de tu Plan Pro.");
+                return;
+              }
+            }
             if (savedRes && savedRes.id) {
               setP(prevP => ({ ...prevP, cloudProjectId: savedRes.id, proyecto: projTitle }));
             }
@@ -592,7 +608,15 @@ export default function ReposicionModule({ onBack, initialData }){
             var restoredP = Object.assign({}, DP, data.P);
             setP(restoredP);
             setIdfEst(data.P.estacion||"BUC");
-          } else if (initialData && (initialData.type === 'amc' || initialData.type === 'amc_payload')) {
+          } else {
+            var loadedPAlt = data.proyecto || data.pozos || data.tr || data.estacion ? data : null;
+            if (loadedPAlt) {
+              var restoredP3 = Object.assign({}, DP, loadedPAlt);
+              setP(restoredP3);
+              setIdfEst(restoredP3.estacion || "BUC");
+            }
+          }
+          if (false) {
         try {
           var data = typeof initialData.content === 'string' ? JSON.parse(initialData.content) : initialData.content;
           var loadedP = data.P || (data.proyecto || data.pozos || data.tr || data.estacion ? data : null);
@@ -1125,7 +1149,7 @@ const handleBack = () => {
             alert("Error al restaurar proyecto desde la Nube.");
           }
         }}
-        onSaveCurrentProject={(title) => {
+        onSaveCurrentProject={(title, forceOverwrite = false) => {
           return import('../tabs/ProjectConsolidatorTab').then(({ recalcPbItems }) => {
             var fullData = {
               v: "v36",
@@ -1149,7 +1173,7 @@ const handleBack = () => {
             };
             var freshPbItems = recalcPbItems(fullData);
             fullData.pbItems = freshPbItems;
-            return saveProjectToCloud(fullData, title);
+            return saveProjectToCloud(fullData, title, null, forceOverwrite);
           });
         }}
       />
