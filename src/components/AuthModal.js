@@ -93,14 +93,15 @@ export default function AuthModal({ isOpen, onClose, initialTab = 'login', onAut
     resetMessages();
     setLoading(true);
     try {
-      await loginWithGoogle();
-      setSuccessMsg('¡Autenticado correctamente con Google!');
-      setTimeout(() => {
-        onClose();
-        onAuthSuccess?.();
-      }, 1000);
+      const data = await loginWithGoogle();
+      if (data?.url) {
+        setSuccessMsg('Redirigiendo a Google...');
+        window.location.href = data.url;
+        return;
+      }
+      setSuccessMsg('Conectando con Google...');
     } catch (err) {
-      setErrorMsg(err.message || 'No fue posible iniciar con Google.');
+      setErrorMsg(err.message || 'No fue posible iniciar con Google. Utiliza tu usuario o correo directamente.');
     } finally {
       setLoading(false);
     }
@@ -261,11 +262,13 @@ export default function AuthModal({ isOpen, onClose, initialTab = 'login', onAut
             /* Campos estándar de Email y Password */
             <>
               <div>
-                <label style={labelStyle}>Correo Electrónico *</label>
+                <label style={labelStyle}>Correo Electrónico o Usuario *</label>
                 <input
-                  type="email"
+                  type="text"
+                  autoCapitalize="none"
+                  autoCorrect="off"
                   required
-                  placeholder="ejemplo@amcaudales.com"
+                  placeholder="ej. EMPAS o usuario@correo.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   style={inputStyle}

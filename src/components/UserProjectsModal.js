@@ -37,6 +37,17 @@ export default function UserProjectsModal({ isOpen, onClose, onLoadProject, onSa
   const cloudCount = cloudProjects.filter(p => p.isCloud).length;
   const localCount = cloudProjects.filter(p => !p.isCloud).length;
 
+  const rawModalName = user?.user_metadata?.full_name || user?.user_metadata?.name || '';
+  let displayModalName = rawModalName;
+  if (!displayModalName && user?.email) {
+    if (user.email.endsWith('@amcaudales.com')) {
+      displayModalName = user.email.replace('@amcaudales.com', '').toUpperCase();
+    } else {
+      displayModalName = user.email.split('@')[0];
+    }
+  }
+  if (!displayModalName) displayModalName = 'Ingeniero';
+
   const showNotification = (text, type = 'info', duration = 3500) => {
     setMsg(text);
     setMsgType(type);
@@ -194,7 +205,7 @@ export default function UserProjectsModal({ isOpen, onClose, onLoadProject, onSa
                   </span>
                 ) : (
                   <span>
-                    👋 Conectado como: <strong>{user?.user_metadata?.full_name || user?.email?.split('@')[0]}</strong>{' '}
+                    👋 Conectado como: <strong>{displayModalName}</strong>{' '}
                     <span style={{ color: '#94a3b8', fontSize: '0.78rem' }}>({user?.email})</span>
                   </span>
                 )}

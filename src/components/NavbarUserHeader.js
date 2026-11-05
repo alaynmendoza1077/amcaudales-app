@@ -13,6 +13,18 @@ export default function NavbarUserHeader({ onSaveCloud, onLoadCloud }) {
   const isGuest = Boolean(!user || user.isGuest || user.id === 'usr_guest' || user.email === 'invitado@amcaudales.com');
   const cloudCount = cloudProjects.filter(p => p.isCloud).length;
 
+  const rawFullName = user?.user_metadata?.full_name || user?.user_metadata?.name || '';
+  let displayName = rawFullName;
+  if (!displayName && user?.email) {
+    if (user.email.endsWith('@amcaudales.com')) {
+      displayName = user.email.replace('@amcaudales.com', '').toUpperCase();
+    } else {
+      displayName = user.email.split('@')[0];
+    }
+  }
+  if (!displayName) displayName = 'Ingeniero';
+  const avatarLetter = (displayName || 'U')[0].toUpperCase();
+
   const handleLogout = async () => {
     try {
       await logout();
@@ -53,16 +65,16 @@ export default function NavbarUserHeader({ onSaveCloud, onLoadCloud }) {
               {/* Tarjeta de Bienvenida con Nombre Completo y Correo */}
               <div
                 style={welcomeCardStyle}
-                title={`Sesión iniciada como: ${user.user_metadata?.full_name || user.email} (${user.email})`}
+                title={`Sesión iniciada como: ${displayName} (${user.email})`}
               >
                 <div style={userInitialStyle}>
-                  {(user.user_metadata?.full_name || user.email || 'U')[0].toUpperCase()}
+                  {avatarLetter}
                 </div>
                 <div style={userTextColStyle}>
                   <div style={welcomeGreetingStyle}>
                     👋 ¡Bienvenido,{' '}
                     <strong style={{ color: '#38bdf8' }}>
-                      {user.user_metadata?.full_name || user.email.split('@')[0]}
+                      {displayName}
                     </strong>!
                   </div>
                   <div style={userPlanSubtextStyle}>

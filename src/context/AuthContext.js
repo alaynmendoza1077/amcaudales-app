@@ -174,16 +174,19 @@ export function AuthProvider({ children }) {
         });
         if (error) {
           if (error.message.includes('not enabled') || error.message.includes('provider is not enabled')) {
-            throw new Error('El proveedor de Google aún no está habilitado en la consola de Supabase. Puedes ingresar con correo y contraseña o como Invitado.');
+            throw new Error('El proveedor de Google aún no está configurado en la consola de Supabase. Ingresa directamente con tu Usuario o Correo y Contraseña.');
           }
           throw error;
+        }
+        if (data?.url) {
+          window.location.href = data.url;
         }
         return data;
       } catch (err) {
         throw new Error(err.message || 'Error al iniciar sesión con Google.');
       }
     } else {
-      return loginAsGuest();
+      throw new Error('Supabase no está configurado para OAuth.');
     }
   };
 
@@ -282,14 +285,23 @@ export function AuthProvider({ children }) {
     setCloudProjects(combinedList);
   };
 
+  const normalizeEmailOrUsername = (input) => {
+    const clean = (input || '').trim().toLowerCase();
+    if (!clean) return '';
+    if (clean.includes('@')) return clean;
+    return `${clean}@amcaudales.com`;
+  };
+
   const register = async (email, password, fullName, company) => {
-    const cleanEmail = (email || '').trim().toLowerCase();
-    if (!cleanEmail || !cleanEmail.includes('@')) {
-      throw new Error('Ingrese un correo electrónico válido.');
+    const cleanEmail = normalizeEmailOrUsername(email);
+    if (!cleanEmail) {
+      throw new Error('Ingrese un correo electrónico o nombre de usuario.');
     }
     if (!password || password.length < 6) {
       throw new Error('La contraseña debe tener al menos 6 caracteres.');
     }
+
+    const assignedName = fullName || (email && !email.includes('@') ? email : cleanEmail.split('@')[0]);
 
     if (isCloudConfigured && supabase) {
       const { data, error } = await supabase.auth.signUp({
@@ -297,7 +309,7 @@ export function AuthProvider({ children }) {
         password,
         options: {
           data: {
-            full_name: fullName || 'Ingeniero AMC',
+            full_name: assignedName,
             company: company || 'Ingeniería AMC',
             plan: 'free'
           }
@@ -306,7 +318,7 @@ export function AuthProvider({ children }) {
 
       if (error) {
         if (error.message.includes('already registered')) {
-          throw new Error('Este correo electrónico ya está registrado en Supabase. Por favor inicie sesión.');
+          throw new Error(`El usuario o correo "${email}" ya está registrado en Supabase. Por favor inicia sesión.`);
         } else if (error.message.includes('Password should be at least')) {
           throw new Error('La contraseña debe tener al menos 6 caracteres.');
         }
@@ -328,7 +340,7 @@ export function AuthProvider({ children }) {
     const newUser = {
       id: 'usr_' + Date.now(),
       email: cleanEmail,
-      user_metadata: { full_name: fullName || 'Ingeniero AMC', company: company || 'Ingeniería AMC', plan: 'free' }
+      user_metadata: { full_name: assignedName, company: company || 'Ingeniería AMC', plan: 'free' }
     };
     localStorage.setItem('amcaudales_user_session', JSON.stringify(newUser));
     setUser(newUser);
@@ -339,9 +351,9 @@ export function AuthProvider({ children }) {
   };
 
   const login = async (email, password) => {
-    const cleanEmail = (email || '').trim().toLowerCase();
+    const cleanEmail = normalizeEmailOrUsername(email);
     if (!cleanEmail || !password) {
-      throw new Error('Por favor ingrese su correo y contraseña.');
+      throw new Error('Por favor ingrese su usuario o correo y contraseña.');
     }
 
     if (isCloudConfigured && supabase) {
@@ -352,7 +364,7 @@ export function AuthProvider({ children }) {
 
       if (error) {
         if (error.message.includes('Invalid login credentials')) {
-          throw new Error('Correo o contraseña incorrectos. Verifique sus datos.');
+          throw new Error(`Usuario o contraseña incorrectos para "${email}". Si aún no te has registrado, ve a la pestaña "📝 Crear Cuenta".`);
         } else if (error.message.includes('Email not confirmed')) {
           throw new Error('Su correo electrónico no ha sido confirmado. Revise su bandeja de entrada o confirme su correo.');
         }
