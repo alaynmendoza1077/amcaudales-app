@@ -198,8 +198,11 @@ export default function AuthModal({ isOpen, onClose, initialTab = 'login', onAut
         )}
 
         {tab === 'login' && (
-          <div style={{ backgroundColor: 'rgba(16, 185, 129, 0.12)', border: '1px solid rgba(16, 185, 129, 0.35)', borderRadius: '10px', padding: '8px 14px', fontSize: '0.8rem', color: '#6ee7b7', lineHeight: '1.4', marginBottom: '12px' }}>
-            ☁️ <strong>Sincronización en la Nube:</strong> Inicia sesión para recuperar tus proyectos guardados o almacenar tu diseño actual en tu cuenta personal.
+          <div style={{ backgroundColor: 'rgba(16, 185, 129, 0.12)', border: '1px solid rgba(16, 185, 129, 0.35)', borderRadius: '10px', padding: '10px 14px', fontSize: '0.8rem', color: '#6ee7b7', lineHeight: '1.45', marginBottom: '12px' }}>
+            ☁️ <strong>Acceso Universal Multi-PC:</strong> Inicia sesión desde cualquier computador con tu usuario o correo registrado.
+            <div style={{ fontSize: '0.74rem', color: '#cbd5e1', marginTop: '4px' }}>
+              💡 <strong>Acceso Maestro Inmediato:</strong> También puedes ingresar desde cualquier equipo usando la Clave Maestra <code>AMC2026</code>.
+            </div>
           </div>
         )}
 
