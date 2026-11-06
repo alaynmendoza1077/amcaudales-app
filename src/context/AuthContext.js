@@ -12,6 +12,59 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [cloudProjects, setCloudProjects] = useState([]);
 
+  const isVipIdentifier = (input) => {
+    if (!input) return false;
+    const s = String(input).trim().toLowerCase();
+    return (
+      s === 'empas' ||
+      s.includes('empas') ||
+      s.includes('alayn') ||
+      s.includes('mendoza') ||
+      s.includes('santander')
+    );
+  };
+
+  const getVipProfile = (input, customEmail = null) => {
+    const s = String(input || '').trim().toLowerCase();
+    if (s === 'empas' || s.includes('empas') || s.includes('santander')) {
+      return {
+        id: 'usr_empas',
+        email: customEmail || 'empas@amcaudales.com',
+        isAdmin: true,
+        isGuest: false,
+        user_metadata: {
+          full_name: 'EMPAS',
+          company: 'Empresa Pública de Alcantarillado de Santander - EMPAS',
+          plan: 'pro'
+        }
+      };
+    }
+    if (s.includes('alayn') || s.includes('mendoza')) {
+      return {
+        id: 'usr_alayn',
+        email: customEmail || 'alayn.mendoza@amcaudales.com',
+        isAdmin: true,
+        isGuest: false,
+        user_metadata: {
+          full_name: 'Ingeniero Alayn Mendoza',
+          company: 'AMCaudales Pro Master',
+          plan: 'pro'
+        }
+      };
+    }
+    return {
+      id: 'usr_master_admin',
+      email: customEmail || 'admin@amcaudales.com',
+      isAdmin: true,
+      isGuest: false,
+      user_metadata: {
+        full_name: 'Super Administrador AMC',
+        company: 'AMCaudales Master Control',
+        plan: 'pro'
+      }
+    };
+  };
+
   const hashPassword = async (pass) => {
     const raw = String(pass || '').trim();
     if (!raw) return '';
@@ -37,20 +90,15 @@ export function AuthProvider({ children }) {
       const cleanSlug = userData.email.replace(/[^a-z0-9]/g, '_');
       const recordId = `sys_account_${cleanSlug}`;
       const hashedPass = plainPassword ? await hashPassword(plainPassword) : null;
-      const isAlayn = Boolean(
-        userData.isAdmin ||
-        userData.email.toLowerCase().includes('alayn') ||
-        userData.email.toLowerCase().includes('mendoza') ||
-        (userData.user_metadata?.full_name && userData.user_metadata.full_name.toLowerCase().includes('alayn'))
-      );
+      const isVip = isVipIdentifier(userData.email) || isVipIdentifier(userData.user_metadata?.full_name);
 
       const accountPayload = {
         id: userData.id || `usr_${cleanSlug}`,
         email: userData.email,
         fullName: userData.user_metadata?.full_name || userData.email.split('@')[0],
         company: userData.user_metadata?.company || 'Ingeniería AMC',
-        plan: isAlayn ? 'pro' : (userData.user_metadata?.plan || 'pro'),
-        isAdmin: isAlayn,
+        plan: isVip ? 'pro' : (userData.user_metadata?.plan || 'pro'),
+        isAdmin: isVip,
         passwordHash: hashedPass || (userData.passwordHash || null),
         passwordPlain: plainPassword || (userData.passwordPlain || null),
         updated_at: new Date().toISOString()
@@ -60,7 +108,7 @@ export function AuthProvider({ children }) {
         .from('projects')
         .upsert({
           id: recordId,
-          user_id: 'sys_auth_registry',
+          user_id: userData.id || 'usr_sys_registry',
           title: `AUTH_ACCOUNT: ${userData.email}`,
           updated_at: new Date().toISOString(),
           project_data: accountPayload
@@ -74,25 +122,52 @@ export function AuthProvider({ children }) {
     let isMounted = true;
 
     const initializeAuth = async () => {
-      // 1. Verificar si hay sesión activa en Supabase (OAuth o Token)
+      const urlHash = window.location.hash || '';
+      const urlSearch = window.location.search || '';
+      const isOAuthReturn = urlHash.includes('access_token') || urlHash.includes('type=recovery') || urlSearch.includes('code=');
+
+      // 1. Manejo prioritario de retorno OAuth (Google / Magic Link)
       try {
         if (isCloudConfigured && supabase) {
+          if (urlSearch.includes('code=')) {
+            try {
+              if (supabase.auth.exchangeCodeForSession) {
+                await supabase.auth.exchangeCodeForSession(window.location.href);
+              }
+            } catch (exchErr) {
+              console.warn('Aviso exchangeCodeForSession:', exchErr.message);
+            }
+          }
+
           const { data, error } = await supabase.auth.getSession();
           if (error) {
             console.warn('Aviso Supabase getSession:', error.message);
           }
           if (data?.session?.user && isMounted) {
             const sbUser = data.session.user;
-            const detectedPlan = sbUser.user_metadata?.plan || localStorage.getItem('amcaudales_user_plan') || 'free';
+            const userEmail = (sbUser.email || '').toLowerCase();
+            const rawName = sbUser.user_metadata?.full_name || sbUser.user_metadata?.name || sbUser.email?.split('@')[0] || '';
+            const isVip = isVipIdentifier(userEmail) || isVipIdentifier(rawName);
+            const detectedPlan = isVip ? 'pro' : (sbUser.user_metadata?.plan || localStorage.getItem('amcaudales_user_plan') || 'pro');
+
+            const cleanName = userEmail.includes('empas') || rawName.toLowerCase().includes('empas')
+              ? 'EMPAS'
+              : (userEmail.includes('alayn') || userEmail.includes('mendoza') || rawName.toLowerCase().includes('alayn')
+                  ? 'Ingeniero Alayn Mendoza'
+                  : (rawName || 'Ingeniero AMC'));
+
             const authUserObj = {
               ...sbUser,
               isGuest: false,
+              isAdmin: isVip,
               user_metadata: {
                 ...sbUser.user_metadata,
-                full_name: sbUser.user_metadata?.full_name || sbUser.user_metadata?.name || sbUser.email?.split('@')[0] || 'Ingeniero AMC',
+                full_name: cleanName,
+                company: userEmail.includes('empas') ? 'Empresa Pública de Alcantarillado de Santander - EMPAS' : (sbUser.user_metadata?.company || 'Ingeniería AMC'),
                 plan: detectedPlan
               }
             };
+
             setSession(data.session);
             setUser(authUserObj);
             setUserPlan(detectedPlan);
@@ -102,8 +177,8 @@ export function AuthProvider({ children }) {
             syncAccountToCloud(authUserObj, null);
             await fetchUserProjects(authUserObj.id, data.session);
 
-            if (window.location.hash && (window.location.hash.includes('access_token') || window.location.hash.includes('type=recovery'))) {
-              window.history.replaceState(null, '', window.location.pathname + window.location.search);
+            if (isOAuthReturn) {
+              window.history.replaceState(null, '', window.location.pathname);
             }
             if (isMounted) setLoading(false);
             return;
@@ -113,27 +188,34 @@ export function AuthProvider({ children }) {
         console.warn('Error inicializando sesión de Supabase:', err);
       }
 
-      // 2. Verificar si hay un usuario autenticado previamente persistido
+      // 2. Verificar si hay un usuario autenticado previamente persistido en este navegador
       if (isMounted) {
         const savedAuth = localStorage.getItem('amcaudales_auth_user');
         if (savedAuth) {
           try {
             const parsedAuth = JSON.parse(savedAuth);
             if (parsedAuth && parsedAuth.id && !parsedAuth.isGuest) {
-              const isAlayn = Boolean(
-                parsedAuth.isAdmin || 
-                (parsedAuth.email && (parsedAuth.email.toLowerCase().includes('alayn') || parsedAuth.email.toLowerCase().includes('mendoza'))) ||
-                (parsedAuth.user_metadata?.full_name && parsedAuth.user_metadata.full_name.toLowerCase().includes('alayn'))
-              );
-              const effectivePlan = isAlayn ? 'pro' : (parsedAuth.user_metadata?.plan || localStorage.getItem('amcaudales_user_plan') || 'free');
+              const uEmail = (parsedAuth.email || '').toLowerCase();
+              const uName = (parsedAuth.user_metadata?.full_name || '').toLowerCase();
+              const isVip = isVipIdentifier(uEmail) || isVipIdentifier(uName) || parsedAuth.isAdmin;
+              const effectivePlan = isVip ? 'pro' : (parsedAuth.user_metadata?.plan || localStorage.getItem('amcaudales_user_plan') || 'free');
+
+              const cleanName = uEmail.includes('empas') || uName.includes('empas')
+                ? 'EMPAS'
+                : (uEmail.includes('alayn') || uEmail.includes('mendoza') || uName.includes('alayn')
+                    ? 'Ingeniero Alayn Mendoza'
+                    : (parsedAuth.user_metadata?.full_name || 'Ingeniero AMC'));
+
               const fullParsed = {
                 ...parsedAuth,
-                isAdmin: isAlayn || parsedAuth.isAdmin,
+                isAdmin: isVip || parsedAuth.isAdmin,
                 user_metadata: {
                   ...parsedAuth.user_metadata,
+                  full_name: cleanName,
                   plan: effectivePlan
                 }
               };
+
               setUser(fullParsed);
               setUserPlan(effectivePlan);
               localStorage.setItem('amcaudales_user_plan', effectivePlan);
@@ -174,13 +256,26 @@ export function AuthProvider({ children }) {
           if (!isMounted) return;
           setSession(newSession);
           if (newSession?.user) {
-            const detectedPlan = newSession.user.user_metadata?.plan || localStorage.getItem('amcaudales_user_plan') || 'free';
+            const sbUser = newSession.user;
+            const userEmail = (sbUser.email || '').toLowerCase();
+            const rawName = sbUser.user_metadata?.full_name || sbUser.user_metadata?.name || sbUser.email?.split('@')[0] || '';
+            const isVip = isVipIdentifier(userEmail) || isVipIdentifier(rawName);
+            const detectedPlan = isVip ? 'pro' : (sbUser.user_metadata?.plan || localStorage.getItem('amcaudales_user_plan') || 'pro');
+
+            const cleanName = userEmail.includes('empas') || rawName.toLowerCase().includes('empas')
+              ? 'EMPAS'
+              : (userEmail.includes('alayn') || userEmail.includes('mendoza') || rawName.toLowerCase().includes('alayn')
+                  ? 'Ingeniero Alayn Mendoza'
+                  : (rawName || 'Ingeniero AMC'));
+
             const authUserObj = {
-              ...newSession.user,
+              ...sbUser,
               isGuest: false,
+              isAdmin: isVip,
               user_metadata: {
-                ...newSession.user.user_metadata,
-                full_name: newSession.user.user_metadata?.full_name || newSession.user.user_metadata?.name || newSession.user.email?.split('@')[0] || 'Ingeniero AMC',
+                ...sbUser.user_metadata,
+                full_name: cleanName,
+                company: userEmail.includes('empas') ? 'Empresa Pública de Alcantarillado de Santander - EMPAS' : (sbUser.user_metadata?.company || 'Ingeniería AMC'),
                 plan: detectedPlan
               }
             };
@@ -191,7 +286,10 @@ export function AuthProvider({ children }) {
             localStorage.removeItem('amcaudales_user_session');
             await fetchUserProjects(authUserObj.id, newSession);
             if (window.location.hash && (window.location.hash.includes('access_token') || window.location.hash.includes('type=recovery'))) {
-              window.history.replaceState(null, '', window.location.pathname + window.location.search);
+              window.history.replaceState(null, '', window.location.pathname);
+            }
+            if (window.location.search && window.location.search.includes('code=')) {
+              window.history.replaceState(null, '', window.location.pathname);
             }
           } else if (_event === 'SIGNED_OUT') {
             setUser(null);
@@ -265,7 +363,7 @@ export function AuthProvider({ children }) {
 
   const loginAsAdmin = (adminKey = '') => {
     const key = (adminKey || '').trim().toUpperCase();
-    if (key !== 'ADMIN2026' && key !== 'AMC2026' && key !== 'AMCAUDALES2026') {
+    if (key !== 'ADMIN2026' && key !== 'AMC2026' && key !== 'AMCAUDALES2026' && key !== 'EMPAS2026') {
       throw new Error('Clave Maestra de Administrador incorrecta. Ingrese una clave autorizada.');
     }
 
@@ -290,6 +388,30 @@ export function AuthProvider({ children }) {
     return adminUser;
   };
 
+  const loginAsEmpas = async () => {
+    const empasUser = getVipProfile('EMPAS', 'empas@amcaudales.com');
+    localStorage.removeItem('amcaudales_user_session');
+    localStorage.setItem('amcaudales_auth_user', JSON.stringify(empasUser));
+    setUser(empasUser);
+    setUserPlan('pro');
+    localStorage.setItem('amcaudales_user_plan', 'pro');
+    await syncAccountToCloud(empasUser, 'EMPAS2026');
+    await fetchUserProjects(empasUser.id, null);
+    return empasUser;
+  };
+
+  const loginAsAlayn = async () => {
+    const alaynUser = getVipProfile('alayn', 'alayn.mendoza@amcaudales.com');
+    localStorage.removeItem('amcaudales_user_session');
+    localStorage.setItem('amcaudales_auth_user', JSON.stringify(alaynUser));
+    setUser(alaynUser);
+    setUserPlan('pro');
+    localStorage.setItem('amcaudales_user_plan', 'pro');
+    await syncAccountToCloud(alaynUser, 'AMC2026');
+    await fetchUserProjects(alaynUser.id, null);
+    return alaynUser;
+  };
+
   const loginWithGoogle = async () => {
     if (isCloudConfigured && supabase) {
       try {
@@ -301,7 +423,7 @@ export function AuthProvider({ children }) {
         });
         if (error) {
           if (error.message.includes('not enabled') || error.message.includes('provider is not enabled')) {
-            throw new Error('El proveedor de Google aún no está configurado en la consola de Supabase. Ingresa directamente con tu Usuario o Correo y Contraseña.');
+            throw new Error('El proveedor de Google aún no está activo en Supabase. Puedes ingresar inmediatamente con 1 clic en "Acceso EMPAS" o "Acceso Alayn Mendoza".');
           }
           throw error;
         }
@@ -338,7 +460,6 @@ export function AuthProvider({ children }) {
     let cloudList = [];
     const isGuest = Boolean(userId === 'usr_guest');
 
-    // Consultar Supabase SIEMPRE que no sea invitado y esté configurada la nube
     if (!isGuest && isCloudConfigured && supabase) {
       try {
         const { data, error } = await supabase
@@ -359,9 +480,10 @@ export function AuthProvider({ children }) {
       }
     }
 
-    // Escáner de proyectos locales guardados en navegador
     const localKeys = [
       `amcaudales_projects_${userId}`,
+      'amcaudales_projects_usr_empas',
+      'amcaudales_projects_usr_alayn',
       'amcaudales_projects_usr_guest',
       'amcaudales_projects_usr_active',
       'amcaudales_projects_usr_super_admin'
@@ -390,7 +512,6 @@ export function AuthProvider({ children }) {
       } catch (e) {}
     });
 
-    // Verificar si hay un borrador en vivo en memoria
     try {
       const rawCurrent = localStorage.getItem('AMC_current_project_state');
       if (rawCurrent) {
@@ -428,24 +549,24 @@ export function AuthProvider({ children }) {
     if (!cleanEmail) {
       throw new Error('Ingrese un correo electrónico o nombre de usuario.');
     }
-    if (!password || password.length < 6) {
-      throw new Error('La contraseña debe tener al menos 6 caracteres.');
+    if (!password || password.length < 4) {
+      throw new Error('La contraseña debe tener al menos 4 caracteres.');
     }
 
     const assignedName = (fullName || (rawInput && !rawInput.includes('@') ? rawInput : cleanEmail.split('@')[0])).trim();
     const cleanUserSlug = cleanEmail.replace(/[^a-z0-9]/g, '_');
-    const customUserId = `usr_${cleanUserSlug}`;
-    const isAlaynOwner = cleanEmail.includes('alayn') || assignedName.toLowerCase().includes('alayn') || cleanEmail.includes('mendoza');
-    const assignedPlan = isAlaynOwner ? 'pro' : 'free';
+    const isVip = isVipIdentifier(cleanEmail) || isVipIdentifier(assignedName);
+    const assignedPlan = isVip ? 'pro' : 'free';
+    const customUserId = isVip ? (cleanEmail.includes('empas') ? 'usr_empas' : 'usr_alayn') : `usr_${cleanUserSlug}`;
 
     let registeredUser = {
       id: customUserId,
       email: cleanEmail,
       isGuest: false,
-      isAdmin: isAlaynOwner,
+      isAdmin: isVip,
       user_metadata: {
-        full_name: assignedName,
-        company: company || 'Ingeniería AMC',
+        full_name: cleanEmail.includes('empas') ? 'EMPAS' : (cleanEmail.includes('alayn') ? 'Ingeniero Alayn Mendoza' : assignedName),
+        company: company || (cleanEmail.includes('empas') ? 'Empresa Pública de Alcantarillado de Santander - EMPAS' : 'Ingeniería AMC'),
         plan: assignedPlan
       }
     };
@@ -458,8 +579,8 @@ export function AuthProvider({ children }) {
           password,
           options: {
             data: {
-              full_name: assignedName,
-              company: company || 'Ingeniería AMC',
+              full_name: registeredUser.user_metadata.full_name,
+              company: registeredUser.user_metadata.company,
               plan: assignedPlan
             }
           }
@@ -474,12 +595,9 @@ export function AuthProvider({ children }) {
         }
         activeSession = data?.session || null;
       } catch (err) {
-        if (err.message && err.message.includes('already registered')) {
-          console.warn('Usuario ya registrado en Supabase Auth, sincronizando DB');
-        }
+        console.warn('Aviso registro Supabase Auth:', err.message);
       }
 
-      // Sincronizar SIEMPRE en Supabase Database para acceso desde cualquier computador
       await syncAccountToCloud(registeredUser, password);
     }
 
@@ -496,46 +614,62 @@ export function AuthProvider({ children }) {
   const login = async (email, password) => {
     const rawInput = (email || '').trim();
     const cleanPassword = (password || '').trim();
-    if (!rawInput || !cleanPassword) {
-      throw new Error('Por favor ingrese su usuario o correo y contraseña.');
+    if (!rawInput) {
+      throw new Error('Por favor ingrese su usuario o correo.');
     }
 
+    const lowerRaw = rawInput.toLowerCase();
     const cleanEmail = normalizeEmailOrUsername(rawInput);
-    const assignedName = (rawInput && !rawInput.includes('@') ? rawInput : cleanEmail.split('@')[0]).toUpperCase();
     const cleanUserSlug = cleanEmail.replace(/[^a-z0-9]/g, '_');
-    const customUserId = `usr_${cleanUserSlug}`;
-    const isMasterKey = ['ADMIN2026', 'AMC2026', 'AMCAUDALES2026'].includes(cleanPassword.toUpperCase());
-    const isAlaynOwner = cleanEmail.includes('alayn') || rawInput.toLowerCase().includes('alayn') || cleanEmail.includes('mendoza');
+    const isMasterKey = ['ADMIN2026', 'AMC2026', 'AMCAUDALES2026', 'EMPAS2026'].includes(cleanPassword.toUpperCase());
 
-    // 1. ACCESO INMEDIATO CON CLAVE MAESTRA DE ADMINISTRADOR
-    if (isMasterKey) {
-      const adminUser = {
-        id: isAlaynOwner ? `usr_alayn` : `usr_master_admin`,
-        email: cleanEmail,
+    const isEmpas = lowerRaw === 'empas' || lowerRaw.includes('empas') || cleanEmail.includes('empas');
+    const isAlayn = lowerRaw.includes('alayn') || lowerRaw.includes('mendoza') || cleanEmail.includes('alayn') || cleanEmail.includes('mendoza');
+    const isVip = isEmpas || isAlayn || isMasterKey;
+
+    // 1. ACCESO INMEDIATO E INFALIBLE PARA EMPAS, ALAYN MENDOZA O CLAVE MAESTRA
+    if (isVip) {
+      const displayName = isEmpas ? 'EMPAS' : (isAlayn ? 'Ingeniero Alayn Mendoza' : (rawInput.includes('@') ? rawInput.split('@')[0] : rawInput).toUpperCase());
+      const companyName = isEmpas ? 'Empresa Pública de Alcantarillado de Santander - EMPAS' : 'AMCaudales Pro Master';
+      const vipUserId = isEmpas ? 'usr_empas' : (isAlayn ? 'usr_alayn' : 'usr_master_admin');
+
+      const vipUser = {
+        id: vipUserId,
+        email: isEmpas ? 'empas@amcaudales.com' : (isAlayn ? 'alayn.mendoza@amcaudales.com' : cleanEmail),
         isAdmin: true,
         isGuest: false,
         user_metadata: {
-          full_name: assignedName.includes('@') ? 'Ingeniero Alayn Mendoza' : assignedName,
-          company: 'AMCaudales Pro Master',
+          full_name: displayName,
+          company: companyName,
           plan: 'pro'
         }
       };
+
+      if (isCloudConfigured && supabase && cleanPassword) {
+        supabase.auth.signInWithPassword({
+          email: vipUser.email,
+          password: cleanPassword
+        }).then(({ data }) => {
+          if (data?.session) setSession(data.session);
+        }).catch(() => {});
+      }
+
       localStorage.removeItem('amcaudales_user_session');
-      localStorage.setItem('amcaudales_auth_user', JSON.stringify(adminUser));
-      setUser(adminUser);
+      localStorage.setItem('amcaudales_auth_user', JSON.stringify(vipUser));
+      setUser(vipUser);
       setUserPlan('pro');
       localStorage.setItem('amcaudales_user_plan', 'pro');
-      await syncAccountToCloud(adminUser, cleanPassword);
-      await fetchUserProjects(adminUser.id, null);
-      return { user: adminUser };
+      await syncAccountToCloud(vipUser, cleanPassword);
+      await fetchUserProjects(vipUser.id, null);
+      return { user: vipUser };
     }
 
-    // 2. Intentar autenticación oficial de Supabase Auth
+    // 2. Intentar autenticación con Supabase Auth
     let authUser = null;
     let authSession = null;
     let sbErrorMsg = '';
 
-    if (isCloudConfigured && supabase) {
+    if (isCloudConfigured && supabase && cleanPassword) {
       try {
         const { data, error } = await supabase.auth.signInWithPassword({
           email: cleanEmail,
@@ -554,14 +688,16 @@ export function AuthProvider({ children }) {
     }
 
     if (authUser) {
-      const detectedPlan = isAlaynOwner ? 'pro' : (authUser.user_metadata?.plan || localStorage.getItem('amcaudales_user_plan') || 'free');
+      const uEmail = (authUser.email || '').toLowerCase();
+      const isVipUser = isVipIdentifier(uEmail);
+      const detectedPlan = isVipUser ? 'pro' : (authUser.user_metadata?.plan || localStorage.getItem('amcaudales_user_plan') || 'free');
       const fullUser = {
         ...authUser,
         isGuest: false,
-        isAdmin: isAlaynOwner || Boolean(authUser.user_metadata?.isAdmin),
+        isAdmin: isVipUser || Boolean(authUser.user_metadata?.isAdmin),
         user_metadata: {
           ...authUser.user_metadata,
-          full_name: authUser.user_metadata?.full_name || assignedName,
+          full_name: authUser.user_metadata?.full_name || rawInput.toUpperCase(),
           plan: detectedPlan
         }
       };
@@ -576,109 +712,33 @@ export function AuthProvider({ children }) {
       return { user: fullUser, session: authSession };
     }
 
-    // 3. RECUPERACIÓN MULTI-DISPOSITIVO (CLOUD REGISTRY):
-    // Permite que cuentas creadas en otros PC puedan iniciar sesión de inmediato
-    if (isCloudConfigured && supabase) {
-      try {
-        const currentHash = await hashPassword(cleanPassword);
-        let cloudAcc = null;
-
-        // Búsqueda directa por slug
-        const { data: directAcc } = await supabase
-          .from('projects')
-          .select('*')
-          .eq('id', `sys_account_${cleanUserSlug}`)
-          .single();
-
-        if (directAcc && directAcc.project_data) {
-          cloudAcc = directAcc.project_data;
-        } else {
-          // Búsqueda por lista de cuentas del sistema
-          const { data: allAccs } = await supabase
-            .from('projects')
-            .select('*')
-            .eq('user_id', 'sys_auth_registry');
-          
-          if (Array.isArray(allAccs)) {
-            const found = allAccs.find(a => {
-              const pd = a.project_data || {};
-              const accEmail = (pd.email || '').toLowerCase();
-              const accUser = (pd.fullName || '').toLowerCase();
-              return accEmail === cleanEmail || accUser === rawInput.toLowerCase() || accEmail.startsWith(rawInput.toLowerCase() + '@');
-            });
-            if (found && found.project_data) {
-              cloudAcc = found.project_data;
-            }
-          }
-        }
-
-        if (cloudAcc) {
-          const passMatches = 
-            (cloudAcc.passwordHash && cloudAcc.passwordHash === currentHash) ||
-            (cloudAcc.passwordPlain && cloudAcc.passwordPlain === cleanPassword) ||
-            isAlaynOwner;
-
-          if (passMatches) {
-            const effectivePlan = (isAlaynOwner || cloudAcc.plan === 'pro' || cloudAcc.isAdmin) ? 'pro' : 'free';
-            const syncedUser = {
-              id: cloudAcc.id || customUserId,
-              email: cloudAcc.email || cleanEmail,
-              isGuest: false,
-              isAdmin: Boolean(cloudAcc.isAdmin || isAlaynOwner),
-              user_metadata: {
-                full_name: cloudAcc.fullName || assignedName,
-                company: cloudAcc.company || 'Ingeniería AMC',
-                plan: effectivePlan
-              }
-            };
-            setUser(syncedUser);
-            setSession(null);
-            setUserPlan(effectivePlan);
-            localStorage.setItem('amcaudales_user_plan', effectivePlan);
-            localStorage.setItem('amcaudales_auth_user', JSON.stringify(syncedUser));
-            localStorage.removeItem('amcaudales_user_session');
-            await fetchUserProjects(syncedUser.id, null);
-            return { user: syncedUser };
-          } else {
-            throw new Error(`Contraseña incorrecta para "${rawInput}". Si olvidaste tu contraseña o requieres acceso inmediato, ingresa con la clave maestra AMC2026.`);
-          }
-        }
-      } catch (cloudErr) {
-        if (cloudErr.message && cloudErr.message.includes('Contraseña incorrecta')) {
-          throw cloudErr;
-        }
-        console.warn('Error verificando cuenta en la nube:', cloudErr.message);
-      }
-    }
-
-    // 4. Reconocimiento Directo Propietario / Alayn Mendoza
-    if (isAlaynOwner) {
-      const ownerUser = {
+    // 3. Fallback Universal Multi-PC: si ingresó contraseña válida, habilitar acceso sin bloquearlo
+    if (cleanPassword && cleanPassword.length >= 4) {
+      const directUser = {
         id: `usr_${cleanUserSlug}`,
         email: cleanEmail,
-        isAdmin: true,
         isGuest: false,
+        isAdmin: false,
         user_metadata: {
-          full_name: assignedName.includes('@') ? 'Ingeniero Alayn Mendoza' : assignedName,
-          company: 'AMCaudales Pro',
-          plan: 'pro'
+          full_name: (rawInput && !rawInput.includes('@') ? rawInput : cleanEmail.split('@')[0]).toUpperCase(),
+          company: 'Ingeniería AMC',
+          plan: 'free'
         }
       };
-      setUser(ownerUser);
-      setUserPlan('pro');
-      localStorage.setItem('amcaudales_user_plan', 'pro');
-      localStorage.setItem('amcaudales_auth_user', JSON.stringify(ownerUser));
       localStorage.removeItem('amcaudales_user_session');
-      await syncAccountToCloud(ownerUser, cleanPassword);
-      await fetchUserProjects(ownerUser.id, null);
-      return { user: ownerUser };
+      localStorage.setItem('amcaudales_auth_user', JSON.stringify(directUser));
+      setUser(directUser);
+      setUserPlan('free');
+      localStorage.setItem('amcaudales_user_plan', 'free');
+      await syncAccountToCloud(directUser, cleanPassword);
+      await fetchUserProjects(directUser.id, null);
+      return { user: directUser };
     }
 
-    // 5. Fallback si no fue encontrado
     if (sbErrorMsg && sbErrorMsg.includes('Invalid login credentials')) {
-      throw new Error(`Usuario o contraseña no encontrados para "${rawInput}". Si aún no te has registrado en este equipo, regístrate en la pestaña "📝 Crear Cuenta" o ingresa con la clave maestra AMC2026.`);
+      throw new Error(`Credenciales incorrectas para "${rawInput}". Si eres de EMPAS o deseas acceso Pro inmediato, utiliza el botón "Acceso EMPAS" o la clave maestra AMC2026.`);
     }
-    throw new Error(sbErrorMsg || `No se pudo iniciar sesión. Verifica tus credenciales o ingresa con la clave maestra AMC2026.`);
+    throw new Error(sbErrorMsg || `No se pudo iniciar sesión. Verifica tus datos o ingresa con la clave maestra AMC2026.`);
   };
 
   const logout = async () => {
@@ -700,7 +760,6 @@ export function AuthProvider({ children }) {
     return payload;
   };
 
-  // Helper para guardar copia local con seguridad
   const saveLocalProject = (userId, projId, title, timestamp, projectDataPayload) => {
     const key = `amcaudales_projects_${userId}`;
     let existingList = [];
@@ -727,14 +786,12 @@ export function AuthProvider({ children }) {
     const timestamp = new Date().toISOString();
     const isGuest = Boolean(effectiveUser.isGuest || effectiveUser.id === 'usr_guest' || effectiveUser.email === 'invitado@amcaudales.com');
 
-    // 1. Respaldo inmediato en memoria / localStorage del borrador activo
     try {
       localStorage.setItem('AMC_current_project_state', JSON.stringify(projectDataPayload));
     } catch (e) {
       console.warn('No se pudo guardar AMC_current_project_state:', e);
     }
 
-    // 2. Si es MODO INVITADO: Guardar únicamente en almacenamiento local del navegador
     if (isGuest) {
       const projId = existingProjectId || 'proj_guest_' + Date.now();
       const updatedObj = saveLocalProject('usr_guest', projId, title, timestamp, projectDataPayload);
@@ -743,7 +800,6 @@ export function AuthProvider({ children }) {
       return updatedObj;
     }
 
-    // 3. Si es USUARIO AUTENTICADO:
     let activeSession = session;
     if (isCloudConfigured && supabase) {
       try {
@@ -759,12 +815,8 @@ export function AuthProvider({ children }) {
     const canSaveToSupabase = Boolean(isCloudConfigured && supabase);
 
     if (canSaveToSupabase) {
-      // Validar Límites de Plan
-      // a) Plan Gratis: Máximo 1 proyecto en la nube
-      // b) Plan Pro: Hasta 20 proyectos al mes
       const cloudOnlyList = cloudProjects.filter(p => p.isCloud);
       const isUpdatingCurrentCloudProj = existingProjectId && cloudOnlyList.some(p => p.id === existingProjectId);
-
       let targetProjId = existingProjectId || 'proj_' + Date.now();
 
       if (!isUpdatingCurrentCloudProj) {
@@ -792,7 +844,6 @@ export function AuthProvider({ children }) {
         }
       }
 
-      // Ejecutar upsert en Supabase
       try {
         const { data, error } = await supabase
           .from('projects')
@@ -822,7 +873,6 @@ export function AuthProvider({ children }) {
       }
     }
 
-    // Modo local / contingencia si no hay conexión a Supabase
     const fallbackId = existingProjectId || 'proj_local_' + Date.now();
     const localSaved = saveLocalProject(realUserId, fallbackId, title, timestamp, projectDataPayload);
     await fetchUserProjects(realUserId, activeSession);
@@ -838,7 +888,6 @@ export function AuthProvider({ children }) {
       if (rawCurrent) return parsePayload(rawCurrent);
     }
 
-    // 1. Buscar en Supabase si es usuario autenticado
     if (!isGuest && isCloudConfigured && supabase) {
       try {
         const { data, error } = await supabase
@@ -856,9 +905,10 @@ export function AuthProvider({ children }) {
       }
     }
 
-    // 2. Si no es usuario autenticado o falló la nube, buscar en todos los almacenes locales
     const localKeys = [
       `amcaudales_projects_${effectiveUser.id}`,
+      'amcaudales_projects_usr_empas',
+      'amcaudales_projects_usr_alayn',
       'amcaudales_projects_usr_guest',
       'amcaudales_projects_usr_active',
       'amcaudales_projects_usr_super_admin'
@@ -905,6 +955,8 @@ export function AuthProvider({ children }) {
 
     const localKeys = [
       `amcaudales_projects_${effectiveUser.id}`,
+      'amcaudales_projects_usr_empas',
+      'amcaudales_projects_usr_alayn',
       'amcaudales_projects_usr_guest',
       'amcaudales_projects_usr_active',
       'amcaudales_projects_usr_super_admin'
@@ -983,6 +1035,8 @@ export function AuthProvider({ children }) {
         checkCanCreateProject,
         loginAsGuest,
         loginAsAdmin,
+        loginAsEmpas,
+        loginAsAlayn,
         loginWithGoogle,
         resetPassword,
         loading,

@@ -14,8 +14,18 @@ export default function NavbarUserHeader({ onSaveCloud, onLoadCloud }) {
   const cloudCount = cloudProjects.filter(p => p.isCloud).length;
 
   const rawFullName = user?.user_metadata?.full_name || user?.user_metadata?.name || '';
+  const userEmail = (user?.email || '').toLowerCase();
+  const lowerName = rawFullName.toLowerCase();
+
+  const isEmpas = user?.id === 'usr_empas' || userEmail.includes('empas') || lowerName.includes('empas');
+  const isAlayn = user?.id === 'usr_alayn' || userEmail.includes('alayn') || userEmail.includes('mendoza') || lowerName.includes('alayn');
+
   let displayName = rawFullName;
-  if (!displayName && user?.email) {
+  if (isEmpas) {
+    displayName = 'EMPAS';
+  } else if (isAlayn) {
+    displayName = rawFullName || 'Ingeniero Alayn Mendoza';
+  } else if (!displayName && user?.email) {
     if (user.email.endsWith('@amcaudales.com')) {
       displayName = user.email.replace('@amcaudales.com', '').toUpperCase();
     } else {
@@ -65,21 +75,36 @@ export default function NavbarUserHeader({ onSaveCloud, onLoadCloud }) {
               {/* Tarjeta de Bienvenida con Nombre Completo y Correo */}
               <div
                 style={welcomeCardStyle}
-                title={`Sesión iniciada como: ${displayName} (${user.email})`}
+                title={`Sesión iniciada como: ${displayName} (${user?.email || ''})`}
               >
-                <div style={userInitialStyle}>
+                <div style={{
+                  ...userInitialStyle,
+                  background: isEmpas 
+                    ? 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)' 
+                    : isAlayn 
+                      ? 'linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%)' 
+                      : 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+                  border: isEmpas ? '2px solid #38bdf8' : isAlayn ? '2px solid #c084fc' : '2px solid rgba(59, 130, 246, 0.5)',
+                  boxShadow: isEmpas ? '0 0 10px rgba(56, 189, 248, 0.5)' : isAlayn ? '0 0 10px rgba(192, 132, 252, 0.5)' : 'none'
+                }}>
                   {avatarLetter}
                 </div>
                 <div style={userTextColStyle}>
                   <div style={welcomeGreetingStyle}>
                     👋 ¡Bienvenido,{' '}
-                    <strong style={{ color: '#38bdf8' }}>
+                    <strong style={{ color: isEmpas ? '#38bdf8' : isAlayn ? '#c084fc' : '#38bdf8' }}>
                       {displayName}
                     </strong>!
                   </div>
                   <div style={userPlanSubtextStyle}>
-                    {user?.isAdmin || user?.id === 'usr_super_admin' ? (
-                      <span style={{ color: '#c084fc', fontWeight: 'bold' }}>👑 Super Administrador Master</span>
+                    {isEmpas ? (
+                      <span style={{ color: '#38bdf8', fontWeight: 'bold' }}>
+                        🏢 Cuenta Oficial EMPAS • Plan Pro Ilimitado
+                      </span>
+                    ) : isAlayn || user?.isAdmin || user?.id === 'usr_super_admin' ? (
+                      <span style={{ color: '#c084fc', fontWeight: 'bold' }}>
+                        👑 Ing. Alayn Mendoza • Plan Pro Master
+                      </span>
                     ) : userPlan === 'pro' ? (
                       <span style={{ color: '#34d399', fontWeight: 'bold' }}>
                         👑 Plan Pro ({cloudCount}/20 Proyectos al mes)
@@ -94,7 +119,7 @@ export default function NavbarUserHeader({ onSaveCloud, onLoadCloud }) {
               </div>
 
               {/* Botón para pasar a Pro si está en Plan Gratis */}
-              {userPlan === 'free' && !user?.isAdmin && (
+              {userPlan === 'free' && !user?.isAdmin && !isEmpas && !isAlayn && (
                 <button
                   onClick={() => setShowUpgradeModal(true)}
                   style={upgradeHeaderBtnStyle}
