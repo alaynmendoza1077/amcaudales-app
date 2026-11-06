@@ -6,8 +6,6 @@ export default function AuthModal({ isOpen, onClose, initialTab = 'login', onAut
     login,
     register,
     loginAsAdmin,
-    loginAsEmpas,
-    loginAsAlayn,
     loginWithGoogle,
     resetPassword,
     loginAsGuest,
@@ -15,7 +13,7 @@ export default function AuthModal({ isOpen, onClose, initialTab = 'login', onAut
   } = useAuth();
 
   const [tab, setTab] = useState(initialTab); // 'login' | 'register' | 'recover' | 'admin'
-  
+
   // Estados de formulario
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -66,36 +64,31 @@ export default function AuthModal({ isOpen, onClose, initialTab = 'login', onAut
         await resetPassword(email);
         setSuccessMsg('Se ha enviado el enlace de restablecimiento a su correo electrónico.');
       } else if (tab === 'register') {
-        if (!email || !fullName || !confirmPassword) {
+        if (!email || !fullName || !password || !confirmPassword) {
           throw new Error('Por favor complete todos los campos obligatorios (*).');
         }
-        if (password.length < 4) {
-          throw new Error('La contraseña debe tener al menos 4 caracteres.');
+        if (password.length < 6) {
+          throw new Error('La contraseña debe tener al menos 6 caracteres.');
         }
         if (password !== confirmPassword) {
           throw new Error('Las contraseñas no coinciden. Por favor verifique.');
         }
         await register(email, password, fullName, company);
-        setSuccessMsg('¡Cuenta registrada exitosamente! Plan Pro activado.');
+        setSuccessMsg('¡Cuenta creada exitosamente! Bienvenido a AMCaudales.');
         setTimeout(() => {
           onClose();
           onAuthSuccess?.();
-        }, 900);
+        }, 800);
       } else {
         // Tab Login
         if (!email) {
-          throw new Error('Por favor ingrese su correo electrónico o usuario.');
+          throw new Error('Por favor ingrese su correo electrónico.');
         }
-        await login(email, password || 'AMC2026');
-        const lowerEmail = email.toLowerCase();
-        const isEmpas = lowerEmail.includes('empas');
-        const isAlayn = lowerEmail.includes('alayn') || lowerEmail.includes('mendoza');
-        const welcomeText = isEmpas 
-          ? '¡Bienvenido EMPAS! Acceso Pro Oficial activado.' 
-          : (isAlayn 
-              ? '¡Bienvenido Ing. Alayn Mendoza! Acceso Pro Master activado.' 
-              : '¡Inicio de sesión exitoso! Bienvenido a AMCaudales.');
-        setSuccessMsg(welcomeText);
+        if (!password) {
+          throw new Error('Por favor ingrese su contraseña o continúe con Google.');
+        }
+        await login(email, password);
+        setSuccessMsg('¡Inicio de sesión exitoso! Bienvenido a AMCaudales.');
         setTimeout(() => {
           onClose();
           onAuthSuccess?.();
@@ -112,16 +105,10 @@ export default function AuthModal({ isOpen, onClose, initialTab = 'login', onAut
     resetMessages();
     setLoading(true);
     try {
-      const data = await loginWithGoogle();
-      if (data?.url) {
-        setSuccessMsg('Redirigiendo a Google...');
-        window.location.href = data.url;
-        return;
-      }
-      setSuccessMsg('Conectando con Google...');
+      setSuccessMsg('Redirigiendo a Google...');
+      await loginWithGoogle();
     } catch (err) {
-      setErrorMsg(err.message || 'No fue posible conectar con Google. Utiliza los botones de Acceso Directo EMPAS o ingresa tu usuario.');
-    } finally {
+      setErrorMsg(err.message || 'No fue posible conectar con Google. Por favor intente nuevamente.');
       setLoading(false);
     }
   };
@@ -134,7 +121,7 @@ export default function AuthModal({ isOpen, onClose, initialTab = 'login', onAut
   return (
     <div style={modalOverlayStyle}>
       <div style={modalCardStyle}>
-        
+
         {/* Encabezado del Modal */}
         <div style={modalHeaderStyle}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -147,7 +134,7 @@ export default function AuthModal({ isOpen, onClose, initialTab = 'login', onAut
                 {tab === 'admin' && 'Panel Maestro Administrador'}
               </h3>
               <span style={cloudBadgeStyle}>
-                {isCloudConfigured ? '☁️ Nube Supabase Activa' : '⚡ Modo Local y Offline'}
+                {isCloudConfigured ? '☁️ Nube Supabase Activa • Acceso Multi-PC' : '⚡ Modo Local y Offline'}
               </span>
             </div>
           </div>
@@ -181,104 +168,26 @@ export default function AuthModal({ isOpen, onClose, initialTab = 'login', onAut
           </div>
         )}
 
-        {/* Accesos Rápidos VIP 1-Clic para EMPAS y Alayn Mendoza */}
-        {tab === 'login' && (
-          <div style={{ marginBottom: '14px' }}>
-            <div style={{ fontSize: '0.78rem', color: '#94a3b8', marginBottom: '6px', fontWeight: 600 }}>
-              ⚡ Acceso Directo Pro Multi-PC (1 Clic, Sin Contraseña):
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-              <button
-                type="button"
-                disabled={loading}
-                onClick={async () => {
-                  setLoading(true);
-                  resetMessages();
-                  try {
-                    await loginAsEmpas();
-                    setSuccessMsg('¡Bienvenido EMPAS! Acceso Pro Oficial activado.');
-                    setTimeout(() => { onClose(); onAuthSuccess?.(); }, 600);
-                  } catch (e) {
-                    setErrorMsg(e.message);
-                  } finally {
-                    setLoading(false);
-                  }
-                }}
-                style={{
-                  background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
-                  color: '#ffffff',
-                  border: '1px solid #38bdf8',
-                  borderRadius: '8px',
-                  padding: '9px 10px',
-                  fontSize: '0.82rem',
-                  fontWeight: 'bold',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '6px',
-                  boxShadow: '0 2px 8px rgba(2, 132, 199, 0.35)'
-                }}
-              >
-                🏢 Entrar como EMPAS
-              </button>
-              <button
-                type="button"
-                disabled={loading}
-                onClick={async () => {
-                  setLoading(true);
-                  resetMessages();
-                  try {
-                    await loginAsAlayn();
-                    setSuccessMsg('¡Bienvenido Ing. Alayn Mendoza! Acceso Pro Master activado.');
-                    setTimeout(() => { onClose(); onAuthSuccess?.(); }, 600);
-                  } catch (e) {
-                    setErrorMsg(e.message);
-                  } finally {
-                    setLoading(false);
-                  }
-                }}
-                style={{
-                  background: 'linear-gradient(135deg, #10b981 0%, #047857 100%)',
-                  color: '#ffffff',
-                  border: '1px solid #34d399',
-                  borderRadius: '8px',
-                  padding: '9px 10px',
-                  fontSize: '0.82rem',
-                  fontWeight: 'bold',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '6px',
-                  boxShadow: '0 2px 8px rgba(16, 185, 129, 0.35)'
-                }}
-              >
-                👑 Ing. Alayn Mendoza
-              </button>
-            </div>
-            <div style={{ ...separatorStyle, margin: '14px 0 10px 0' }}><span>o ingresa con Google / credenciales</span></div>
-          </div>
-        )}
-
-        {/* Botón de Inicio con Google (en login y registro) */}
+        {/* Botón Principal de Google (disponible tanto en Login como en Registro) */}
         {(tab === 'login' || tab === 'register') && (
-          <div style={{ marginBottom: '14px' }}>
+          <div style={{ marginBottom: '16px' }}>
             <button
               type="button"
               disabled={loading}
               onClick={handleGoogleAuth}
               style={googleBtnStyle}
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" style={{ marginRight: '6px' }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" style={{ marginRight: '10px' }}>
                 <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
                 <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
                 <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
                 <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
               </svg>
-              {tab === 'register' ? 'Registrarse con Google' : 'Continuar con Google'}
+              <span>{tab === 'register' ? 'Registrarse con Google' : 'Continuar con Google'}</span>
             </button>
-            <div style={separatorStyle}><span>o ingresa con tu correo o usuario</span></div>
+            <div style={separatorStyle}>
+              <span>{tab === 'register' ? 'o regístrate con tu correo' : 'o ingresa con tu correo electrónico'}</span>
+            </div>
           </div>
         )}
 
@@ -286,25 +195,9 @@ export default function AuthModal({ isOpen, onClose, initialTab = 'login', onAut
         {errorMsg && <div style={errorBannerStyle}>⚠️ {errorMsg}</div>}
         {successMsg && <div style={successBannerStyle}>✔ {successMsg}</div>}
 
-        {/* Banner Informativo de Plan según pestaña */}
-        {tab === 'register' && (
-          <div style={{ backgroundColor: 'rgba(59, 130, 246, 0.12)', border: '1px solid rgba(59, 130, 246, 0.35)', borderRadius: '10px', padding: '10px 14px', fontSize: '0.8rem', color: '#93c5fd', lineHeight: '1.45', marginBottom: '12px' }}>
-            ⚡ <strong>Plan Pro Incluido:</strong> Tu registro incluye sincronización en la Nube para abrir tus proyectos desde cualquier computador.
-          </div>
-        )}
-
-        {tab === 'login' && (
-          <div style={{ backgroundColor: 'rgba(16, 185, 129, 0.12)', border: '1px solid rgba(16, 185, 129, 0.35)', borderRadius: '10px', padding: '10px 14px', fontSize: '0.8rem', color: '#6ee7b7', lineHeight: '1.45', marginBottom: '12px' }}>
-            ☁️ <strong>Acceso Multi-PC Universal:</strong> Puedes ingresar como <code>EMPAS</code> o tu correo registrado desde cualquier computador.
-            <div style={{ fontSize: '0.74rem', color: '#cbd5e1', marginTop: '4px' }}>
-              💡 <strong>Clave Maestra:</strong> Puedes usar la Clave Maestra <code>AMC2026</code> con cualquier usuario para acceso total inmediato.
-            </div>
-          </div>
-        )}
-
         {/* Formulario */}
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          
+
           {/* Campos exclusivos de Registro */}
           {tab === 'register' && (
             <>
@@ -313,17 +206,17 @@ export default function AuthModal({ isOpen, onClose, initialTab = 'login', onAut
                 <input
                   type="text"
                   required
-                  placeholder="Ej. EMPAS o Ing. Norman Castillo"
+                  placeholder="Ej. Ing. Carlos Pérez"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   style={inputStyle}
                 />
               </div>
               <div>
-                <label style={labelStyle}>Empresa / Firma Consultora</label>
+                <label style={labelStyle}>Empresa / Entidad Consultora</label>
                 <input
                   type="text"
-                  placeholder="Ej. Empresa Pública de Alcantarillado - EMPAS"
+                  placeholder="Ej. Consultoría Hidráulica S.A.S."
                   value={company}
                   onChange={(e) => setCompany(e.target.value)}
                   style={inputStyle}
@@ -361,13 +254,13 @@ export default function AuthModal({ isOpen, onClose, initialTab = 'login', onAut
             /* Campos estándar de Email y Password */
             <>
               <div>
-                <label style={labelStyle}>Correo Electrónico o Usuario *</label>
+                <label style={labelStyle}>Correo Electrónico *</label>
                 <input
-                  type="text"
+                  type="email"
                   autoCapitalize="none"
                   autoCorrect="off"
                   required
-                  placeholder="ej. EMPAS o tu correo electrónico"
+                  placeholder="nombre@ejemplo.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   style={inputStyle}
@@ -377,7 +270,7 @@ export default function AuthModal({ isOpen, onClose, initialTab = 'login', onAut
               {tab !== 'recover' && (
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <label style={labelStyle}>Contraseña {tab === 'login' ? '(Opcional para EMPAS/Admin)' : '*'}</label>
+                    <label style={labelStyle}>Contraseña *</label>
                     {tab === 'login' && (
                       <button
                         type="button"
@@ -391,8 +284,8 @@ export default function AuthModal({ isOpen, onClose, initialTab = 'login', onAut
                   <div style={{ position: 'relative' }}>
                     <input
                       type={showPassword ? 'text' : 'password'}
-                      required={tab === 'register'}
-                      placeholder={tab === 'login' ? '•••••••• (o vacía para EMPAS)' : '••••••••'}
+                      required
+                      placeholder="••••••••"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       style={inputStyle}
@@ -435,7 +328,7 @@ export default function AuthModal({ isOpen, onClose, initialTab = 'login', onAut
 
           {/* Botón Principal de Envío */}
           <button type="submit" disabled={loading} style={submitBtnStyle}>
-            {loading ? 'Procesando...' : 
+            {loading ? 'Procesando...' :
               tab === 'admin' ? '👑 Entrar como Super Admin' :
               tab === 'recover' ? '📨 Enviar Enlace de Recuperación' :
               tab === 'register' ? 'Crear Cuenta e Ingresar' : 'Ingresar a la Plataforma'}
@@ -455,9 +348,9 @@ export default function AuthModal({ isOpen, onClose, initialTab = 'login', onAut
           </div>
         )}
 
-        {/* Acceso Rápido en Modo Invitado */}
+        {/* Acceso en Modo Invitado */}
         {tab !== 'admin' && (
-          <button onClick={handleGuestEntry} style={guestModeBtnStyle} title="Acceso sin registro para probar la calculadora y el visor">
+          <button onClick={handleGuestEntry} style={guestModeBtnStyle} title="Acceso sin cuenta para probar el software en este computador">
             🚀 Explorar en Modo Invitado / Prueba (1er Proyecto Gratis)
           </button>
         )}
@@ -571,24 +464,24 @@ const inactiveTabStyle = {
 
 const googleBtnStyle = {
   width: '100%',
-  padding: '11px',
+  padding: '12px',
   background: '#ffffff',
   color: '#0f172a',
   border: 'none',
-  borderRadius: '8px',
+  borderRadius: '10px',
   fontWeight: '700',
-  fontSize: '0.88rem',
+  fontSize: '0.92rem',
   cursor: 'pointer',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-  transition: 'transform 0.15s'
+  boxShadow: '0 3px 12px rgba(0,0,0,0.25)',
+  transition: 'transform 0.15s, box-shadow 0.15s'
 };
 
 const separatorStyle = {
   textAlign: 'center',
-  margin: '12px 0 6px 0',
+  margin: '14px 0 6px 0',
   fontSize: '0.75rem',
   color: '#64748b'
 };

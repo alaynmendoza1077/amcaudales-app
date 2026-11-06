@@ -14,18 +14,10 @@ export default function NavbarUserHeader({ onSaveCloud, onLoadCloud }) {
   const cloudCount = cloudProjects.filter(p => p.isCloud).length;
 
   const rawFullName = user?.user_metadata?.full_name || user?.user_metadata?.name || '';
-  const userEmail = (user?.email || '').toLowerCase();
-  const lowerName = rawFullName.toLowerCase();
-
-  const isEmpas = user?.id === 'usr_empas' || userEmail.includes('empas') || lowerName.includes('empas');
-  const isAlayn = user?.id === 'usr_alayn' || userEmail.includes('alayn') || userEmail.includes('mendoza') || lowerName.includes('alayn');
+  const avatarUrl = user?.avatarUrl || user?.user_metadata?.avatar_url || user?.user_metadata?.picture || null;
 
   let displayName = rawFullName;
-  if (isEmpas) {
-    displayName = 'EMPAS';
-  } else if (isAlayn) {
-    displayName = rawFullName || 'Ingeniero Alayn Mendoza';
-  } else if (!displayName && user?.email) {
+  if (!displayName && user?.email) {
     if (user.email.endsWith('@amcaudales.com')) {
       displayName = user.email.replace('@amcaudales.com', '').toUpperCase();
     } else {
@@ -33,6 +25,7 @@ export default function NavbarUserHeader({ onSaveCloud, onLoadCloud }) {
     }
   }
   if (!displayName) displayName = 'Ingeniero';
+
   const avatarLetter = (displayName || 'U')[0].toUpperCase();
 
   const handleLogout = async () => {
@@ -72,62 +65,43 @@ export default function NavbarUserHeader({ onSaveCloud, onLoadCloud }) {
           {/* ESTADO 1: USUARIO AUTENTICADO (CON CUENTA) */}
           {!isGuest ? (
             <div style={userControlStyle}>
-              {/* Tarjeta de Bienvenida con Nombre Completo y Correo */}
+              {/* Tarjeta de Bienvenida con Nombre Completo, Foto de Perfil y Correo */}
               <div
                 style={welcomeCardStyle}
                 title={`Sesión iniciada como: ${displayName} (${user?.email || ''})`}
               >
-                <div style={{
-                  ...userInitialStyle,
-                  background: isEmpas 
-                    ? 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)' 
-                    : isAlayn 
-                      ? 'linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%)' 
-                      : 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
-                  border: isEmpas ? '2px solid #38bdf8' : isAlayn ? '2px solid #c084fc' : '2px solid rgba(59, 130, 246, 0.5)',
-                  boxShadow: isEmpas ? '0 0 10px rgba(56, 189, 248, 0.5)' : isAlayn ? '0 0 10px rgba(192, 132, 252, 0.5)' : 'none'
-                }}>
-                  {avatarLetter}
-                </div>
+                {avatarUrl ? (
+                  <img
+                    src={avatarUrl}
+                    alt={displayName}
+                    style={userAvatarImgStyle}
+                    referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                    }}
+                  />
+                ) : (
+                  <div style={userInitialStyle}>
+                    {avatarLetter}
+                  </div>
+                )}
+
                 <div style={userTextColStyle}>
                   <div style={welcomeGreetingStyle}>
-                    👋 ¡Bienvenido,{' '}
-                    <strong style={{ color: isEmpas ? '#38bdf8' : isAlayn ? '#c084fc' : '#38bdf8' }}>
-                      {displayName}
-                    </strong>!
+                    👋 ¡Bienvenido, <strong style={{ color: '#38bdf8' }}>{displayName}</strong>!
                   </div>
                   <div style={userPlanSubtextStyle}>
-                    {isEmpas ? (
-                      <span style={{ color: '#38bdf8', fontWeight: 'bold' }}>
-                        🏢 Cuenta Oficial EMPAS • Plan Pro Ilimitado
-                      </span>
-                    ) : isAlayn || user?.isAdmin || user?.id === 'usr_super_admin' ? (
-                      <span style={{ color: '#c084fc', fontWeight: 'bold' }}>
-                        👑 Ing. Alayn Mendoza • Plan Pro Master
-                      </span>
-                    ) : userPlan === 'pro' ? (
-                      <span style={{ color: '#34d399', fontWeight: 'bold' }}>
-                        👑 Plan Pro ({cloudCount}/20 Proyectos al mes)
-                      </span>
-                    ) : (
-                      <span style={{ color: '#fbbf24', fontWeight: '600' }}>
-                        ⚡ Plan Gratis ({cloudCount}/1 Proyecto Nube)
+                    <span style={{ color: '#34d399', fontWeight: 'bold' }}>
+                      👑 Plan Pro • Sincronización en la Nube
+                    </span>
+                    {user?.email && (
+                      <span style={{ color: '#94a3b8', fontSize: '0.72rem', marginLeft: '6px' }}>
+                        ({user.email})
                       </span>
                     )}
                   </div>
                 </div>
               </div>
-
-              {/* Botón para pasar a Pro si está en Plan Gratis */}
-              {userPlan === 'free' && !user?.isAdmin && !isEmpas && !isAlayn && (
-                <button
-                  onClick={() => setShowUpgradeModal(true)}
-                  style={upgradeHeaderBtnStyle}
-                  title="Actualizar a Plan Pro para guardar hasta 20 proyectos al mes y exportar presupuestos oficiales"
-                >
-                  👑 Pasar a Pro
-                </button>
-              )}
 
               {/* Botón Cerrar Sesión */}
               <button
@@ -162,7 +136,7 @@ export default function NavbarUserHeader({ onSaveCloud, onLoadCloud }) {
               <button
                 onClick={() => setShowAuthModal(true)}
                 style={loginBtnStyle}
-                title="Inicia sesión o crea tu cuenta para guardar en la Nube y abrir desde cualquier PC"
+                title="Inicia sesión o crea tu cuenta con Google para guardar en la Nube y abrir desde cualquier PC"
               >
                 🔑 Iniciar Sesión / Registrarse
               </button>
@@ -303,9 +277,18 @@ const welcomeCardStyle = {
   boxShadow: '0 2px 10px rgba(0, 0, 0, 0.3)'
 };
 
+const userAvatarImgStyle = {
+  width: '34px',
+  height: '34px',
+  borderRadius: '50%',
+  objectFit: 'cover',
+  border: '2px solid #38bdf8',
+  boxShadow: '0 0 8px rgba(56, 189, 248, 0.4)'
+};
+
 const userInitialStyle = {
-  width: '32px',
-  height: '32px',
+  width: '34px',
+  height: '34px',
   borderRadius: '50%',
   background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
   color: '#ffffff',
@@ -357,19 +340,6 @@ const loginBtnStyle = {
   fontSize: '0.84rem',
   cursor: 'pointer',
   boxShadow: '0 2px 8px rgba(16, 185, 129, 0.35)',
-  whiteSpace: 'nowrap'
-};
-
-const upgradeHeaderBtnStyle = {
-  background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-  color: '#ffffff',
-  border: 'none',
-  padding: '7px 12px',
-  borderRadius: '8px',
-  fontWeight: '700',
-  fontSize: '0.78rem',
-  cursor: 'pointer',
-  boxShadow: '0 2px 8px rgba(245, 158, 11, 0.3)',
   whiteSpace: 'nowrap'
 };
 

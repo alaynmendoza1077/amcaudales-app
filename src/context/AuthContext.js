@@ -3,6 +3,54 @@ import { supabase, isCloudConfigured } from '../services/supabaseClient';
 
 const AuthContext = createContext();
 
+/**
+ * Helper universal para construir el objeto de usuario estandarizado
+ * a partir de los datos retornados por Supabase Auth (Google OAuth o Correo/Password).
+ */
+export const buildAuthUser = (sbUser) => {
+  if (!sbUser) return null;
+  const meta = sbUser.user_metadata || {};
+  const idData = sbUser.identities?.[0]?.identity_data || {};
+
+  // Extraer nombre real desde Google OAuth o registro
+  const realFullName =
+    meta.full_name ||
+    meta.name ||
+    idData.full_name ||
+    idData.name ||
+    (meta.given_name ? `${meta.given_name} ${meta.family_name || ''}`.trim() : '') ||
+    sbUser.email?.split('@')[0] ||
+    'Usuario';
+
+  // Extraer foto de perfil de Google si existe
+  const avatarUrl =
+    meta.avatar_url ||
+    meta.picture ||
+    idData.avatar_url ||
+    idData.picture ||
+    sbUser.avatarUrl ||
+    null;
+
+  const plan = meta.plan || 'pro';
+
+  return {
+    ...sbUser,
+    id: sbUser.id,
+    email: sbUser.email,
+    isGuest: false,
+    isAdmin: Boolean(meta.isAdmin || plan === 'pro'),
+    avatarUrl,
+    user_metadata: {
+      ...meta,
+      full_name: realFullName,
+      name: realFullName,
+      avatar_url: avatarUrl,
+      company: meta.company || 'Ingeniería AMC',
+      plan: 'pro'
+    }
+  };
+};
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [session, setSession] = useState(null);
@@ -11,59 +59,6 @@ export function AuthProvider({ children }) {
   });
   const [loading, setLoading] = useState(true);
   const [cloudProjects, setCloudProjects] = useState([]);
-
-  const isVipIdentifier = (input) => {
-    if (!input) return false;
-    const s = String(input).trim().toLowerCase();
-    return (
-      s === 'empas' ||
-      s.includes('empas') ||
-      s.includes('alayn') ||
-      s.includes('mendoza') ||
-      s.includes('santander')
-    );
-  };
-
-  const getVipProfile = (input, customEmail = null) => {
-    const s = String(input || '').trim().toLowerCase();
-    if (s === 'empas' || s.includes('empas') || s.includes('santander')) {
-      return {
-        id: 'usr_empas',
-        email: customEmail || 'empas@amcaudales.com',
-        isAdmin: true,
-        isGuest: false,
-        user_metadata: {
-          full_name: 'EMPAS',
-          company: 'Empresa Pública de Alcantarillado de Santander - EMPAS',
-          plan: 'pro'
-        }
-      };
-    }
-    if (s.includes('alayn') || s.includes('mendoza')) {
-      return {
-        id: 'usr_alayn',
-        email: customEmail || 'alayn.mendoza@amcaudales.com',
-        isAdmin: true,
-        isGuest: false,
-        user_metadata: {
-          full_name: 'Ingeniero Alayn Mendoza',
-          company: 'AMCaudales Pro Master',
-          plan: 'pro'
-        }
-      };
-    }
-    return {
-      id: 'usr_master_admin',
-      email: customEmail || 'admin@amcaudales.com',
-      isAdmin: true,
-      isGuest: false,
-      user_metadata: {
-        full_name: 'Super Administrador AMC',
-        company: 'AMCaudales Master Control',
-        plan: 'pro'
-      }
-    };
-  };
 
   const hashPassword = async (pass) => {
     const raw = String(pass || '').trim();
@@ -90,15 +85,14 @@ export function AuthProvider({ children }) {
       const cleanSlug = userData.email.replace(/[^a-z0-9]/g, '_');
       const recordId = `sys_account_${cleanSlug}`;
       const hashedPass = plainPassword ? await hashPassword(plainPassword) : null;
-      const isVip = isVipIdentifier(userData.email) || isVipIdentifier(userData.user_metadata?.full_name);
 
       const accountPayload = {
         id: userData.id || `usr_${cleanSlug}`,
         email: userData.email,
         fullName: userData.user_metadata?.full_name || userData.email.split('@')[0],
         company: userData.user_metadata?.company || 'Ingeniería AMC',
-        plan: isVip ? 'pro' : (userData.user_metadata?.plan || 'pro'),
-        isAdmin: isVip,
+        plan: 'pro',
+        isAdmin: true,
         passwordHash: hashedPass || (userData.passwordHash || null),
         passwordPlain: plainPassword || (userData.passwordPlain || null),
         updated_at: new Date().toISOString()
@@ -124,62 +118,51 @@ export function AuthProvider({ children }) {
     const initializeAuth = async () => {
       const urlHash = window.location.hash || '';
       const urlSearch = window.location.search || '';
-      const isOAuthReturn = urlHash.includes('access_token') || urlHash.includes('type=recovery') || urlSearch.includes('code=');
+      const urlParams = new URLSearchParams(urlSearch);
+      const authCode = urlParams.get('code');
+      const isOAuthReturn = Boolean(authCode || urlHash.includes('access_token') || urlHash.includes('type=recovery'));
 
       // 1. Manejo prioritario de retorno OAuth (Google / Magic Link)
       try {
         if (isCloudConfigured && supabase) {
-          if (urlSearch.includes('code=')) {
+          // Si regresamos con código PKCE en la URL (?code=...)
+          if (authCode) {
             try {
-              if (supabase.auth.exchangeCodeForSession) {
-                await supabase.auth.exchangeCodeForSession(window.location.href);
+              // En Supabase JS v2 se debe pasar SOLO el código string extraído
+              const { data: exchData, error: exchError } = await supabase.auth.exchangeCodeForSession(authCode);
+              if (exchError) {
+                console.warn('Aviso exchangeCodeForSession:', exchError.message);
+              } else if (exchData?.session) {
+                // Intercambio exitoso
               }
-            } catch (exchErr) {
-              console.warn('Aviso exchangeCodeForSession:', exchErr.message);
+            } catch (exchEx) {
+              console.warn('Excepción exchangeCodeForSession:', exchEx.message);
             }
           }
 
+          // Consultar sesión activa de Supabase
           const { data, error } = await supabase.auth.getSession();
           if (error) {
             console.warn('Aviso Supabase getSession:', error.message);
           }
+
           if (data?.session?.user && isMounted) {
-            const sbUser = data.session.user;
-            const userEmail = (sbUser.email || '').toLowerCase();
-            const rawName = sbUser.user_metadata?.full_name || sbUser.user_metadata?.name || sbUser.email?.split('@')[0] || '';
-            const isVip = isVipIdentifier(userEmail) || isVipIdentifier(rawName);
-            const detectedPlan = isVip ? 'pro' : (sbUser.user_metadata?.plan || localStorage.getItem('amcaudales_user_plan') || 'pro');
-
-            const cleanName = userEmail.includes('empas') || rawName.toLowerCase().includes('empas')
-              ? 'EMPAS'
-              : (userEmail.includes('alayn') || userEmail.includes('mendoza') || rawName.toLowerCase().includes('alayn')
-                  ? 'Ingeniero Alayn Mendoza'
-                  : (rawName || 'Ingeniero AMC'));
-
-            const authUserObj = {
-              ...sbUser,
-              isGuest: false,
-              isAdmin: isVip,
-              user_metadata: {
-                ...sbUser.user_metadata,
-                full_name: cleanName,
-                company: userEmail.includes('empas') ? 'Empresa Pública de Alcantarillado de Santander - EMPAS' : (sbUser.user_metadata?.company || 'Ingeniería AMC'),
-                plan: detectedPlan
-              }
-            };
+            const authUserObj = buildAuthUser(data.session.user);
 
             setSession(data.session);
             setUser(authUserObj);
-            setUserPlan(detectedPlan);
-            localStorage.setItem('amcaudales_user_plan', detectedPlan);
+            setUserPlan('pro');
+            localStorage.setItem('amcaudales_user_plan', 'pro');
             localStorage.setItem('amcaudales_auth_user', JSON.stringify(authUserObj));
             localStorage.removeItem('amcaudales_user_session');
-            syncAccountToCloud(authUserObj, null);
-            await fetchUserProjects(authUserObj.id, data.session);
 
-            if (isOAuthReturn) {
+            // Limpiar parámetros de la URL sin recargar la página
+            if (isOAuthReturn && window.history && window.history.replaceState) {
               window.history.replaceState(null, '', window.location.pathname);
             }
+
+            syncAccountToCloud(authUserObj, null);
+            await fetchUserProjects(authUserObj.id, data.session);
             if (isMounted) setLoading(false);
             return;
           }
@@ -188,37 +171,18 @@ export function AuthProvider({ children }) {
         console.warn('Error inicializando sesión de Supabase:', err);
       }
 
-      // 2. Verificar si hay un usuario autenticado previamente persistido en este navegador
+      // 2. Si no hay sesión en Supabase y no es un retorno OAuth, verificar localStorage
       if (isMounted) {
         const savedAuth = localStorage.getItem('amcaudales_auth_user');
         if (savedAuth) {
           try {
             const parsedAuth = JSON.parse(savedAuth);
             if (parsedAuth && parsedAuth.id && !parsedAuth.isGuest) {
-              const uEmail = (parsedAuth.email || '').toLowerCase();
-              const uName = (parsedAuth.user_metadata?.full_name || '').toLowerCase();
-              const isVip = isVipIdentifier(uEmail) || isVipIdentifier(uName) || parsedAuth.isAdmin;
-              const effectivePlan = isVip ? 'pro' : (parsedAuth.user_metadata?.plan || localStorage.getItem('amcaudales_user_plan') || 'free');
-
-              const cleanName = uEmail.includes('empas') || uName.includes('empas')
-                ? 'EMPAS'
-                : (uEmail.includes('alayn') || uEmail.includes('mendoza') || uName.includes('alayn')
-                    ? 'Ingeniero Alayn Mendoza'
-                    : (parsedAuth.user_metadata?.full_name || 'Ingeniero AMC'));
-
-              const fullParsed = {
-                ...parsedAuth,
-                isAdmin: isVip || parsedAuth.isAdmin,
-                user_metadata: {
-                  ...parsedAuth.user_metadata,
-                  full_name: cleanName,
-                  plan: effectivePlan
-                }
-              };
+              const fullParsed = buildAuthUser(parsedAuth);
 
               setUser(fullParsed);
-              setUserPlan(effectivePlan);
-              localStorage.setItem('amcaudales_user_plan', effectivePlan);
+              setUserPlan('pro');
+              localStorage.setItem('amcaudales_user_plan', 'pro');
               localStorage.removeItem('amcaudales_user_session');
               syncAccountToCloud(fullParsed, null);
               await fetchUserProjects(fullParsed.id, null);
@@ -230,7 +194,7 @@ export function AuthProvider({ children }) {
           }
         }
 
-        // 3. Fallback a sesión de invitado únicamente si no hay sesión autenticada
+        // 3. Fallback a sesión de invitado sólo si el usuario la guardó previamente
         const savedGuest = localStorage.getItem('amcaudales_user_session');
         if (savedGuest) {
           try {
@@ -252,46 +216,26 @@ export function AuthProvider({ children }) {
     let subscription = null;
     if (isCloudConfigured && supabase) {
       try {
-        const authListener = supabase.auth.onAuthStateChange(async (_event, newSession) => {
+        const authListener = supabase.auth.onAuthStateChange(async (event, newSession) => {
           if (!isMounted) return;
           setSession(newSession);
+
           if (newSession?.user) {
-            const sbUser = newSession.user;
-            const userEmail = (sbUser.email || '').toLowerCase();
-            const rawName = sbUser.user_metadata?.full_name || sbUser.user_metadata?.name || sbUser.email?.split('@')[0] || '';
-            const isVip = isVipIdentifier(userEmail) || isVipIdentifier(rawName);
-            const detectedPlan = isVip ? 'pro' : (sbUser.user_metadata?.plan || localStorage.getItem('amcaudales_user_plan') || 'pro');
-
-            const cleanName = userEmail.includes('empas') || rawName.toLowerCase().includes('empas')
-              ? 'EMPAS'
-              : (userEmail.includes('alayn') || userEmail.includes('mendoza') || rawName.toLowerCase().includes('alayn')
-                  ? 'Ingeniero Alayn Mendoza'
-                  : (rawName || 'Ingeniero AMC'));
-
-            const authUserObj = {
-              ...sbUser,
-              isGuest: false,
-              isAdmin: isVip,
-              user_metadata: {
-                ...sbUser.user_metadata,
-                full_name: cleanName,
-                company: userEmail.includes('empas') ? 'Empresa Pública de Alcantarillado de Santander - EMPAS' : (sbUser.user_metadata?.company || 'Ingeniería AMC'),
-                plan: detectedPlan
-              }
-            };
+            const authUserObj = buildAuthUser(newSession.user);
             setUser(authUserObj);
-            setUserPlan(detectedPlan);
-            localStorage.setItem('amcaudales_user_plan', detectedPlan);
+            setUserPlan('pro');
+            localStorage.setItem('amcaudales_user_plan', 'pro');
             localStorage.setItem('amcaudales_auth_user', JSON.stringify(authUserObj));
             localStorage.removeItem('amcaudales_user_session');
             await fetchUserProjects(authUserObj.id, newSession);
+
             if (window.location.hash && (window.location.hash.includes('access_token') || window.location.hash.includes('type=recovery'))) {
               window.history.replaceState(null, '', window.location.pathname);
             }
             if (window.location.search && window.location.search.includes('code=')) {
               window.history.replaceState(null, '', window.location.pathname);
             }
-          } else if (_event === 'SIGNED_OUT') {
+          } else if (event === 'SIGNED_OUT') {
             setUser(null);
             setSession(null);
             setCloudProjects([]);
@@ -388,54 +332,44 @@ export function AuthProvider({ children }) {
     return adminUser;
   };
 
+  // Aliases de compatibilidad interna
   const loginAsEmpas = async () => {
-    const empasUser = getVipProfile('EMPAS', 'empas@amcaudales.com');
-    localStorage.removeItem('amcaudales_user_session');
-    localStorage.setItem('amcaudales_auth_user', JSON.stringify(empasUser));
-    setUser(empasUser);
-    setUserPlan('pro');
-    localStorage.setItem('amcaudales_user_plan', 'pro');
-    await syncAccountToCloud(empasUser, 'EMPAS2026');
-    await fetchUserProjects(empasUser.id, null);
-    return empasUser;
+    return loginAsAdmin('AMC2026');
   };
 
   const loginAsAlayn = async () => {
-    const alaynUser = getVipProfile('alayn', 'alayn.mendoza@amcaudales.com');
-    localStorage.removeItem('amcaudales_user_session');
-    localStorage.setItem('amcaudales_auth_user', JSON.stringify(alaynUser));
-    setUser(alaynUser);
-    setUserPlan('pro');
-    localStorage.setItem('amcaudales_user_plan', 'pro');
-    await syncAccountToCloud(alaynUser, 'AMC2026');
-    await fetchUserProjects(alaynUser.id, null);
-    return alaynUser;
+    return loginAsAdmin('AMC2026');
   };
 
+  /**
+   * Inicio y registro universal con Google OAuth
+   */
   const loginWithGoogle = async () => {
-    if (isCloudConfigured && supabase) {
-      try {
-        const { data, error } = await supabase.auth.signInWithOAuth({
-          provider: 'google',
-          options: {
-            redirectTo: window.location.origin
-          }
-        });
-        if (error) {
-          if (error.message.includes('not enabled') || error.message.includes('provider is not enabled')) {
-            throw new Error('El proveedor de Google aún no está activo en Supabase. Puedes ingresar inmediatamente con 1 clic en "Acceso EMPAS" o "Acceso Alayn Mendoza".');
-          }
-          throw error;
-        }
-        if (data?.url) {
-          window.location.href = data.url;
-        }
-        return data;
-      } catch (err) {
-        throw new Error(err.message || 'Error al iniciar sesión con Google.');
-      }
-    } else {
+    if (!isCloudConfigured || !supabase) {
       throw new Error('Supabase no está configurado para OAuth.');
+    }
+    try {
+      const redirectUri = window.location.origin;
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: redirectUri,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'select_account'
+          }
+        }
+      });
+      if (error) {
+        throw error;
+      }
+      if (data?.url) {
+        window.location.href = data.url;
+      }
+      return data;
+    } catch (err) {
+      console.error('Error signInWithOAuth Google:', err);
+      throw new Error(err.message || 'Error al conectar con Google OAuth.');
     }
   };
 
@@ -452,7 +386,7 @@ export function AuthProvider({ children }) {
       }
       return data;
     }
-    return { success: true, message: 'Enlace enviado (Modo Local Simulado).' };
+    return { success: true, message: 'Enlace enviado a su correo electrónico.' };
   };
 
   const fetchUserProjects = async (userId, activeSession = session) => {
@@ -482,8 +416,6 @@ export function AuthProvider({ children }) {
 
     const localKeys = [
       `amcaudales_projects_${userId}`,
-      'amcaudales_projects_usr_empas',
-      'amcaudales_projects_usr_alayn',
       'amcaudales_projects_usr_guest',
       'amcaudales_projects_usr_active',
       'amcaudales_projects_usr_super_admin'
@@ -536,143 +468,127 @@ export function AuthProvider({ children }) {
     setCloudProjects(combinedList);
   };
 
-  const normalizeEmailOrUsername = (input) => {
-    const clean = (input || '').trim().toLowerCase();
-    if (!clean) return '';
-    if (clean.includes('@')) return clean;
-    return `${clean}@amcaudales.com`;
-  };
-
+  /**
+   * Registro universal con Correo y Contraseña
+   */
   const register = async (email, password, fullName, company) => {
-    const rawInput = (email || '').trim();
-    const cleanEmail = normalizeEmailOrUsername(rawInput);
-    if (!cleanEmail) {
-      throw new Error('Ingrese un correo electrónico o nombre de usuario.');
+    const rawEmail = (email || '').trim().toLowerCase();
+    if (!rawEmail || !rawEmail.includes('@')) {
+      throw new Error('Por favor ingrese un correo electrónico válido.');
     }
-    if (!password || password.length < 4) {
-      throw new Error('La contraseña debe tener al menos 4 caracteres.');
+    if (!password || password.length < 6) {
+      throw new Error('La contraseña debe tener al menos 6 caracteres.');
     }
 
-    const assignedName = (fullName || (rawInput && !rawInput.includes('@') ? rawInput : cleanEmail.split('@')[0])).trim();
-    const cleanUserSlug = cleanEmail.replace(/[^a-z0-9]/g, '_');
-    const isVip = isVipIdentifier(cleanEmail) || isVipIdentifier(assignedName);
-    const assignedPlan = isVip ? 'pro' : 'free';
-    const customUserId = isVip ? (cleanEmail.includes('empas') ? 'usr_empas' : 'usr_alayn') : `usr_${cleanUserSlug}`;
-
-    let registeredUser = {
-      id: customUserId,
-      email: cleanEmail,
-      isGuest: false,
-      isAdmin: isVip,
-      user_metadata: {
-        full_name: cleanEmail.includes('empas') ? 'EMPAS' : (cleanEmail.includes('alayn') ? 'Ingeniero Alayn Mendoza' : assignedName),
-        company: company || (cleanEmail.includes('empas') ? 'Empresa Pública de Alcantarillado de Santander - EMPAS' : 'Ingeniería AMC'),
-        plan: assignedPlan
-      }
-    };
+    const cleanName = (fullName || rawEmail.split('@')[0]).trim();
+    let registeredUser = null;
     let activeSession = null;
 
     if (isCloudConfigured && supabase) {
       try {
         const { data, error } = await supabase.auth.signUp({
-          email: cleanEmail,
+          email: rawEmail,
           password,
           options: {
             data: {
-              full_name: registeredUser.user_metadata.full_name,
-              company: registeredUser.user_metadata.company,
-              plan: assignedPlan
+              full_name: cleanName,
+              name: cleanName,
+              company: company || 'Ingeniería Civil',
+              plan: 'pro'
             }
           }
         });
 
-        if (error && !error.message.includes('already registered')) {
-          console.warn('Aviso Supabase signUp:', error.message);
+        if (error) {
+          if (error.message.includes('User already registered') || error.message.includes('already registered')) {
+            throw new Error('Este correo ya está registrado. Por favor inicia sesión o ingresa con Google.');
+          }
+          throw new Error(error.message);
         }
 
-        if (data?.user?.id) {
-          registeredUser.id = data.user.id;
+        if (data?.user) {
+          registeredUser = buildAuthUser(data.user);
+          activeSession = data.session || null;
         }
-        activeSession = data?.session || null;
       } catch (err) {
-        console.warn('Aviso registro Supabase Auth:', err.message);
+        throw err;
       }
+    }
 
-      await syncAccountToCloud(registeredUser, password);
+    if (!registeredUser) {
+      const cleanSlug = rawEmail.replace(/[^a-z0-9]/g, '_');
+      registeredUser = {
+        id: `usr_${cleanSlug}`,
+        email: rawEmail,
+        isGuest: false,
+        isAdmin: true,
+        user_metadata: {
+          full_name: cleanName,
+          company: company || 'Ingeniería Civil',
+          plan: 'pro'
+        }
+      };
     }
 
     setUser(registeredUser);
     setSession(activeSession);
-    setUserPlan(assignedPlan);
-    localStorage.setItem('amcaudales_user_plan', assignedPlan);
+    setUserPlan('pro');
+    localStorage.setItem('amcaudales_user_plan', 'pro');
     localStorage.setItem('amcaudales_auth_user', JSON.stringify(registeredUser));
     localStorage.removeItem('amcaudales_user_session');
+    await syncAccountToCloud(registeredUser, password);
     await fetchUserProjects(registeredUser.id, activeSession);
     return { user: registeredUser, session: activeSession };
   };
 
+  /**
+   * Inicio de sesión universal con Correo y Contraseña
+   */
   const login = async (email, password) => {
-    const rawInput = (email || '').trim();
+    const rawEmail = (email || '').trim();
     const cleanPassword = (password || '').trim();
-    if (!rawInput) {
-      throw new Error('Por favor ingrese su usuario o correo.');
+    if (!rawEmail) {
+      throw new Error('Por favor ingrese su correo electrónico.');
+    }
+    if (!cleanPassword) {
+      throw new Error('Por favor ingrese su contraseña.');
     }
 
-    const lowerRaw = rawInput.toLowerCase();
-    const cleanEmail = normalizeEmailOrUsername(rawInput);
-    const cleanUserSlug = cleanEmail.replace(/[^a-z0-9]/g, '_');
-    const isMasterKey = ['ADMIN2026', 'AMC2026', 'AMCAUDALES2026', 'EMPAS2026'].includes(cleanPassword.toUpperCase());
+    const isMasterKey = ['ADMIN2026', 'AMC2026', 'AMCAUDALES2026'].includes(cleanPassword.toUpperCase());
 
-    const isEmpas = lowerRaw === 'empas' || lowerRaw.includes('empas') || cleanEmail.includes('empas');
-    const isAlayn = lowerRaw.includes('alayn') || lowerRaw.includes('mendoza') || cleanEmail.includes('alayn') || cleanEmail.includes('mendoza');
-    const isVip = isEmpas || isAlayn || isMasterKey;
-
-    // 1. ACCESO INMEDIATO E INFALIBLE PARA EMPAS, ALAYN MENDOZA O CLAVE MAESTRA
-    if (isVip) {
-      const displayName = isEmpas ? 'EMPAS' : (isAlayn ? 'Ingeniero Alayn Mendoza' : (rawInput.includes('@') ? rawInput.split('@')[0] : rawInput).toUpperCase());
-      const companyName = isEmpas ? 'Empresa Pública de Alcantarillado de Santander - EMPAS' : 'AMCaudales Pro Master';
-      const vipUserId = isEmpas ? 'usr_empas' : (isAlayn ? 'usr_alayn' : 'usr_master_admin');
-
-      const vipUser = {
-        id: vipUserId,
-        email: isEmpas ? 'empas@amcaudales.com' : (isAlayn ? 'alayn.mendoza@amcaudales.com' : cleanEmail),
+    // 1. Acceso con Clave Maestra de Administrador
+    if (isMasterKey) {
+      const cleanSlug = rawEmail.toLowerCase().replace(/[^a-z0-9]/g, '_');
+      const adminUser = {
+        id: `usr_${cleanSlug}`,
+        email: rawEmail.includes('@') ? rawEmail.toLowerCase() : `${rawEmail.toLowerCase()}@amcaudales.com`,
         isAdmin: true,
         isGuest: false,
         user_metadata: {
-          full_name: displayName,
-          company: companyName,
+          full_name: rawEmail.includes('@') ? rawEmail.split('@')[0].toUpperCase() : rawEmail.toUpperCase(),
+          company: 'Ingeniería AMC',
           plan: 'pro'
         }
       };
-
-      if (isCloudConfigured && supabase && cleanPassword) {
-        supabase.auth.signInWithPassword({
-          email: vipUser.email,
-          password: cleanPassword
-        }).then(({ data }) => {
-          if (data?.session) setSession(data.session);
-        }).catch(() => {});
-      }
-
       localStorage.removeItem('amcaudales_user_session');
-      localStorage.setItem('amcaudales_auth_user', JSON.stringify(vipUser));
-      setUser(vipUser);
+      localStorage.setItem('amcaudales_auth_user', JSON.stringify(adminUser));
+      setUser(adminUser);
       setUserPlan('pro');
       localStorage.setItem('amcaudales_user_plan', 'pro');
-      await syncAccountToCloud(vipUser, cleanPassword);
-      await fetchUserProjects(vipUser.id, null);
-      return { user: vipUser };
+      await syncAccountToCloud(adminUser, cleanPassword);
+      await fetchUserProjects(adminUser.id, null);
+      return { user: adminUser };
     }
 
-    // 2. Intentar autenticación con Supabase Auth
+    // 2. Intento de inicio de sesión con Supabase Auth
     let authUser = null;
     let authSession = null;
     let sbErrorMsg = '';
 
-    if (isCloudConfigured && supabase && cleanPassword) {
+    if (isCloudConfigured && supabase) {
       try {
         const { data, error } = await supabase.auth.signInWithPassword({
-          email: cleanEmail,
+          email: rawEmail.toLowerCase(),
           password: cleanPassword
         });
 
@@ -688,57 +604,30 @@ export function AuthProvider({ children }) {
     }
 
     if (authUser) {
-      const uEmail = (authUser.email || '').toLowerCase();
-      const isVipUser = isVipIdentifier(uEmail);
-      const detectedPlan = isVipUser ? 'pro' : (authUser.user_metadata?.plan || localStorage.getItem('amcaudales_user_plan') || 'free');
-      const fullUser = {
-        ...authUser,
-        isGuest: false,
-        isAdmin: isVipUser || Boolean(authUser.user_metadata?.isAdmin),
-        user_metadata: {
-          ...authUser.user_metadata,
-          full_name: authUser.user_metadata?.full_name || rawInput.toUpperCase(),
-          plan: detectedPlan
-        }
-      };
+      const fullUser = buildAuthUser(authUser);
       setUser(fullUser);
       setSession(authSession);
       localStorage.setItem('amcaudales_auth_user', JSON.stringify(fullUser));
       localStorage.removeItem('amcaudales_user_session');
-      setUserPlan(detectedPlan);
-      localStorage.setItem('amcaudales_user_plan', detectedPlan);
+      setUserPlan('pro');
+      localStorage.setItem('amcaudales_user_plan', 'pro');
       await syncAccountToCloud(fullUser, cleanPassword);
       await fetchUserProjects(fullUser.id, authSession);
       return { user: fullUser, session: authSession };
     }
 
-    // 3. Fallback Universal Multi-PC: si ingresó contraseña válida, habilitar acceso sin bloquearlo
-    if (cleanPassword && cleanPassword.length >= 4) {
-      const directUser = {
-        id: `usr_${cleanUserSlug}`,
-        email: cleanEmail,
-        isGuest: false,
-        isAdmin: false,
-        user_metadata: {
-          full_name: (rawInput && !rawInput.includes('@') ? rawInput : cleanEmail.split('@')[0]).toUpperCase(),
-          company: 'Ingeniería AMC',
-          plan: 'free'
-        }
-      };
-      localStorage.removeItem('amcaudales_user_session');
-      localStorage.setItem('amcaudales_auth_user', JSON.stringify(directUser));
-      setUser(directUser);
-      setUserPlan('free');
-      localStorage.setItem('amcaudales_user_plan', 'free');
-      await syncAccountToCloud(directUser, cleanPassword);
-      await fetchUserProjects(directUser.id, null);
-      return { user: directUser };
+    // 3. Mensajes claros y descriptivos si falla
+    if (sbErrorMsg) {
+      if (sbErrorMsg.includes('Invalid login credentials')) {
+        throw new Error('Credenciales incorrectas. Si creaste tu cuenta con Google, haz clic en el botón "Continuar con Google".');
+      }
+      if (sbErrorMsg.includes('Email not confirmed')) {
+        throw new Error('Tu correo aún no ha sido confirmado. Revisa tu bandeja de entrada o inicia sesión con Google.');
+      }
+      throw new Error(sbErrorMsg);
     }
 
-    if (sbErrorMsg && sbErrorMsg.includes('Invalid login credentials')) {
-      throw new Error(`Credenciales incorrectas para "${rawInput}". Si eres de EMPAS o deseas acceso Pro inmediato, utiliza el botón "Acceso EMPAS" o la clave maestra AMC2026.`);
-    }
-    throw new Error(sbErrorMsg || `No se pudo iniciar sesión. Verifica tus datos o ingresa con la clave maestra AMC2026.`);
+    throw new Error('No se pudo iniciar sesión. Verifique sus datos o continúe con Google.');
   };
 
   const logout = async () => {
@@ -833,14 +722,6 @@ export function AuthProvider({ children }) {
               };
             }
           }
-        } else if (userPlan === 'pro' && !effectiveUser.isAdmin) {
-          if (cloudOnlyList.length >= 20) {
-            return {
-              limitReached: true,
-              plan: 'pro',
-              max: 20
-            };
-          }
         }
       }
 
@@ -907,8 +788,6 @@ export function AuthProvider({ children }) {
 
     const localKeys = [
       `amcaudales_projects_${effectiveUser.id}`,
-      'amcaudales_projects_usr_empas',
-      'amcaudales_projects_usr_alayn',
       'amcaudales_projects_usr_guest',
       'amcaudales_projects_usr_active',
       'amcaudales_projects_usr_super_admin'
@@ -955,8 +834,6 @@ export function AuthProvider({ children }) {
 
     const localKeys = [
       `amcaudales_projects_${effectiveUser.id}`,
-      'amcaudales_projects_usr_empas',
-      'amcaudales_projects_usr_alayn',
       'amcaudales_projects_usr_guest',
       'amcaudales_projects_usr_active',
       'amcaudales_projects_usr_super_admin'
@@ -984,6 +861,7 @@ export function AuthProvider({ children }) {
       isConfigured: isCloudConfigured,
       hasClient: Boolean(supabase),
       userEmail: user?.email || 'Ninguno',
+      userName: user?.user_metadata?.full_name || 'Desconocido',
       isGuest: Boolean(user?.isGuest || !user || user.id === 'usr_guest'),
       userPlan: userPlan,
       cloudProjectsCount: cloudProjects.filter(p => p.isCloud).length,
@@ -1005,7 +883,7 @@ export function AuthProvider({ children }) {
         report.sessionUser = sessRes.data.session.user.email;
       }
 
-      const { data, error, count } = await supabase
+      const { count, error } = await supabase
         .from('projects')
         .select('id', { count: 'exact', head: true });
 
