@@ -1995,7 +1995,7 @@ const handleExportPolygonVertices = () => {
         <div style={{ display: 'flex', gap: '8px', marginTop: '16px', flexDirection: 'column' }}>
           {isCalculating && calcProgress.total > 0 && (
             <div style={{ backgroundColor: '#ffffff', border: '1px solid #dbeafe', borderRadius: '12px', padding: '12px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
-              <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#4b5563', marginBottom: '6px' }}>Calculando áreas aferentes...</div>
+              <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#38bdf8', marginBottom: '6px' }}>{cartografia.length > 0 ? `Calculando áreas por Catastro Urbano (${cartografia.length} predios)...` : 'Calculando áreas aferentes (Reto Voronoi)...'}</div>
               <div style={{ width: '100%', height: '8px', backgroundColor: '#e5e7eb', borderRadius: '4px', overflow: 'hidden' }}>
                 <div style={{ width: `${Math.round((calcProgress.current / calcProgress.total) * 100)}%`, height: '100%', backgroundColor: '#8e44ad', borderRadius: '4px', transition: 'width 0.3s ease' }}></div>
               </div>
@@ -2010,14 +2010,14 @@ const handleExportPolygonVertices = () => {
                disabled={isCalculating}
                style={{ flex: 1, backgroundColor: isCalculating ? '#9ca3af' : '#00A6D6', color: '#ffffff', fontWeight: 'bold', padding: '12px 8px', borderRadius: '12px', border: 'none', cursor: isCalculating ? 'not-allowed' : 'pointer', fontSize: '13px' }}
              >
-               {isCalculating ? `Procesando ${calcProgress.current}/${calcProgress.total}...` : "🧮 Calcular Áreas (Tramos Selec.)"}
+               {isCalculating ? `Procesando ${calcProgress.current}/${calcProgress.total}...` : (cartografia.length > 0 ? "📐 Áreas Catastro Urbano (Selec.)" : "🧮 Calcular Áreas (Tramos Selec.)")}
             </button>
             <button 
                onClick={() => handleCalcularAreas(selTramos.length > 0)}
                disabled={isCalculating}
                style={{ flex: 1, backgroundColor: isCalculating ? '#9ca3af' : '#8b5cf6', color: '#ffffff', fontWeight: 'bold', padding: '12px 8px', borderRadius: '12px', border: 'none', cursor: isCalculating ? 'not-allowed' : 'pointer', fontSize: '13px' }}
              >
-               {isCalculating ? `Procesando ${calcProgress.current}/${calcProgress.total}...` : "⚡ Autogenerar Áreas (Reto Voronoi)"}
+               {isCalculating ? `Procesando ${calcProgress.current}/${calcProgress.total}...` : (cartografia.length > 0 ? "🏙️ Áreas Catastro Urbano (Red Completa)" : "⚡ Autogenerar Áreas (Reto Voronoi)")}
             </button>
           </div>
           <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>

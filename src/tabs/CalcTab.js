@@ -20,6 +20,9 @@ export default function CalcTab(props){
   var estSepData=props.estSepData||{};var setEstSepData=props.setEstSepData||(function(){});
   var perfilIdx=props.perfilIdx,setPerfilIdx=props.setPerfilIdx;
   var perfilZoom=props.perfilZoom,setPerfilZoom=props.setPerfilZoom;
+  var [showDualDrainage, setShowDualDrainage] = useState(true);
+  var [roadWidth, setRoadWidth] = useState(6.0);
+  var [roadCrownSlope, setRoadCrownSlope] = useState(2.0);
   var selMap=props.selMap;
   var filterSel=props.filterSel;
   var isSel=function(de,a){
@@ -435,6 +438,11 @@ export default function CalcTab(props){
       };
       var terr="M"+pts.map(function(p){return sx(p.x)+","+sy(p.crDE);}).join(" L");
       var bat="M"+pts.map(function(p){return sx(p.x)+","+sy(p.cfDE);}).join(" L");
+      var deltaH = (roadWidth / 2) * (roadCrownSlope / 100);
+      var terrLat = "M" + pts.map(function(p){
+        var hC = parseFloat(p.crDE);
+        return sx(p.x) + "," + sy(isNaN(hC) ? yMin : (hC - deltaH));
+      }).join(" L");
       var gridY=[];var step=yR>10?2:yR>5?1:.5;for(var gy=Math.ceil(yMin/step)*step;gy<=yMax;gy+=step)gridY.push(gy);
       var gridX=[];var stepX=xMax>500?100:xMax>200?50:xMax>100?20:10;for(var gx=0;gx<=xMax;gx+=stepX)gridX.push(gx);
       return <div className="c">
@@ -451,6 +459,7 @@ export default function CalcTab(props){
             <span style={{fontSize:11,color:"#D8E2F0",minWidth:30,textAlign:"center"}}>{Math.round((zoomLvl||1)*100)+"%"}</span>
             <button className="btn" onClick={function(){if(props.setPerfilZoom)props.setPerfilZoom(Math.min(3,(zoomLvl||1)+0.25));}} style={{fontSize:11,padding:"2px 6px",background:"#1C2E4A"}}>+</button>
             <button className="btn" onClick={function(){if(props.setPerfilZoom)props.setPerfilZoom(1);}} style={{fontSize:10,padding:"2px 6px",background:"#1C2E4A"}}>100%</button>
+            <button className="btn" onClick={function(){setShowDualDrainage(!showDualDrainage);}} style={{fontSize:11,padding:"3px 8px",marginLeft:4,background:showDualDrainage?"linear-gradient(135deg,#0284c7,#0369a1)":"#1C2E4A",color:"#fff",border:showDualDrainage?"1px solid #38bdf8":"1px solid #334155",fontWeight:"bold"}} title="Activar/Ocultar visualización de doble drenaje a derecha e izquierda dividido en la mitad">{"↔ " + (showDualDrainage ? "Drenaje Dual Activo (Izq/Der)" : "Ver Drenaje Dual")}</button>
             {/* >>> FIN ADICIÓN v36.6 <<< */}
           </div>
         </div>
@@ -462,6 +471,7 @@ export default function CalcTab(props){
           <path d={terr+" L"+(W-mR)+","+(H-mB)+" L"+mL+","+(H-mB)+" Z"} fill="rgba(40,167,69,0.08)" stroke="none"/>
           {/* >>> FIN ADICIÓN v36.5 <<< */}
           <path d={terr} fill="none" stroke="#28A745" strokeWidth="2"/>
+          {showDualDrainage && <path d={terrLat} fill="none" stroke="#f59e0b" strokeWidth="1.8" strokeDasharray="5,4" />}
           <path d={bat} fill="none" stroke="#00A6D6" strokeWidth="2"/>
           {/* >>> ADICIÓN v36.5: tubería dibujada (rectángulo entre batea DE y batea A) <<< */}
           {chain.map(function(r,ci){
@@ -486,22 +496,99 @@ export default function CalcTab(props){
             {pi%2===0?<text x={sx(p.x)} y={sy(p.cfDE)+12} fill="#7088A8" fontSize="11" textAnchor="middle">{p.cfDE}</text>:null}
             <text x={sx(p.x)} y={H-mB+24} fill="#D8E2F0" fontSize="11" textAnchor="middle" transform={"rotate(-45,"+sx(p.x)+","+(H-mB+24)+")"}>{p.de}</text>
           </g>;})}
-          {chain.map(function(r,ci){var x1=sx(pts[ci].x);var x2=sx(pts[ci+1]?pts[ci+1].x:pts[ci].x+r.L);var yM=(sy(r.cfDE)+sy(r.cfA))/2;return <text key={"dn"+ci} x={(x1+x2)/2} y={yM-4} fill="#F0932B" fontSize="11" textAnchor="middle">{"#"+(r.id||"-")+" "+r.nom+" S="+r.S+"%"}</text>;})}
+          {chain.map(function(r,ci){var x1=sx(pts[ci].x);var x2=sx(pts[ci+1]?pts[ci+1].x:pts[ci].x+r.L);var yM=(sy(r.cfDE)+sy(r.cfA))/2;return <g key={"dn"+ci}><text x={(x1+x2)/2} y={yM-5} fill="#F0932B" fontSize="11" textAnchor="middle">{"#"+(r.id||"-")+" "+r.nom+" S="+r.S+"%"}</text>{showDualDrainage && <text x={(x1+x2)/2} y={yM+8} fill="#38bdf8" fontSize="8.5" textAnchor="middle" fontWeight="bold">{"↔ Drenaje Dual (50% Izq | 50% Der)"}</text>}</g>;})}
           {/* >>> ADICIÓN v36.5: tabla de datos bajo el perfil <<< */}
           {chain.map(function(r,ci){var x1=sx(pts[ci].x);var x2=sx(pts[ci+1]?pts[ci+1].x:pts[ci].x+r.L);var xM=(x1+x2)/2;var yBase=H-mB+40;
             return <g key={"dt"+ci}>
               <text x={xM} y={yBase} fill="#D8E2F0" fontSize="10" textAnchor="middle">{r.L.toFixed(1)+"m"}</text>
               <text x={xM} y={yBase+8} fill="#00A6D6" fontSize="10" textAnchor="middle">{"#"+(r.id||"-")+" "+r.nom}</text>
               <text x={xM} y={yBase+16} fill={r.V>=0.4?"#28A745":"#DC3545"} fontSize="10" textAnchor="middle">{"V="+r.V}</text>
+              {showDualDrainage && <text x={xM} y={yBase+25} fill="#f59e0b" fontSize="8.5" textAnchor="middle">{"Cuneta: "+(parseFloat(r.crDE)-deltaH).toFixed(2)+"m"}</text>}
             </g>;
           })}
           {/* >>> FIN ADICIÓN v36.5 <<< */}
-          <text x={mL} y={12} fill="#28A745" fontSize="11">Rasante</text>
-          <text x={mL+70} y={12} fill="#00A6D6" fontSize="11">Batea</text>
-          <text x={mL+130} y={12} fill="#D4A843" fontSize="11">Pozos</text>
+          <text x={mL} y={12} fill="#28A745" fontSize="11">Rasante Corona (Eje)</text>{showDualDrainage && <text x={mL+125} y={12} fill="#f59e0b" fontSize="11">↔ Cunetas Lat (Izq/Der -50%)</text>}
+          <text x={mL+(showDualDrainage?300:70)} y={12} fill="#00A6D6" fontSize="11">Batea</text>
+          <text x={mL+(showDualDrainage?355:130)} y={12} fill="#D4A843" fontSize="11">Pozos</text>
           <text x={W/2} y={H-2} fill="#7088A8" fontSize="11" textAnchor="middle">Distancia (m)</text>
           <text x={12} y={H/2} fill="#7088A8" fontSize="11" textAnchor="middle" transform={"rotate(-90,12,"+H/2+")"}>Cota (m)</text>
-        </svg></div></div>;}():null}
+        </svg></div>
+        {showDualDrainage && (
+          <div style={{
+            marginTop: 16,
+            backgroundColor: 'rgba(15, 23, 42, 0.95)',
+            border: '1px solid rgba(59, 130, 246, 0.35)',
+            borderRadius: 12,
+            padding: '16px 20px',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.4)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 10 }}>
+              <div>
+                <h4 style={{ margin: 0, fontSize: 13, fontWeight: '800', color: '#38bdf8', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span>↔ SECCIÓN TRANSVERSAL DE LA VÍA: BOMBEO A DOS AGUAS Y DOBLE DRENAJE</span>
+                  <span style={{ fontSize: 10, background: 'rgba(56, 189, 248, 0.2)', color: '#38bdf8', padding: '2px 8px', borderRadius: 4 }}>Dividido al centro 50% Izq | 50% Der</span>
+                </h4>
+                <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
+                  La vía cuenta con corona central que distribuye la mitad de la escorrentía hacia el costado izquierdo y la otra mitad hacia el costado derecho.
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <span style={{ fontSize: 11, color: '#fcd34d', fontWeight: 'bold' }}>Ancho Calzada W:</span>
+                  <input
+                    type="number"
+                    step="0.5"
+                    value={roadWidth}
+                    onChange={function(e){ setRoadWidth(Math.max(2, parseFloat(e.target.value) || 6)); }}
+                    style={{ width: 55, padding: '3px 6px', fontSize: 11, background: 'rgba(30, 41, 59, 0.9)', color: '#fff', border: '1px solid #3b82f6', borderRadius: 6, fontWeight: 'bold' }}
+                  />
+                  <span style={{ fontSize: 11, color: '#94a3b8' }}>m</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <span style={{ fontSize: 11, color: '#fcd34d', fontWeight: 'bold' }}>Bombeo Sx:</span>
+                  <input
+                    type="number"
+                    step="0.5"
+                    value={roadCrownSlope}
+                    onChange={function(e){ setRoadCrownSlope(Math.max(0.5, parseFloat(e.target.value) || 2)); }}
+                    style={{ width: 50, padding: '3px 6px', fontSize: 11, background: 'rgba(30, 41, 59, 0.9)', color: '#fff', border: '1px solid #3b82f6', borderRadius: 6, fontWeight: 'bold' }}
+                  />
+                  <span style={{ fontSize: 11, color: '#94a3b8' }}>%</span>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ width: '100%', overflowX: 'auto', textAlign: 'center' }}>
+              <svg viewBox="0 0 760 170" style={{ width: '100%', maxWidth: 760, background: '#0a0f1d', borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)' }}>
+                <rect x="0" y="110" width="760" height="60" fill="rgba(30, 41, 59, 0.5)" />
+                <rect x="40" y="45" width="80" height="25" fill="#334155" stroke="#64748b" strokeWidth="1.5" />
+                <text x="80" y="62" fill="#cbd5e1" fontSize="9" fontWeight="bold" textAnchor="middle">Andén Izq (1.2m)</text>
+                <text x="80" y="38" fill="#94a3b8" fontSize="8" textAnchor="middle">Cuneta Izq</text>
+                <rect x="640" y="45" width="80" height="25" fill="#334155" stroke="#64748b" strokeWidth="1.5" />
+                <text x="680" y="62" fill="#cbd5e1" fontSize="9" fontWeight="bold" textAnchor="middle">Andén Der (1.2m)</text>
+                <text x="680" y="38" fill="#94a3b8" fontSize="8" textAnchor="middle">Cuneta Der</text>
+                <polygon points="120,70 380,52 640,70 640,110 120,110" fill="#1e293b" stroke="#3b82f6" strokeWidth="2" />
+                <line x1="120" y1="70" x2="380" y2="52" stroke="#28a745" strokeWidth="2.5" />
+                <line x1="380" y1="52" x2="640" y2="70" stroke="#28a745" strokeWidth="2.5" />
+                <line x1="380" y1="30" x2="380" y2="120" stroke="#fcd34d" strokeWidth="1.5" strokeDasharray="4,4" />
+                <circle cx="380" cy="52" r="4" fill="#28a745" stroke="#fff" strokeWidth="1" />
+                <text x="380" y="24" fill="#fcd34d" fontSize="10" fontWeight="bold" textAnchor="middle">EJE VÍA (CORONA MÁXIMA)</text>
+                <text x="245" y="58" fill="#38bdf8" fontSize="9.5" fontWeight="bold" textAnchor="middle">{"← 50% Caudal Hacia Cuneta Izq (W/2 = " + (roadWidth / 2).toFixed(2) + "m, Sx = " + roadCrownSlope + "%)"}</text>
+                <text x="515" y="58" fill="#38bdf8" fontSize="9.5" fontWeight="bold" textAnchor="middle">{"50% Caudal Hacia Cuneta Der (W/2 = " + (roadWidth / 2).toFixed(2) + "m, Sx = " + roadCrownSlope + "%) →"}</text>
+                <rect x="110" y="70" width="16" height="22" fill="#00A6D6" rx="2" stroke="#fff" strokeWidth="1" />
+                <text x="118" y="103" fill="#38bdf8" fontSize="8" fontWeight="bold" textAnchor="middle">Sumidero Izq</text>
+                <rect x="634" y="70" width="16" height="22" fill="#00A6D6" rx="2" stroke="#fff" strokeWidth="1" />
+                <text x="642" y="103" fill="#38bdf8" fontSize="8" fontWeight="bold" textAnchor="middle">Sumidero Der</text>
+                <circle cx="380" cy="130" r="12" fill="#0284c7" stroke="#38bdf8" strokeWidth="2" />
+                <text x="380" y="154" fill="#7088A8" fontSize="9" textAnchor="middle">Tubería Colectora Principal</text>
+                <text x="380" y="90" fill="#94a3b8" fontSize="9" textAnchor="middle">{"Desnivel por Bombeo: ΔH = " + (deltaH).toFixed(3) + " m (CRas Corona - CRas Cuneta)"}</text>
+                <text x="120" y="125" fill="#f59e0b" fontSize="8.5" textAnchor="start">{"Cuneta Izq: CRas - " + (deltaH).toFixed(2) + "m"}</text>
+                <text x="640" y="125" fill="#f59e0b" fontSize="8.5" textAnchor="end">{"Cuneta Der: CRas - " + (deltaH).toFixed(2) + "m"}</text>
+              </svg>
+            </div>
+          </div>
+        )}
+      </div>;}():null}
     {(sub==="sep" || props.isExport)? <div className={props.isExport?"print-page-break":""}><EstructurasSeparacionTab R={R} P={P} T={T} estSepData={estSepData} setEstSepData={setEstSepData} /></div> : null}
     {(sub==="calc_sum" || props.isExport)? <div className={props.isExport?"print-page-break":""}><CalculoSumiderosTab P={P} sumData={sumData} setSumData={setSumData} sumLat={sumLat} setSumLat={setSumLat} sumTrans={sumTrans} setSumTrans={setSumTrans} /></div> : null}
   </div>;

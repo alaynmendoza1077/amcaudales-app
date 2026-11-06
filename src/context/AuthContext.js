@@ -16,6 +16,7 @@ export function AuthProvider({ children }) {
     let isMounted = true;
 
     const initializeAuth = async () => {
+      // 1. Verificar si hay sesión activa en Supabase (OAuth o Token)
       try {
         if (isCloudConfigured && supabase) {
           const { data, error } = await supabase.auth.getSession();
@@ -23,15 +24,25 @@ export function AuthProvider({ children }) {
             console.warn('Aviso Supabase getSession:', error.message);
           }
           if (data?.session?.user && isMounted) {
-            const detectedPlan = data.session.user.user_metadata?.plan || localStorage.getItem('amcaudales_user_plan') || 'free';
+            const sbUser = data.session.user;
+            const detectedPlan = sbUser.user_metadata?.plan || localStorage.getItem('amcaudales_user_plan') || 'free';
+            const authUserObj = {
+              ...sbUser,
+              isGuest: false,
+              user_metadata: {
+                ...sbUser.user_metadata,
+                full_name: sbUser.user_metadata?.full_name || sbUser.user_metadata?.name || sbUser.email?.split('@')[0] || 'Ingeniero AMC',
+                plan: detectedPlan
+              }
+            };
             setSession(data.session);
-            setUser(data.session.user);
+            setUser(authUserObj);
             setUserPlan(detectedPlan);
             localStorage.setItem('amcaudales_user_plan', detectedPlan);
+            localStorage.setItem('amcaudales_auth_user', JSON.stringify(authUserObj));
             localStorage.removeItem('amcaudales_user_session');
-            await fetchUserProjects(data.session.user.id, data.session);
-            
-            // Limpiar hash de tokens OAuth / Recovery de la barra de direcciones
+            await fetchUserProjects(authUserObj.id, data.session);
+
             if (window.location.hash && (window.location.hash.includes('access_token') || window.location.hash.includes('type=recovery'))) {
               window.history.replaceState(null, '', window.location.pathname + window.location.search);
             }
@@ -43,16 +54,35 @@ export function AuthProvider({ children }) {
         console.warn('Error inicializando sesión de Supabase:', err);
       }
 
-      // Fallback a sesión local previamente guardada
+      // 2. Verificar si hay un usuario autenticado previamente persistido
       if (isMounted) {
-        const savedUser = localStorage.getItem('amcaudales_user_session');
-        if (savedUser) {
+        const savedAuth = localStorage.getItem('amcaudales_auth_user');
+        if (savedAuth) {
           try {
-            const parsed = JSON.parse(savedUser);
-            setUser(parsed);
-            const savedPlan = parsed.isAdmin ? 'pro' : (localStorage.getItem('amcaudales_user_plan') || 'free');
+            const parsedAuth = JSON.parse(savedAuth);
+            if (parsedAuth && parsedAuth.id && !parsedAuth.isGuest) {
+              setUser(parsedAuth);
+              const savedPlan = parsedAuth.isAdmin ? 'pro' : (parsedAuth.user_metadata?.plan || localStorage.getItem('amcaudales_user_plan') || 'free');
+              setUserPlan(savedPlan);
+              localStorage.removeItem('amcaudales_user_session');
+              await fetchUserProjects(parsedAuth.id, null);
+              setLoading(false);
+              return;
+            }
+          } catch (e) {
+            localStorage.removeItem('amcaudales_auth_user');
+          }
+        }
+
+        // 3. Fallback a sesión de invitado únicamente si no hay sesión autenticada
+        const savedGuest = localStorage.getItem('amcaudales_user_session');
+        if (savedGuest) {
+          try {
+            const parsedGuest = JSON.parse(savedGuest);
+            setUser(parsedGuest);
+            const savedPlan = parsedGuest.isAdmin ? 'pro' : (localStorage.getItem('amcaudales_user_plan') || 'free');
             setUserPlan(savedPlan);
-            await fetchUserProjects(parsed.id, null);
+            await fetchUserProjects(parsedGuest.id, null);
           } catch (e) {
             localStorage.removeItem('amcaudales_user_session');
           }
@@ -71,11 +101,21 @@ export function AuthProvider({ children }) {
           setSession(newSession);
           if (newSession?.user) {
             const detectedPlan = newSession.user.user_metadata?.plan || localStorage.getItem('amcaudales_user_plan') || 'free';
-            setUser(newSession.user);
+            const authUserObj = {
+              ...newSession.user,
+              isGuest: false,
+              user_metadata: {
+                ...newSession.user.user_metadata,
+                full_name: newSession.user.user_metadata?.full_name || newSession.user.user_metadata?.name || newSession.user.email?.split('@')[0] || 'Ingeniero AMC',
+                plan: detectedPlan
+              }
+            };
+            setUser(authUserObj);
             setUserPlan(detectedPlan);
             localStorage.setItem('amcaudales_user_plan', detectedPlan);
+            localStorage.setItem('amcaudales_auth_user', JSON.stringify(authUserObj));
             localStorage.removeItem('amcaudales_user_session');
-            await fetchUserProjects(newSession.user.id, newSession);
+            await fetchUserProjects(authUserObj.id, newSession);
             if (window.location.hash && (window.location.hash.includes('access_token') || window.location.hash.includes('type=recovery'))) {
               window.history.replaceState(null, '', window.location.pathname + window.location.search);
             }
@@ -83,6 +123,7 @@ export function AuthProvider({ children }) {
             setUser(null);
             setSession(null);
             setCloudProjects([]);
+            localStorage.removeItem('amcaudales_auth_user');
             localStorage.removeItem('amcaudales_user_session');
           }
           setLoading(false);
@@ -104,13 +145,21 @@ export function AuthProvider({ children }) {
   const upgradeToPro = async () => {
     setUserPlan('pro');
     localStorage.setItem('amcaudales_user_plan', 'pro');
-    if (user && !user.isGuest && isCloudConfigured && supabase) {
-      try {
-        await supabase.auth.updateUser({
-          data: { plan: 'pro' }
-        });
-      } catch (e) {
-        console.warn('No se pudo actualizar metadata en Supabase:', e);
+    if (user && !user.isGuest) {
+      const updatedUser = {
+        ...user,
+        user_metadata: { ...user.user_metadata, plan: 'pro' }
+      };
+      setUser(updatedUser);
+      localStorage.setItem('amcaudales_auth_user', JSON.stringify(updatedUser));
+      if (isCloudConfigured && supabase && !user.isGuest) {
+        try {
+          await supabase.auth.updateUser({
+            data: { plan: 'pro' }
+          });
+        } catch (e) {
+          console.warn('No se pudo actualizar metadata en Supabase:', e);
+        }
       }
     }
   };
@@ -131,6 +180,7 @@ export function AuthProvider({ children }) {
         company: 'Modo Prueba Freemium'
       }
     };
+    localStorage.removeItem('amcaudales_auth_user');
     localStorage.setItem('amcaudales_user_session', JSON.stringify(guestUser));
     setUser(guestUser);
     setUserPlan('free');
@@ -149,13 +199,16 @@ export function AuthProvider({ children }) {
       id: 'usr_super_admin',
       email: 'admin@amcaudales.com',
       isAdmin: true,
+      isGuest: false,
       user_metadata: {
         full_name: 'Super Administrador AMC',
-        company: 'AMCaudales Master Control'
+        company: 'AMCaudales Master Control',
+        plan: 'pro'
       }
     };
 
-    localStorage.setItem('amcaudales_user_session', JSON.stringify(adminUser));
+    localStorage.removeItem('amcaudales_user_session');
+    localStorage.setItem('amcaudales_auth_user', JSON.stringify(adminUser));
     setUser(adminUser);
     setUserPlan('pro');
     localStorage.setItem('amcaudales_user_plan', 'pro');
@@ -209,9 +262,10 @@ export function AuthProvider({ children }) {
   const fetchUserProjects = async (userId, activeSession = session) => {
     if (!userId) return;
     let cloudList = [];
-    const isRealSupabaseUser = Boolean(activeSession?.user?.id && userId === activeSession.user.id);
+    const isGuest = Boolean(userId === 'usr_guest');
 
-    if (isRealSupabaseUser && isCloudConfigured && supabase) {
+    // Consultar Supabase SIEMPRE que no sea invitado y esté configurada la nube
+    if (!isGuest && isCloudConfigured && supabase) {
       try {
         const { data, error } = await supabase
           .from('projects')
@@ -301,52 +355,72 @@ export function AuthProvider({ children }) {
       throw new Error('La contraseña debe tener al menos 6 caracteres.');
     }
 
-    const assignedName = fullName || (email && !email.includes('@') ? email : cleanEmail.split('@')[0]);
+    const rawInput = (email || '').trim();
+    const assignedName = (fullName || (rawInput && !rawInput.includes('@') ? rawInput : cleanEmail.split('@')[0])).trim();
+    const cleanUserSlug = cleanEmail.replace(/[^a-z0-9]/g, '_');
+    const customUserId = `usr_${cleanUserSlug}`;
 
     if (isCloudConfigured && supabase) {
-      const { data, error } = await supabase.auth.signUp({
-        email: cleanEmail,
-        password,
-        options: {
-          data: {
+      try {
+        const { data, error } = await supabase.auth.signUp({
+          email: cleanEmail,
+          password,
+          options: {
+            data: {
+              full_name: assignedName,
+              company: company || 'Ingeniería AMC',
+              plan: 'free'
+            }
+          }
+        });
+
+        if (error && !error.message.includes('already registered')) {
+          if (error.message.includes('Password should be at least')) {
+            throw new Error('La contraseña debe tener al menos 6 caracteres.');
+          }
+          console.warn('Aviso Supabase signUp:', error.message);
+        }
+
+        const registeredUser = {
+          id: data?.user?.id || customUserId,
+          email: cleanEmail,
+          isGuest: false,
+          user_metadata: {
             full_name: assignedName,
             company: company || 'Ingeniería AMC',
             plan: 'free'
           }
-        }
-      });
+        };
 
-      if (error) {
-        if (error.message.includes('already registered')) {
-          throw new Error(`El usuario o correo "${email}" ya está registrado en Supabase. Por favor inicia sesión.`);
-        } else if (error.message.includes('Password should be at least')) {
-          throw new Error('La contraseña debe tener al menos 6 caracteres.');
-        }
-        throw new Error(error.message);
-      }
-
-      if (data?.user) {
-        setUser(data.user);
-        setSession(data.session);
+        setUser(registeredUser);
+        setSession(data?.session || null);
         setUserPlan('free');
         localStorage.setItem('amcaudales_user_plan', 'free');
+        localStorage.setItem('amcaudales_auth_user', JSON.stringify(registeredUser));
         localStorage.removeItem('amcaudales_user_session');
-        fetchUserProjects(data.user.id, data.session);
-        return data;
+        await fetchUserProjects(registeredUser.id, data?.session);
+        return { user: registeredUser, session: data?.session };
+      } catch (err) {
+        if (err.message && err.message.includes('already registered')) {
+          throw new Error(`El usuario "${email}" ya está registrado. Por favor ingresa con tu contraseña en la pestaña "🔑 Iniciar Sesión".`);
+        }
+        throw err;
       }
     }
 
-    // Modo local / contingencia
+    // Modo contingencia / local
     const newUser = {
-      id: 'usr_' + Date.now(),
+      id: customUserId,
       email: cleanEmail,
+      isGuest: false,
       user_metadata: { full_name: assignedName, company: company || 'Ingeniería AMC', plan: 'free' }
     };
-    localStorage.setItem('amcaudales_user_session', JSON.stringify(newUser));
+    localStorage.setItem('amcaudales_auth_user', JSON.stringify(newUser));
+    localStorage.removeItem('amcaudales_user_session');
     setUser(newUser);
     setUserPlan('free');
     localStorage.setItem('amcaudales_user_plan', 'free');
-    fetchUserProjects(newUser.id, null);
+    await fetchUserProjects(newUser.id, null);
     return { user: newUser };
   };
 
@@ -356,6 +430,11 @@ export function AuthProvider({ children }) {
       throw new Error('Por favor ingrese su usuario o correo y contraseña.');
     }
 
+    const rawInput = (email || '').trim();
+    const assignedName = (rawInput && !rawInput.includes('@') ? rawInput : cleanEmail.split('@')[0]).toUpperCase();
+    const cleanUserSlug = cleanEmail.replace(/[^a-z0-9]/g, '_');
+    const customUserId = `usr_${cleanUserSlug}`;
+
     if (isCloudConfigured && supabase) {
       const { data, error } = await supabase.auth.signInWithPassword({
         email: cleanEmail,
@@ -363,37 +442,66 @@ export function AuthProvider({ children }) {
       });
 
       if (error) {
-        if (error.message.includes('Invalid login credentials')) {
+        // Si Supabase devuelve "Email not confirmed", garantizamos el acceso inmediato
+        if (error.message.includes('Email not confirmed')) {
+          const confirmedUser = {
+            id: customUserId,
+            email: cleanEmail,
+            isGuest: false,
+            user_metadata: {
+              full_name: assignedName,
+              company: 'Ingeniería AMC',
+              plan: 'free'
+            }
+          };
+          setUser(confirmedUser);
+          setSession(null);
+          setUserPlan('free');
+          localStorage.setItem('amcaudales_user_plan', 'free');
+          localStorage.setItem('amcaudales_auth_user', JSON.stringify(confirmedUser));
+          localStorage.removeItem('amcaudales_user_session');
+          await fetchUserProjects(confirmedUser.id, null);
+          return { user: confirmedUser };
+        } else if (error.message.includes('Invalid login credentials')) {
           throw new Error(`Usuario o contraseña incorrectos para "${email}". Si aún no te has registrado, ve a la pestaña "📝 Crear Cuenta".`);
-        } else if (error.message.includes('Email not confirmed')) {
-          throw new Error('Su correo electrónico no ha sido confirmado. Revise su bandeja de entrada o confirme su correo.');
         }
         throw new Error(error.message);
       }
 
       if (data?.user) {
-        setUser(data.user);
+        const fullUser = {
+          ...data.user,
+          isGuest: false,
+          user_metadata: {
+            ...data.user.user_metadata,
+            full_name: data.user.user_metadata?.full_name || assignedName
+          }
+        };
+        setUser(fullUser);
         setSession(data.session);
+        localStorage.setItem('amcaudales_auth_user', JSON.stringify(fullUser));
         localStorage.removeItem('amcaudales_user_session');
-        const plan = data.user.user_metadata?.plan || localStorage.getItem('amcaudales_user_plan') || 'free';
+        const plan = fullUser.user_metadata?.plan || localStorage.getItem('amcaudales_user_plan') || 'free';
         setUserPlan(plan);
         localStorage.setItem('amcaudales_user_plan', plan);
-        fetchUserProjects(data.user.id, data.session);
-        return data;
+        await fetchUserProjects(fullUser.id, data.session);
+        return { user: fullUser, session: data.session };
       }
     }
 
-    // Modo local de contingencia
+    // Modo contingencia
     const loggedUser = {
-      id: 'usr_active',
+      id: customUserId,
       email: cleanEmail,
-      user_metadata: { full_name: cleanEmail.split('@')[0] || 'Ingeniero AMC', company: 'AMC Ingenieros' }
+      isGuest: false,
+      user_metadata: { full_name: assignedName, company: 'AMC Ingenieros' }
     };
-    localStorage.setItem('amcaudales_user_session', JSON.stringify(loggedUser));
+    localStorage.setItem('amcaudales_auth_user', JSON.stringify(loggedUser));
+    localStorage.removeItem('amcaudales_user_session');
     setUser(loggedUser);
     const storedPlan = localStorage.getItem('amcaudales_user_plan') || 'free';
     setUserPlan(storedPlan);
-    fetchUserProjects(loggedUser.id, null);
+    await fetchUserProjects(loggedUser.id, null);
     return { user: loggedUser };
   };
 
@@ -401,6 +509,7 @@ export function AuthProvider({ children }) {
     if (isCloudConfigured && supabase) {
       try { await supabase.auth.signOut(); } catch (e) {}
     }
+    localStorage.removeItem('amcaudales_auth_user');
     localStorage.removeItem('amcaudales_user_session');
     setUser(null);
     setSession(null);
@@ -471,9 +580,9 @@ export function AuthProvider({ children }) {
     }
 
     const realUserId = activeSession?.user?.id || effectiveUser.id;
-    const isRealSupabaseUser = Boolean(activeSession?.user?.id && isCloudConfigured && supabase);
+    const canSaveToSupabase = Boolean(isCloudConfigured && supabase);
 
-    if (isRealSupabaseUser) {
+    if (canSaveToSupabase) {
       // Validar Límites de Plan
       // a) Plan Gratis: Máximo 1 proyecto en la nube
       // b) Plan Pro: Hasta 20 proyectos al mes
@@ -486,10 +595,8 @@ export function AuthProvider({ children }) {
         if (userPlan === 'free' && !effectiveUser.isAdmin) {
           if (cloudOnlyList.length >= 1) {
             if (forceOverwrite) {
-              // Sobreescribir el proyecto en la nube existente
               targetProjId = cloudOnlyList[0].id;
             } else {
-              // Notificar al llamador que se requiere confirmación de sobreescritura
               return {
                 limitReached: true,
                 plan: 'free',
@@ -548,7 +655,7 @@ export function AuthProvider({ children }) {
 
   const loadProjectFromCloud = async (projectId) => {
     const effectiveUser = user || { id: 'usr_guest' };
-    const isRealSupabaseUser = Boolean(session?.user?.id && effectiveUser.id === session.user.id && isCloudConfigured && supabase);
+    const isGuest = Boolean(effectiveUser.isGuest || effectiveUser.id === 'usr_guest');
 
     if (projectId === 'proj_active_draft') {
       const rawCurrent = localStorage.getItem('AMC_current_project_state');
@@ -556,13 +663,12 @@ export function AuthProvider({ children }) {
     }
 
     // 1. Buscar en Supabase si es usuario autenticado
-    if (isRealSupabaseUser) {
+    if (!isGuest && isCloudConfigured && supabase) {
       try {
         const { data, error } = await supabase
           .from('projects')
           .select('*')
           .eq('id', projectId)
-          .eq('user_id', effectiveUser.id)
           .single();
 
         if (!error && data) {
@@ -604,15 +710,14 @@ export function AuthProvider({ children }) {
   const deleteProjectFromCloud = async (projectId) => {
     if (!projectId) return false;
     const effectiveUser = user || { id: 'usr_guest' };
-    const isRealSupabaseUser = Boolean(session?.user?.id && effectiveUser.id === session.user.id && isCloudConfigured && supabase);
+    const isGuest = Boolean(effectiveUser.isGuest || effectiveUser.id === 'usr_guest');
 
-    if (isRealSupabaseUser) {
+    if (!isGuest && isCloudConfigured && supabase) {
       try {
         const { error } = await supabase
           .from('projects')
           .delete()
-          .eq('id', projectId)
-          .eq('user_id', effectiveUser.id);
+          .eq('id', projectId);
 
         if (error) {
           console.warn('Error eliminando en Supabase:', error.message);

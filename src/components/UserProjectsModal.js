@@ -200,12 +200,29 @@ export default function UserProjectsModal({ isOpen, onClose, onLoadProject, onSa
               <h2 style={titleStyle}>📁 Mis Proyectos en la Plataforma</h2>
               <div style={sessionInfoStyle}>
                 {isGuest ? (
-                  <span style={{ color: '#fbbf24', fontWeight: '700' }}>
-                    👤 Usuario: Modo Invitado (Sin Cuenta Conectada)
-                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <span style={{ color: '#fbbf24', fontWeight: '700' }}>
+                      👤 Modo Invitado (Proyectos guardados solo en este PC)
+                    </span>
+                    <button
+                      onClick={() => setShowAuthModal(true)}
+                      style={{
+                        background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '6px',
+                        padding: '3px 10px',
+                        fontSize: '0.75rem',
+                        fontWeight: 'bold',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      🔑 Iniciar Sesión para Sincronizar en Nube
+                    </button>
+                  </div>
                 ) : (
                   <span>
-                    👋 Conectado como: <strong>{displayModalName}</strong>{' '}
+                    👋 Conectado como: <strong style={{ color: '#38bdf8' }}>{displayModalName}</strong>{' '}
                     <span style={{ color: '#94a3b8', fontSize: '0.78rem' }}>({user?.email})</span>
                   </span>
                 )}

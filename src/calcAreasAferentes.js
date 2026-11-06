@@ -12,7 +12,38 @@ if (!proj4.defs["EPSG:3116"]) {
 const toEPSG3116 = proj4("EPSG:4326", "EPSG:3116");
 const fromEPSG3116 = proj4("EPSG:3116", "EPSG:4326");
 
-const projectToMeters = (lng, lat) => toEPSG3116.forward([lng, lat]);
+// EPSG:9377 (MAGNA-SIRGAS / Origen Nacional)
+if (!proj4.defs["EPSG:9377"]) {
+    proj4.defs("EPSG:9377", "+proj=tmerc +lat_0=4 +lon_0=-73 +k=0.9992 +x_0=5000000 +y_0=2000000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs");
+}
+
+export function convertPointToMeters(x, y) {
+    if (x === null || x === undefined || y === null || y === undefined) return [0, 0];
+    let numX = parseFloat(x);
+    let numY = parseFloat(y);
+    if (isNaN(numX) || isNaN(numY)) return [0, 0];
+
+    // Caso A: Coordenadas en EPSG:9377 (Origen Nacional, X > 3M)
+    if (numX > 3000000 || numY > 3000000 || window.currentGlobalEpsg === "EPSG:9377") {
+        try {
+            return proj4("EPSG:9377", "EPSG:3116").forward([numX, numY]);
+        } catch(e) {
+            return [numX, numY];
+        }
+    }
+    // Caso B: Ya en coordenadas metricas EPSG:3116 (X ~ 1,000,000)
+    if (Math.abs(numX) > 100000) {
+        return [numX, numY];
+    }
+    // Caso C: Grados decimales WGS84 (Lng ~ -74, Lat ~ 4-11)
+    try {
+        return toEPSG3116.forward([numX, numY]);
+    } catch(e) {
+        return [numX, numY];
+    }
+}
+
+const projectToMeters = (lng, lat) => convertPointToMeters(lng, lat);
 const projectToLatLng = (x, y) => fromEPSG3116.forward([x, y]);
 
 // ==================== CONSTANTS (match main.py exactly) ====================
@@ -541,10 +572,12 @@ export async function calcularAreas(tramosACalcular, todosLosTramos, cartografia
                 }
                 if (firstCoord) {
                     let fLng = firstCoord[0], fLat = firstCoord[1];
-                    if (fLng < zonaBboxWGS_exp[0] || fLng > zonaBboxWGS_exp[2] ||
-                        fLat < zonaBboxWGS_exp[1] || fLat > zonaBboxWGS_exp[3]) {
+                    let isMetric = Math.abs(fLng) > 1000;
+                    let ptCheck = isMetric ? convertPointToMeters(fLng, fLat) : null;
+                    if (isMetric ? (ptCheck[0] < zonaBboxM_exp[0] || ptCheck[0] > zonaBboxM_exp[2] || ptCheck[1] < zonaBboxM_exp[1] || ptCheck[1] > zonaBboxM_exp[3]) : (fLng < zonaBboxWGS_exp[0] || fLng > zonaBboxWGS_exp[2] || fLat < zonaBboxWGS_exp[1] || fLat > zonaBboxWGS_exp[3])) {
+
                         skipped++;
-                        continue; // Outside zone — skip entirely
+                        continue;
                     }
                 }
                 
@@ -685,7 +718,8 @@ export async function calcularAreas(tramosACalcular, todosLosTramos, cartografia
         let areaImportada = tramo.aT !== undefined && tramo.aT !== null && tramo.aT !== "" ? tramo.aT :
                             (tramo.area !== undefined && tramo.area !== null && tramo.area !== "" ? tramo.area : null);
 
-        if (areaImportada !== null && parseFloat(areaImportada) > 0) {
+        const hasBaseCarto = Boolean(cartografia && cartografia.length > 0 && prediosCache.length > 0);
+        if (!hasBaseCarto && areaImportada !== null && parseFloat(areaImportada) > 0) {
             console.log(`[calcAreas] Tramo ${tramo.de}: Omitiendo cálculo espacial. Usando área importada: ${areaImportada} Ha`);
             resultados.push({
                 ...tramo,
@@ -767,7 +801,10 @@ export async function calcularAreas(tramosACalcular, todosLosTramos, cartografia
         }
 
         // Forzado para Reto Voronoi: usar el radio especificado en la UI en lugar de buscar predios adyacentes
-        let radioMeters = radioDefault;
+        // Si hay cartografia catastral activa, calcular radio adaptativo por predios; sino usar radio configurado
+        let radioMeters = (hasBaseCarto && cellCandidates.size > 0)
+            ? calcularRadioPorPredios(p0_m, p1_m, dx, dy, lonMeters, redes_barrera, cellCandidates, radioDefault)
+            : radioDefault;
 
         // 1. Create capture zone in meters
         let zonaPuntaMeters = formaPuntaCierreMeters(p0_cierre, p1_cierre, dx_c, dy_c, lonCierre, radioMeters);
@@ -883,7 +920,7 @@ export async function calcularAreas(tramosACalcular, todosLosTramos, cartografia
         }
 
         // Si no se capturaron predios (ej. Reto Voronoi sin cartografía), usar la zona de captura entera
-        if (prediosLocalesCrudos.length === 0 && zonaCapturaMeters) {
+        if (prediosLocalesCrudos.length === 0 && (!hasBaseCarto || poligonosParaUnirMeters.length <= 1) && zonaCapturaMeters) {
             poligonosParaUnirMeters.push(zonaCapturaMeters);
         }
 
