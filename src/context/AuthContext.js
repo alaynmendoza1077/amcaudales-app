@@ -115,140 +115,180 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     let isMounted = true;
 
-    const initializeAuth = async () => {
-      const urlHash = window.location.hash || '';
-      const urlSearch = window.location.search || '';
-      const urlParams = new URLSearchParams(urlSearch);
-      const authCode = urlParams.get('code');
-      const isOAuthReturn = Boolean(authCode || urlHash.includes('access_token') || urlHash.includes('type=recovery'));
+    // Detectar si la URL actual proviene de un retorno de OAuth (Google / Magic Link)
+    const urlHash = window.location.hash || '';
+    const urlSearch = window.location.search || '';
+    const urlParams = new URLSearchParams(urlSearch);
+    const hashParams = new URLSearchParams(urlHash.replace(/^#/, ''));
 
-      // 1. Manejo prioritario de retorno OAuth (Google / Magic Link)
-      try {
-        if (isCloudConfigured && supabase) {
-          // Si regresamos con código PKCE en la URL (?code=...)
-          if (authCode) {
-            try {
-              // En Supabase JS v2 se debe pasar SOLO el código string extraído
-              const { data: exchData, error: exchError } = await supabase.auth.exchangeCodeForSession(authCode);
-              if (exchError) {
-                console.warn('Aviso exchangeCodeForSession:', exchError.message);
-              } else if (exchData?.session) {
-                // Intercambio exitoso
-              }
-            } catch (exchEx) {
-              console.warn('Excepción exchangeCodeForSession:', exchEx.message);
-            }
-          }
+    const authCode = urlParams.get('code');
+    const accessToken = hashParams.get('access_token');
+    const oauthError = urlParams.get('error') || hashParams.get('error');
+    const oauthErrorDesc = urlParams.get('error_description') || hashParams.get('error_description');
+    const isOAuthReturn = Boolean(authCode || accessToken);
 
-          // Consultar sesión activa de Supabase
-          const { data, error } = await supabase.auth.getSession();
-          if (error) {
-            console.warn('Aviso Supabase getSession:', error.message);
-          }
+    if (oauthError) {
+      console.error('[Google OAuth Error]:', oauthError, oauthErrorDesc);
+      alert(`Aviso de inicio de sesión Google: ${oauthErrorDesc || oauthError}`);
+      if (window.history && window.history.replaceState) {
+        window.history.replaceState(null, '', window.location.pathname);
+      }
+    }
 
-          if (data?.session?.user && isMounted) {
-            const authUserObj = buildAuthUser(data.session.user);
+    // Helper universal para aplicar y persistir la sesión autenticada
+    const applyUserSession = async (sbSession) => {
+      if (!isMounted || !sbSession?.user) return;
+      const authUserObj = buildAuthUser(sbSession.user);
 
-            setSession(data.session);
-            setUser(authUserObj);
-            setUserPlan('pro');
-            localStorage.setItem('amcaudales_user_plan', 'pro');
-            localStorage.setItem('amcaudales_auth_user', JSON.stringify(authUserObj));
-            localStorage.removeItem('amcaudales_user_session');
+      setUser(authUserObj);
+      setSession(sbSession);
+      setUserPlan('pro');
+      localStorage.setItem('amcaudales_user_plan', 'pro');
+      localStorage.setItem('amcaudales_auth_user', JSON.stringify(authUserObj));
+      localStorage.removeItem('amcaudales_user_session');
 
-            // Limpiar parámetros de la URL sin recargar la página
-            if (isOAuthReturn && window.history && window.history.replaceState) {
-              window.history.replaceState(null, '', window.location.pathname);
-            }
+      if (isMounted) setLoading(false);
 
-            syncAccountToCloud(authUserObj, null);
-            await fetchUserProjects(authUserObj.id, data.session);
-            if (isMounted) setLoading(false);
-            return;
-          }
-        }
-      } catch (err) {
-        console.warn('Error inicializando sesión de Supabase:', err);
+      // Limpiar parámetros de la URL sin recargar
+      if ((window.location.search.includes('code=') || window.location.hash.includes('access_token')) && window.history && window.history.replaceState) {
+        window.history.replaceState(null, '', window.location.pathname);
       }
 
-      // 2. Si no hay sesión en Supabase y no es un retorno OAuth, verificar localStorage
-      if (isMounted) {
-        const savedAuth = localStorage.getItem('amcaudales_auth_user');
-        if (savedAuth) {
-          try {
-            const parsedAuth = JSON.parse(savedAuth);
-            if (parsedAuth && parsedAuth.id && !parsedAuth.isGuest) {
-              const fullParsed = buildAuthUser(parsedAuth);
-
-              setUser(fullParsed);
-              setUserPlan('pro');
-              localStorage.setItem('amcaudales_user_plan', 'pro');
-              localStorage.removeItem('amcaudales_user_session');
-              syncAccountToCloud(fullParsed, null);
-              await fetchUserProjects(fullParsed.id, null);
-              setLoading(false);
-              return;
-            }
-          } catch (e) {
-            localStorage.removeItem('amcaudales_auth_user');
-          }
-        }
-
-        // 3. Fallback a sesión de invitado sólo si el usuario la guardó previamente
-        const savedGuest = localStorage.getItem('amcaudales_user_session');
-        if (savedGuest) {
-          try {
-            const parsedGuest = JSON.parse(savedGuest);
-            setUser(parsedGuest);
-            const savedPlan = parsedGuest.isAdmin ? 'pro' : (localStorage.getItem('amcaudales_user_plan') || 'free');
-            setUserPlan(savedPlan);
-            await fetchUserProjects(parsedGuest.id, null);
-          } catch (e) {
-            localStorage.removeItem('amcaudales_user_session');
-          }
-        }
-        setLoading(false);
-      }
+      // Sincronización en segundo plano sin congelar la UI
+      syncAccountToCloud(authUserObj, null).catch(err => console.warn('Sync cloud account:', err));
+      fetchUserProjects(authUserObj.id, sbSession).catch(err => console.warn('Fetch user projects:', err));
     };
 
-    initializeAuth();
+    const fallbackToStorage = () => {
+      if (!isMounted) return;
+      const savedAuth = localStorage.getItem('amcaudales_auth_user');
+      if (savedAuth) {
+        try {
+          const parsedAuth = JSON.parse(savedAuth);
+          if (parsedAuth && parsedAuth.id && !parsedAuth.isGuest) {
+            const fullParsed = buildAuthUser(parsedAuth);
+            setUser(fullParsed);
+            setUserPlan('pro');
+            localStorage.setItem('amcaudales_user_plan', 'pro');
+            localStorage.removeItem('amcaudales_user_session');
+            syncAccountToCloud(fullParsed, null).catch(console.warn);
+            fetchUserProjects(fullParsed.id, null).catch(console.warn);
+            setLoading(false);
+            return;
+          }
+        } catch (e) {
+          localStorage.removeItem('amcaudales_auth_user');
+        }
+      }
 
+      // Fallback a sesión de invitado sólo si el usuario la guardó previamente
+      const savedGuest = localStorage.getItem('amcaudales_user_session');
+      if (savedGuest) {
+        try {
+          const parsedGuest = JSON.parse(savedGuest);
+          setUser(parsedGuest);
+          const savedPlan = parsedGuest.isAdmin ? 'pro' : (localStorage.getItem('amcaudales_user_plan') || 'free');
+          setUserPlan(savedPlan);
+          fetchUserProjects(parsedGuest.id, null).catch(console.warn);
+        } catch (e) {
+          localStorage.removeItem('amcaudales_user_session');
+        }
+      }
+
+      setLoading(false);
+    };
+
+    // 1. Suscribirse a onAuthStateChange PRIMERO
     let subscription = null;
     if (isCloudConfigured && supabase) {
       try {
         const authListener = supabase.auth.onAuthStateChange(async (event, newSession) => {
           if (!isMounted) return;
-          setSession(newSession);
+          console.log('[Supabase Auth Event]:', event, newSession?.user?.email);
 
           if (newSession?.user) {
-            const authUserObj = buildAuthUser(newSession.user);
-            setUser(authUserObj);
-            setUserPlan('pro');
-            localStorage.setItem('amcaudales_user_plan', 'pro');
-            localStorage.setItem('amcaudales_auth_user', JSON.stringify(authUserObj));
-            localStorage.removeItem('amcaudales_user_session');
-            await fetchUserProjects(authUserObj.id, newSession);
-
-            if (window.location.hash && (window.location.hash.includes('access_token') || window.location.hash.includes('type=recovery'))) {
-              window.history.replaceState(null, '', window.location.pathname);
-            }
-            if (window.location.search && window.location.search.includes('code=')) {
-              window.history.replaceState(null, '', window.location.pathname);
-            }
+            await applyUserSession(newSession);
           } else if (event === 'SIGNED_OUT') {
             setUser(null);
             setSession(null);
             setCloudProjects([]);
             localStorage.removeItem('amcaudales_auth_user');
             localStorage.removeItem('amcaudales_user_session');
+            if (isMounted) setLoading(false);
           }
-          setLoading(false);
         });
         subscription = authListener.data?.subscription;
       } catch (e) {
         console.warn('Error configurando onAuthStateChange:', e);
       }
     }
+
+    // 2. Proceso de inicialización y verificación
+    const initializeAuth = async () => {
+      try {
+        if (isCloudConfigured && supabase) {
+          // Si es retorno de OAuth, detectSessionInUrl de Supabase está intercambiando el código en paralelo.
+          // Mantenemos loading en true y sondeamos getSession() cada 250ms
+          if (isOAuthReturn) {
+            console.log('[OAuth Return] Procesando retorno de autenticación Google...');
+            let attempts = 0;
+            const maxAttempts = 14; // 14 * 250ms = 3.5 segundos máximo
+
+            const checkSessionInterval = setInterval(async () => {
+              if (!isMounted) {
+                clearInterval(checkSessionInterval);
+                return;
+              }
+              attempts++;
+              const { data } = await supabase.auth.getSession();
+              if (data?.session?.user) {
+                clearInterval(checkSessionInterval);
+                console.log('[OAuth Return] ¡Sesión de Google detectada exitosamente!');
+                await applyUserSession(data.session);
+                return;
+              }
+
+              // Si ya se superaron los intentos y aún no hay sesión por auto-detección
+              if (attempts >= maxAttempts) {
+                clearInterval(checkSessionInterval);
+                console.warn('[OAuth Return] Intentando intercambio de código de respaldo...');
+                if (authCode) {
+                  try {
+                    const { data: exchData, error: exchError } = await supabase.auth.exchangeCodeForSession(authCode);
+                    if (!exchError && exchData?.session?.user) {
+                      console.log('[OAuth Return] ¡Intercambio directo de código exitoso!');
+                      await applyUserSession(exchData.session);
+                      return;
+                    }
+                  } catch (e) {
+                    console.warn('[OAuth Return] Falló intercambio de código respaldo:', e.message);
+                  }
+                }
+
+                // Si todo falló, revisar storage
+                fallbackToStorage();
+              }
+            }, 250);
+
+            return;
+          }
+
+          // Flujo estándar (No OAuth): Consultar sesión activa de Supabase
+          const { data } = await supabase.auth.getSession();
+          if (data?.session?.user && isMounted) {
+            await applyUserSession(data.session);
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn('Error verificando sesión en Supabase:', err);
+      }
+
+      // Si no hay sesión en Supabase y no es retorno OAuth, verificar localStorage
+      fallbackToStorage();
+    };
+
+    initializeAuth();
 
     return () => {
       isMounted = false;
@@ -349,7 +389,8 @@ export function AuthProvider({ children }) {
       throw new Error('Supabase no está configurado para OAuth.');
     }
     try {
-      const redirectUri = window.location.origin;
+      localStorage.removeItem('amcaudales_user_session');
+      const redirectUri = window.location.origin + window.location.pathname;
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
@@ -545,28 +586,29 @@ export function AuthProvider({ children }) {
    * Inicio de sesión universal con Correo y Contraseña
    */
   const login = async (email, password) => {
-    const rawEmail = (email || '').trim();
+    let rawEmail = (email || '').trim();
     const cleanPassword = (password || '').trim();
     if (!rawEmail) {
-      throw new Error('Por favor ingrese su correo electrónico.');
+      throw new Error('Por favor ingrese su correo electrónico o usuario.');
     }
     if (!cleanPassword) {
       throw new Error('Por favor ingrese su contraseña.');
     }
 
-    const isMasterKey = ['ADMIN2026', 'AMC2026', 'AMCAUDALES2026'].includes(cleanPassword.toUpperCase());
+    const isMasterKey = ['ADMIN2026', 'AMC2026', 'AMCAUDALES2026', 'EMPAS2026'].includes(cleanPassword.toUpperCase());
 
-    // 1. Acceso con Clave Maestra de Administrador
+    // 1. Acceso con Clave Maestra de Administrador o Cuenta Institucional EMPAS
     if (isMasterKey) {
       const cleanSlug = rawEmail.toLowerCase().replace(/[^a-z0-9]/g, '_');
+      const isEmpas = rawEmail.toLowerCase().includes('empas') || cleanPassword.toUpperCase() === 'EMPAS2026';
       const adminUser = {
         id: `usr_${cleanSlug}`,
         email: rawEmail.includes('@') ? rawEmail.toLowerCase() : `${rawEmail.toLowerCase()}@amcaudales.com`,
         isAdmin: true,
         isGuest: false,
         user_metadata: {
-          full_name: rawEmail.includes('@') ? rawEmail.split('@')[0].toUpperCase() : rawEmail.toUpperCase(),
-          company: 'Ingeniería AMC',
+          full_name: isEmpas ? 'EMPAS S.A. E.S.P.' : (rawEmail.includes('@') ? rawEmail.split('@')[0].toUpperCase() : rawEmail.toUpperCase()),
+          company: isEmpas ? 'Empresa Pública de Alcantarillado de Santander' : 'Ingeniería AMC',
           plan: 'pro'
         }
       };
@@ -580,6 +622,9 @@ export function AuthProvider({ children }) {
       return { user: adminUser };
     }
 
+    // Normalizar si se ingresó nombre sin dominio para Supabase
+    const supabaseEmail = rawEmail.includes('@') ? rawEmail.toLowerCase() : `${rawEmail.toLowerCase()}@amcaudales.com`;
+
     // 2. Intento de inicio de sesión con Supabase Auth
     let authUser = null;
     let authSession = null;
@@ -588,7 +633,7 @@ export function AuthProvider({ children }) {
     if (isCloudConfigured && supabase) {
       try {
         const { data, error } = await supabase.auth.signInWithPassword({
-          email: rawEmail.toLowerCase(),
+          email: supabaseEmail,
           password: cleanPassword
         });
 

@@ -254,13 +254,14 @@ export default function AuthModal({ isOpen, onClose, initialTab = 'login', onAut
             /* Campos estándar de Email y Password */
             <>
               <div>
-                <label style={labelStyle}>Correo Electrónico *</label>
+                <label style={labelStyle}>{tab === 'register' ? 'Correo Electrónico *' : 'Correo Electrónico o Usuario *'}</label>
                 <input
-                  type="email"
+                  type={tab === 'register' ? 'email' : 'text'}
                   autoCapitalize="none"
                   autoCorrect="off"
+                  inputMode="email"
                   required
-                  placeholder="nombre@ejemplo.com"
+                  placeholder={tab === 'register' ? 'nombre@ejemplo.com' : 'nombre@ejemplo.com o EMPAS'}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   style={inputStyle}

@@ -32,10 +32,57 @@ const ReposicionModule = lazyWithRetry(() => import('./modules/ReposicionModule'
 const ExpressModule = lazyWithRetry(() => import('./modules/ExpressModule'));
 const PresupuestoModule = lazyWithRetry(() => import('./modules/PresupuestoModule'));
 
-// Fallback de carga (Loader)
+// Fallback de carga (Loader Profesional)
 const Loader = () => (
-  <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', background: '#050a15', color: '#60a5fa', fontSize: '1.5rem', fontFamily: 'sans-serif' }}>
-    Cargando módulo...
+  <div style={{
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'center',
+    alignItems: 'center',
+    minHeight: '100vh',
+    background: 'radial-gradient(circle at 50% 40%, #0a1738 0%, #050a15 100%)',
+    color: '#ffffff',
+    fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+    padding: '2rem'
+  }}>
+    <div style={{
+      width: '60px',
+      height: '60px',
+      border: '4px solid rgba(59, 130, 246, 0.2)',
+      borderTop: '4px solid #38bdf8',
+      borderRadius: '50%',
+      animation: 'amcSpin 0.9s cubic-bezier(0.4, 0, 0.2, 1) infinite',
+      marginBottom: '1.5rem',
+      boxShadow: '0 0 25px rgba(56, 189, 248, 0.35)'
+    }} />
+    <style>{`
+      @keyframes amcSpin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+    `}</style>
+    <div style={{
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: '8px',
+      padding: '4px 12px',
+      background: 'rgba(59, 130, 246, 0.15)',
+      border: '1px solid rgba(59, 130, 246, 0.4)',
+      borderRadius: '20px',
+      fontSize: '0.8rem',
+      fontWeight: '700',
+      color: '#38bdf8',
+      marginBottom: '0.8rem',
+      letterSpacing: '0.05em'
+    }}>
+      ☁️ NUBE AMCaudales Pro
+    </div>
+    <h2 style={{ fontSize: '1.4rem', fontWeight: '800', color: '#f8fafc', margin: '0 0 0.5rem 0' }}>
+      Conectando Sesión...
+    </h2>
+    <p style={{ color: '#94a3b8', fontSize: '0.9rem', margin: 0, textAlign: 'center' }}>
+      Sincronizando credenciales de Google y proyectos en la nube.
+    </p>
   </div>
 );
 
