@@ -427,16 +427,12 @@ export function AuthProvider({ children }) {
     }
     try {
       localStorage.removeItem('amcaudales_user_session');
-      // Redirigir al origen exacto del navegador sin sufijos extra
+      // Redirigir al origen exacto del navegador sin rutas extra
       const redirectTarget = window.location.origin;
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: redirectTarget,
-          queryParams: {
-            access_type: 'offline',
-            prompt: 'select_account'
-          }
+          redirectTo: redirectTarget
         }
       });
       if (error) {
