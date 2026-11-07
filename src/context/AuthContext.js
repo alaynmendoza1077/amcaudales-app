@@ -538,35 +538,54 @@ export function AuthProvider({ children }) {
 
     if (!isGuest && isCloudConfigured && supabase) {
       try {
-        const candidateIds = [userId, activeSession?.user?.id, user?.id];
-        const userEmail = activeSession?.user?.email || user?.email || '';
-        if (userEmail) {
-          candidateIds.push(stringToUUID(userEmail));
-          candidateIds.push(stringToUUID(`usr_${userEmail.replace(/[^a-z0-9]/g, '_')}`));
-        }
+        // 1. Consultar directamente proyectos del usuario en Supabase vía RLS
+        const { data: directData, error: directError } = await supabase
+          .from('projects')
+          .select('id, title, updated_at, created_at, user_id')
+          .order('updated_at', { ascending: false });
 
-        const validUUIDs = candidateIds.filter(id => isValidUUID(id));
-        const uniqueUUIDs = Array.from(new Set(validUUIDs));
+        if (!directError && Array.isArray(directData) && directData.length > 0) {
+          cloudList = directData
+            .filter(p => p && p.id && !String(p.title || '').startsWith('AUTH_ACCOUNT:'))
+            .map(p => ({ ...p, isCloud: true }));
+        } else {
+          // 2. Filtro de contingencia por IDs candidatos si RLS no retorna directo
+          const candidateIds = [userId, activeSession?.user?.id, user?.id];
+          const userEmail = activeSession?.user?.email || user?.email || '';
+          if (userEmail) {
+            candidateIds.push(stringToUUID(userEmail));
+            candidateIds.push(stringToUUID(`usr_${userEmail.replace(/[^a-z0-9]/g, '_')}`));
+          }
 
-        if (uniqueUUIDs.length > 0) {
-          const { data, error } = await supabase
-            .from('projects')
-            .select('id, title, updated_at, created_at, user_id')
-            .in('user_id', uniqueUUIDs)
-            .order('updated_at', { ascending: false });
+          const validUUIDs = candidateIds.filter(id => isValidUUID(id));
+          const uniqueUUIDs = Array.from(new Set(validUUIDs));
 
-          if (!error && Array.isArray(data)) {
-            cloudList = data
-              .filter(p => p && p.id && !String(p.title || '').startsWith('AUTH_ACCOUNT:'))
-              .map(p => ({ ...p, isCloud: true }));
-          } else if (error) {
-            console.warn('Aviso carga proyectos Supabase:', error.message);
+          if (uniqueUUIDs.length > 0) {
+            const { data, error } = await supabase
+              .from('projects')
+              .select('id, title, updated_at, created_at, user_id')
+              .in('user_id', uniqueUUIDs)
+              .order('updated_at', { ascending: false });
+
+            if (!error && Array.isArray(data)) {
+              cloudList = data
+                .filter(p => p && p.id && !String(p.title || '').startsWith('AUTH_ACCOUNT:'))
+                .map(p => ({ ...p, isCloud: true }));
+            }
           }
         }
       } catch (err) {
         console.warn('Error al cargar proyectos de la nube:', err.message);
       }
     }
+
+    const normalizeTitle = (t) => {
+      return String(t || '')
+        .replace(/\s*\(Borrador Activo\)$/i, '')
+        .replace(/\s*\(Borrador de Trabajo previo\)$/i, '')
+        .trim()
+        .toLowerCase();
+    };
 
     const localKeys = [
       `amcaudales_projects_${userId}`,
@@ -584,11 +603,33 @@ export function AuthProvider({ children }) {
           const list = JSON.parse(raw);
           if (Array.isArray(list)) {
             list.forEach(p => {
-              const alreadyInCloud = cloudList.some(cp => cp && (cp.id === p.id || (cp.title && p.title && cp.title.trim().toLowerCase() === p.title.trim().toLowerCase())));
-              if (p && p.id && !String(p.id).startsWith('sys_account_') && !alreadyInCloud && !recoveredLocalProjects.some(rp => rp && rp.id === p.id)) {
+              if (!p || !p.id || String(p.id).startsWith('sys_account_')) return;
+              const pNorm = normalizeTitle(p.title);
+              if (!pNorm) return;
+
+              // Si ya está en la Nube con el mismo título o id, no duplicar local
+              const alreadyInCloud = cloudList.some(cp => cp && (cp.id === p.id || normalizeTitle(cp.title) === pNorm));
+              if (alreadyInCloud) return;
+
+              // Si ya existe este proyecto en la lista local, conservar solo el más reciente
+              const existingIdx = recoveredLocalProjects.findIndex(rp => normalizeTitle(rp.title) === pNorm);
+              if (existingIdx !== -1) {
+                const existingDate = new Date(recoveredLocalProjects[existingIdx].updated_at || 0).getTime();
+                const newDate = new Date(p.updated_at || 0).getTime();
+                if (newDate > existingDate) {
+                  recoveredLocalProjects[existingIdx] = {
+                    id: p.id,
+                    title: p.title ? p.title.replace(/\s*\(Borrador Activo\)$/i, '').trim() : 'Proyecto Local',
+                    updated_at: p.updated_at || new Date().toISOString(),
+                    project_data: p.project_data || null,
+                    isCloud: false,
+                    isLocalRecovered: true
+                  };
+                }
+              } else {
                 recoveredLocalProjects.push({
                   id: p.id,
-                  title: p.title ? `${p.title}` : 'Proyecto Local',
+                  title: p.title ? p.title.replace(/\s*\(Borrador Activo\)$/i, '').trim() : 'Proyecto Local',
                   updated_at: p.updated_at || new Date().toISOString(),
                   project_data: p.project_data || null,
                   isCloud: false,
@@ -608,11 +649,14 @@ export function AuthProvider({ children }) {
         if (parsedCurrent && (parsedCurrent.P || parsedCurrent.T)) {
           const activeProjId = 'proj_active_draft';
           const draftTitle = parsedCurrent.P?.proyecto ? `${parsedCurrent.P.proyecto}` : '';
-          const draftAlreadyInCloud = cloudList.some(cp => cp && (cp.id === activeProjId || (draftTitle && cp.title && cp.title.trim().toLowerCase() === draftTitle.trim().toLowerCase())));
-          if (!draftAlreadyInCloud && !recoveredLocalProjects.some(rp => rp && rp.id === activeProjId)) {
+          const pNorm = normalizeTitle(draftTitle);
+          const draftAlreadyInCloud = pNorm && cloudList.some(cp => cp && (cp.id === activeProjId || normalizeTitle(cp.title) === pNorm));
+          const draftAlreadyInLocal = pNorm && recoveredLocalProjects.some(rp => rp && normalizeTitle(rp.title) === pNorm);
+
+          if (!draftAlreadyInCloud && !draftAlreadyInLocal) {
             recoveredLocalProjects.unshift({
               id: activeProjId,
-              title: draftTitle ? `${draftTitle} (Borrador Activo)` : 'Borrador de Trabajo previo',
+              title: draftTitle ? `${draftTitle}` : 'Borrador de Trabajo previo',
               updated_at: parsedCurrent.timestamp || new Date().toISOString(),
               project_data: parsedCurrent,
               isCloud: false,
@@ -905,6 +949,18 @@ export function AuthProvider({ children }) {
         }
       }
 
+      // Asegurar que project_data NUNCA sea null ni undefined (para cumplir restricción not-null en Postgres)
+      let validPayload = projectDataPayload;
+      if (!validPayload || typeof validPayload !== 'object') {
+        try {
+          const raw = localStorage.getItem('AMC_current_project_state');
+          if (raw) validPayload = JSON.parse(raw);
+        } catch (e) {}
+      }
+      if (!validPayload || typeof validPayload !== 'object') {
+        validPayload = { title, created_at: new Date().toISOString(), version: '3.0' };
+      }
+
       try {
         const { data, error } = await supabase
           .from('projects')
@@ -913,23 +969,21 @@ export function AuthProvider({ children }) {
             user_id: realUserId,
             title,
             updated_at: timestamp,
-            project_data: projectDataPayload
+            project_data: validPayload
           })
           .select();
 
         if (error) {
           console.error('Error Supabase upsert:', error);
-          saveLocalProject(realUserId, targetProjId, title, timestamp, projectDataPayload);
-          throw new Error('Error al sincronizar con Supabase: ' + error.message);
+          throw new Error('Error al sincronizar con Supabase: ' + (error.message || JSON.stringify(error)));
         }
 
         if (data && data.length > 0) {
-          saveLocalProject(realUserId, targetProjId, title, timestamp, projectDataPayload);
+          saveLocalProject(realUserId, targetProjId, title, timestamp, validPayload);
           await fetchUserProjects(realUserId, activeSession);
           return { ...data[0], isCloud: true };
         }
       } catch (err) {
-        saveLocalProject(realUserId, targetProjId, title, timestamp, projectDataPayload);
         throw err;
       }
     }
@@ -1046,6 +1100,52 @@ export function AuthProvider({ children }) {
     await fetchUserProjects(effectiveUser.id, session);
   };
 
+  const cleanLocalDuplicates = () => {
+    const normalizeTitle = (t) => {
+      return String(t || '')
+        .replace(/\s*\(Borrador Activo\)$/i, '')
+        .replace(/\s*\(Borrador de Trabajo previo\)$/i, '')
+        .trim()
+        .toLowerCase();
+    };
+
+    const localKeys = [
+      `amcaudales_projects_${user?.id || 'usr_guest'}`,
+      'amcaudales_projects_usr_alaynmendoza',
+      'amcaudales_projects_usr_guest',
+      'amcaudales_projects_usr_active',
+      'amcaudales_projects_usr_super_admin'
+    ];
+
+    localKeys.forEach(k => {
+      try {
+        const raw = localStorage.getItem(k);
+        if (raw) {
+          const list = JSON.parse(raw);
+          if (Array.isArray(list)) {
+            const uniqueMap = new Map();
+            list.forEach(p => {
+              if (p && p.title) {
+                const norm = normalizeTitle(p.title);
+                if (!uniqueMap.has(norm)) {
+                  uniqueMap.set(norm, p);
+                } else {
+                  const prev = uniqueMap.get(norm);
+                  if (new Date(p.updated_at || 0) > new Date(prev.updated_at || 0)) {
+                    uniqueMap.set(norm, p);
+                  }
+                }
+              }
+            });
+            localStorage.setItem(k, JSON.stringify(Array.from(uniqueMap.values())));
+          }
+        }
+      } catch (e) {}
+    });
+
+    fetchUserProjects(user?.id, session);
+  };
+
   const auditCloudConnection = async () => {
     const report = {
       isConfigured: isCloudConfigured,
@@ -1120,6 +1220,7 @@ export function AuthProvider({ children }) {
         deleteProjectFromCloud,
         auditCloudConnection,
         refreshProjects,
+        cleanLocalDuplicates,
         isCloudConfigured
       }}
     >

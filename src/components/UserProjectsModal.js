@@ -15,7 +15,8 @@ export default function UserProjectsModal({ isOpen, onClose, onLoadProject, onSa
     userPlan,
     isCloudConfigured,
     auditCloudConnection,
-    refreshProjects
+    refreshProjects,
+    cleanLocalDuplicates
   } = useAuth();
 
   const [newProjectTitle, setNewProjectTitle] = useState('Nuevo Proyecto AMC');
@@ -205,9 +206,10 @@ export default function UserProjectsModal({ isOpen, onClose, onLoadProject, onSa
     if (locals.length === 0) return;
 
     setLoading(true);
-    showNotification(`Sincronizando ${locals.length} proyectos locales a la Nube...`, 'info', 0);
+    showNotification(`Sincronizando ${locals.length} proyecto(s) a la Nube...`, 'info', 0);
 
     let successCount = 0;
+    let lastErrMsg = '';
     for (const p of locals) {
       try {
         const cleanTitle = (p.title || 'Proyecto AMC').replace(/\s*\(Borrador Activo\)$/i, '').trim();
@@ -218,18 +220,22 @@ export default function UserProjectsModal({ isOpen, onClose, onLoadProject, onSa
         await executeSave(cleanTitle, false, payload);
         successCount++;
       } catch (err) {
+        lastErrMsg = err.message || String(err);
         console.warn('Error subiendo proyecto local:', p.title, err);
       }
     }
 
     setLoading(false);
     if (successCount > 0) {
-      showNotification(`✅ ¡${successCount} proyectos subidos a la Nube con éxito! Ahora están disponibles en ambos PCs.`, 'success', 5000);
+      if (typeof cleanLocalDuplicates === 'function') {
+        cleanLocalDuplicates();
+      }
+      showNotification(`✅ ¡${successCount} proyecto(s) subido(s) a la Nube con éxito! Ahora están disponibles en ambos computadores.`, 'success', 5000);
       if (typeof refreshProjects === 'function') {
         await refreshProjects();
       }
     } else {
-      showNotification('No se pudieron sincronizar los proyectos a la nube.', 'error', 4000);
+      showNotification(`Error al subir a la Nube: ${lastErrMsg || 'Verifique su sesión de Google.'}`, 'error', 6000);
     }
   };
 
@@ -634,6 +640,31 @@ export default function UserProjectsModal({ isOpen, onClose, onLoadProject, onSa
               </span>
             </h4>
             <div style={{ display: 'flex', gap: '6px' }}>
+              <button
+                onClick={() => {
+                  if (typeof cleanLocalDuplicates === 'function') {
+                    cleanLocalDuplicates();
+                    showNotification('Duplicados locales limpiados correctamente.', 'info', 2500);
+                  }
+                }}
+                disabled={loading}
+                style={{
+                  background: 'rgba(245, 158, 11, 0.15)',
+                  border: '1px solid rgba(245, 158, 11, 0.4)',
+                  color: '#fbbf24',
+                  borderRadius: '6px',
+                  padding: '5px 11px',
+                  fontSize: '0.75rem',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}
+                title="Limpiar borradores repetidos y duplicados en este computador"
+              >
+                🧹 Limpiar Duplicados
+              </button>
               <button
                 onClick={async () => {
                   setLoading(true);
