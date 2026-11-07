@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { saveFileWithDialog } from '../utils/fileSaver';
 import AuthModal from './AuthModal';
@@ -12,7 +12,8 @@ export default function UserProjectsModal({ isOpen, onClose, onLoadProject, onSa
     user,
     userPlan,
     isCloudConfigured,
-    auditCloudConnection
+    auditCloudConnection,
+    refreshProjects
   } = useAuth();
 
   const [newProjectTitle, setNewProjectTitle] = useState('Nuevo Proyecto AMC');
@@ -31,6 +32,12 @@ export default function UserProjectsModal({ isOpen, onClose, onLoadProject, onSa
   const [overwriteConfirm, setOverwriteConfirm] = useState(null); // { existingProject, title }
   const [auditResult, setAuditResult] = useState(null);
   const fileInputRef = useRef(null);
+
+  useEffect(() => {
+    if (isOpen && user && !user.isGuest && typeof refreshProjects === 'function') {
+      refreshProjects().catch(err => console.warn('Auto-refresh proyectos:', err));
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -525,6 +532,39 @@ export default function UserProjectsModal({ isOpen, onClose, onLoadProject, onSa
               </span>
             </h4>
             <div style={{ display: 'flex', gap: '6px' }}>
+              <button
+                onClick={async () => {
+                  setLoading(true);
+                  showNotification('Sincronizando con Supabase Cloud...', 'info', 0);
+                  try {
+                    if (typeof refreshProjects === 'function') {
+                      await refreshProjects();
+                      showNotification('¡Lista de proyectos sincronizada con éxito!', 'success', 2500);
+                    }
+                  } catch (e) {
+                    showNotification('Error al actualizar: ' + e.message, 'error', 4000);
+                  } finally {
+                    setLoading(false);
+                  }
+                }}
+                disabled={loading}
+                style={{
+                  background: 'rgba(56, 189, 248, 0.15)',
+                  border: '1px solid rgba(56, 189, 248, 0.4)',
+                  color: '#38bdf8',
+                  borderRadius: '6px',
+                  padding: '5px 11px',
+                  fontSize: '0.75rem',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}
+                title="Refrescar y sincronizar proyectos con la Nube de Supabase"
+              >
+                🔄 Actualizar Nube
+              </button>
               <button
                 onClick={handleRunAudit}
                 style={auditBtnStyle}

@@ -3,6 +3,34 @@ import { supabase, isCloudConfigured } from '../services/supabaseClient';
 
 const AuthContext = createContext();
 
+export const isValidUUID = (str) => {
+  if (!str || typeof str !== 'string') return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(str.trim());
+};
+
+export const generateUUID = () => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    try {
+      return crypto.randomUUID();
+    } catch (e) {}
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+};
+
+export const stringToUUID = (str) => {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) - hash) + str.charCodeAt(i);
+    hash |= 0;
+  }
+  const hex = (Math.abs(hash).toString(16) + '00000000000000000000000000000000').slice(0, 32);
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+};
+
 /**
  * Helper universal para construir el objeto de usuario estandarizado
  * a partir de los datos retornados por Supabase Auth (Google OAuth o Correo/Password).
@@ -85,8 +113,9 @@ export function AuthProvider({ children }) {
     if (!isCloudConfigured || !supabase || !userData || !userData.email) return;
     try {
       const cleanSlug = userData.email.replace(/[^a-z0-9]/g, '_');
-      const recordId = `sys_account_${cleanSlug}`;
+      const recordId = stringToUUID(`sys_account_${cleanSlug}`);
       const hashedPass = plainPassword ? await hashPassword(plainPassword) : null;
+      const userUUID = isValidUUID(userData.id) ? userData.id : stringToUUID(`usr_${cleanSlug}`);
 
       const accountPayload = {
         id: userData.id || `usr_${cleanSlug}`,
@@ -104,7 +133,7 @@ export function AuthProvider({ children }) {
         .from('projects')
         .upsert({
           id: recordId,
-          user_id: userData.id || 'usr_sys_registry',
+          user_id: userUUID,
           title: `AUTH_ACCOUNT: ${userData.email}`,
           updated_at: new Date().toISOString(),
           project_data: accountPayload
@@ -503,30 +532,30 @@ export function AuthProvider({ children }) {
 
     if (!isGuest && isCloudConfigured && supabase) {
       try {
+        const candidateIds = [userId, activeSession?.user?.id, user?.id];
         const userEmail = activeSession?.user?.email || user?.email || '';
-        const cleanSlug = userEmail ? userEmail.replace(/[^a-z0-9]/gi, '_') : '';
-        const possibleIds = [userId];
-        if (cleanSlug) {
-          possibleIds.push(`usr_${cleanSlug}`);
-          possibleIds.push(userEmail);
-          possibleIds.push(userEmail.toLowerCase());
-          possibleIds.push('usr_alaynmendoza');
-          possibleIds.push('usr_super_admin');
-          possibleIds.push('usr_active');
+        if (userEmail) {
+          candidateIds.push(stringToUUID(userEmail));
+          candidateIds.push(stringToUUID(`usr_${userEmail.replace(/[^a-z0-9]/g, '_')}`));
         }
 
-        const { data, error } = await supabase
-          .from('projects')
-          .select('id, title, updated_at, created_at, user_id')
-          .in('user_id', possibleIds)
-          .order('updated_at', { ascending: false });
+        const validUUIDs = candidateIds.filter(id => isValidUUID(id));
+        const uniqueUUIDs = Array.from(new Set(validUUIDs));
 
-        if (!error && Array.isArray(data)) {
-          cloudList = data
-            .filter(p => p && !String(p.id).startsWith('sys_account_') && p.user_id !== 'sys_auth_registry')
-            .map(p => ({ ...p, isCloud: true }));
-        } else if (error) {
-          console.warn('Aviso carga proyectos Supabase:', error.message);
+        if (uniqueUUIDs.length > 0) {
+          const { data, error } = await supabase
+            .from('projects')
+            .select('id, title, updated_at, created_at, user_id')
+            .in('user_id', uniqueUUIDs)
+            .order('updated_at', { ascending: false });
+
+          if (!error && Array.isArray(data)) {
+            cloudList = data
+              .filter(p => p && p.id && !String(p.title || '').startsWith('AUTH_ACCOUNT:'))
+              .map(p => ({ ...p, isCloud: true }));
+          } else if (error) {
+            console.warn('Aviso carga proyectos Supabase:', error.message);
+          }
         }
       } catch (err) {
         console.warn('Error al cargar proyectos de la nube:', err.message);
@@ -828,19 +857,23 @@ export function AuthProvider({ children }) {
       } catch (e) {}
     }
 
-    const realUserId = activeSession?.user?.id || effectiveUser.id;
+    const realUserId = (activeSession?.user?.id && isValidUUID(activeSession.user.id))
+      ? activeSession.user.id
+      : (isValidUUID(effectiveUser.id)
+          ? effectiveUser.id
+          : (effectiveUser.email ? stringToUUID(effectiveUser.email) : generateUUID()));
     const canSaveToSupabase = Boolean(isCloudConfigured && supabase);
 
     if (canSaveToSupabase) {
       const cloudOnlyList = cloudProjects.filter(p => p.isCloud);
-      const isUpdatingCurrentCloudProj = existingProjectId && cloudOnlyList.some(p => p.id === existingProjectId);
-      let targetProjId = existingProjectId || 'proj_' + Date.now();
+      const isUpdatingCurrentCloudProj = existingProjectId && isValidUUID(existingProjectId) && cloudOnlyList.some(p => p.id === existingProjectId);
+      let targetProjId = (existingProjectId && isValidUUID(existingProjectId)) ? existingProjectId : generateUUID();
 
       if (!isUpdatingCurrentCloudProj) {
         if (userPlan === 'free' && !effectiveUser.isAdmin) {
           if (cloudOnlyList.length >= 1) {
             if (forceOverwrite) {
-              targetProjId = cloudOnlyList[0].id;
+              targetProjId = (cloudOnlyList[0].id && isValidUUID(cloudOnlyList[0].id)) ? cloudOnlyList[0].id : generateUUID();
             } else {
               return {
                 limitReached: true,
@@ -897,7 +930,7 @@ export function AuthProvider({ children }) {
       if (rawCurrent) return parsePayload(rawCurrent);
     }
 
-    if (!isGuest && isCloudConfigured && supabase) {
+    if (!isGuest && isCloudConfigured && supabase && isValidUUID(projectId)) {
       try {
         const { data, error } = await supabase
           .from('projects')
@@ -950,7 +983,7 @@ export function AuthProvider({ children }) {
     const effectiveUser = user || { id: 'usr_guest' };
     const isGuest = Boolean(effectiveUser.isGuest || effectiveUser.id === 'usr_guest');
 
-    if (!isGuest && isCloudConfigured && supabase) {
+    if (!isGuest && isCloudConfigured && supabase && isValidUUID(projectId)) {
       try {
         const { error } = await supabase
           .from('projects')
@@ -987,6 +1020,11 @@ export function AuthProvider({ children }) {
 
     await fetchUserProjects(effectiveUser.id, session);
     return true;
+  };
+
+  const refreshProjects = async () => {
+    const effectiveUser = user || { id: 'usr_guest' };
+    await fetchUserProjects(effectiveUser.id, session);
   };
 
   const auditCloudConnection = async () => {
@@ -1062,6 +1100,7 @@ export function AuthProvider({ children }) {
         loadProjectFromCloud,
         deleteProjectFromCloud,
         auditCloudConnection,
+        refreshProjects,
         isCloudConfigured
       }}
     >
