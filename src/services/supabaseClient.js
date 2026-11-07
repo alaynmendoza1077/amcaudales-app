@@ -16,8 +16,7 @@ export const supabase = isCloudConfigured
         flowType: 'pkce',
         persistSession: true,
         autoRefreshToken: true,
-        detectSessionInUrl: true,
-        storage: window.localStorage
+        detectSessionInUrl: true
       }
     })
   : null;

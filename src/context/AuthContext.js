@@ -233,13 +233,48 @@ export function AuthProvider({ children }) {
     const initializeAuth = async () => {
       try {
         if (isCloudConfigured && supabase) {
-          // Si es retorno de OAuth, detectSessionInUrl de Supabase está intercambiando el código en paralelo.
-          // Mantenemos loading en true y sondeamos getSession() cada 300ms
-          if (isOAuthReturn) {
-            console.log('[OAuth Return] Procesando retorno de autenticación Google...');
-            let attempts = 0;
-            const maxAttempts = 15; // 15 * 300ms = 4.5 segundos máximo
+          // A: Si llegaron tokens en el hash (#access_token=...&refresh_token=...)
+          if (accessToken && refreshToken) {
+            try {
+              const { data: setRes, error: setErr } = await supabase.auth.setSession({
+                access_token: accessToken,
+                refresh_token: refreshToken
+              });
+              if (!setErr && setRes?.session?.user) {
+                await applyUserSession(setRes.session);
+                return;
+              }
+            } catch (e) {
+              console.warn('[OAuth Return] Error setSession hash:', e);
+            }
+          }
 
+          // B: Si la URL trae código de autorización (?code=...)
+          if (authCode) {
+            console.log('[OAuth Return] Intercambiando código de autorización...');
+            try {
+              const { data: exchData, error: exchError } = await supabase.auth.exchangeCodeForSession(authCode);
+              if (!exchError && exchData?.session?.user) {
+                console.log('[OAuth Return] ¡Intercambio de código exitoso!');
+                await applyUserSession(exchData.session);
+                return;
+              }
+            } catch (e) {
+              console.warn('[OAuth Return] exchangeCodeForSession info:', e.message);
+            }
+          }
+
+          // C: Consultar getSession() activo (o procesado en paralelo por detectSessionInUrl)
+          const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+          if (!sessionError && sessionData?.session?.user && isMounted) {
+            await applyUserSession(sessionData.session);
+            return;
+          }
+
+          // D: Si es un retorno de OAuth pero aún se está procesando, dar un breve período de espera
+          if (isOAuthReturn) {
+            let attempts = 0;
+            const maxAttempts = 10;
             const checkSessionInterval = setInterval(async () => {
               if (!isMounted || sessionApplied) {
                 clearInterval(checkSessionInterval);
@@ -250,45 +285,17 @@ export function AuthProvider({ children }) {
                 const { data } = await supabase.auth.getSession();
                 if (data?.session?.user) {
                   clearInterval(checkSessionInterval);
-                  console.log('[OAuth Return] ¡Sesión de Google detectada exitosamente!');
                   await applyUserSession(data.session);
                   return;
                 }
-              } catch (e) {
-                console.warn('[OAuth Return] Error verificando sesión:', e);
-              }
+              } catch (e) {}
 
-              // Si ya se superaron los intentos y aún no hay sesión por auto-detección
               if (attempts >= maxAttempts) {
                 clearInterval(checkSessionInterval);
-                // Si llegaron tokens directos en hash (fallback)
-                if (accessToken && refreshToken) {
-                  try {
-                    const { data: setRes } = await supabase.auth.setSession({
-                      access_token: accessToken,
-                      refresh_token: refreshToken
-                    });
-                    if (setRes?.session?.user) {
-                      await applyUserSession(setRes.session);
-                      return;
-                    }
-                  } catch (e) {
-                    console.warn('[OAuth Return] Falló setSession fallback:', e);
-                  }
-                }
-
-                // Si todo falló, revisar storage
                 fallbackToStorage();
               }
             }, 300);
 
-            return;
-          }
-
-          // Flujo estándar (No OAuth): Consultar sesión activa de Supabase
-          const { data } = await supabase.auth.getSession();
-          if (data?.session?.user && isMounted) {
-            await applyUserSession(data.session);
             return;
           }
         }
@@ -421,11 +428,12 @@ export function AuthProvider({ children }) {
     }
     try {
       localStorage.removeItem('amcaudales_user_session');
-      const currentOrigin = window.location.origin.replace(/\/+$/, '');
+      const baseOrigin = window.location.origin.replace(/\/+$/, '');
+      const redirectTarget = `${baseOrigin}/`;
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: currentOrigin,
+          redirectTo: redirectTarget,
           queryParams: {
             access_type: 'offline',
             prompt: 'select_account'
