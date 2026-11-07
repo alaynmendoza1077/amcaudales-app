@@ -12,8 +12,8 @@ export const buildAuthUser = (sbUser) => {
   const meta = sbUser.user_metadata || {};
   const idData = sbUser.identities?.[0]?.identity_data || {};
 
-  // Extraer nombre real desde Google OAuth o registro
-  let realFullName =
+  // Extraer nombre real universal desde Google OAuth o registro con correo
+  const realFullName =
     meta.full_name ||
     meta.name ||
     idData.full_name ||
@@ -22,13 +22,7 @@ export const buildAuthUser = (sbUser) => {
     sbUser.email?.split('@')[0] ||
     'Usuario';
 
-  // Si es el correo oficial del creador Alayn Mendoza, personalizar de forma explícita
-  const isAlayn = Boolean(sbUser.email && sbUser.email.toLowerCase().includes('alaynmendoza'));
-  if (isAlayn) {
-    realFullName = 'Ing. Alayn Mendoza';
-  }
-
-  // Extraer foto de perfil de Google si existe
+  // Extraer foto de perfil de Google OAuth si existe
   const avatarUrl =
     meta.avatar_url ||
     meta.picture ||
@@ -38,20 +32,21 @@ export const buildAuthUser = (sbUser) => {
     null;
 
   const plan = meta.plan || 'pro';
+  const company = meta.company || idData.company || 'Consultoría Hidráulica';
 
   return {
     ...sbUser,
-    id: sbUser.id || (isAlayn ? 'usr_alaynmendoza' : `usr_${sbUser.email?.split('@')[0]}`),
+    id: sbUser.id || `usr_${sbUser.email?.replace(/[^a-z0-9]/gi, '_')}`,
     email: sbUser.email,
     isGuest: false,
-    isAdmin: Boolean(meta.isAdmin || plan === 'pro' || isAlayn),
+    isAdmin: Boolean(meta.isAdmin || plan === 'pro'),
     avatarUrl,
     user_metadata: {
       ...meta,
       full_name: realFullName,
       name: realFullName,
       avatar_url: avatarUrl,
-      company: isAlayn ? 'Ingeniería Hidráulica AMC' : (meta.company || 'Ingeniería AMC'),
+      company: company,
       plan: 'pro'
     }
   };
@@ -120,6 +115,7 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     let isMounted = true;
+    let sessionApplied = false;
 
     // Detectar si la URL actual proviene de un retorno de OAuth (Google / Magic Link)
     const urlHash = window.location.hash || '';
@@ -129,6 +125,7 @@ export function AuthProvider({ children }) {
 
     const authCode = urlParams.get('code');
     const accessToken = hashParams.get('access_token');
+    const refreshToken = hashParams.get('refresh_token');
     const oauthError = urlParams.get('error') || hashParams.get('error');
     const oauthErrorDesc = urlParams.get('error_description') || hashParams.get('error_description');
     const isOAuthReturn = Boolean(authCode || accessToken);
@@ -143,7 +140,8 @@ export function AuthProvider({ children }) {
 
     // Helper universal para aplicar y persistir la sesión autenticada
     const applyUserSession = async (sbSession) => {
-      if (!isMounted || !sbSession?.user) return;
+      if (!isMounted || !sbSession?.user || sessionApplied) return;
+      sessionApplied = true;
       const authUserObj = buildAuthUser(sbSession.user);
 
       setUser(authUserObj);
@@ -156,9 +154,11 @@ export function AuthProvider({ children }) {
       if (isMounted) setLoading(false);
 
       // Limpiar parámetros de la URL sin recargar
-      if ((window.location.search.includes('code=') || window.location.hash.includes('access_token')) && window.history && window.history.replaceState) {
-        window.history.replaceState(null, '', window.location.pathname);
-      }
+      try {
+        if ((window.location.search.includes('code=') || window.location.hash.includes('access_token')) && window.history && window.history.replaceState) {
+          window.history.replaceState(null, '', window.location.pathname);
+        }
+      } catch (e) {}
 
       // Sincronización en segundo plano sin congelar la UI
       syncAccountToCloud(authUserObj, null).catch(err => console.warn('Sync cloud account:', err));
@@ -166,7 +166,7 @@ export function AuthProvider({ children }) {
     };
 
     const fallbackToStorage = () => {
-      if (!isMounted) return;
+      if (!isMounted || sessionApplied) return;
       const savedAuth = localStorage.getItem('amcaudales_auth_user');
       if (savedAuth) {
         try {
@@ -234,47 +234,53 @@ export function AuthProvider({ children }) {
       try {
         if (isCloudConfigured && supabase) {
           // Si es retorno de OAuth, detectSessionInUrl de Supabase está intercambiando el código en paralelo.
-          // Mantenemos loading en true y sondeamos getSession() cada 250ms
+          // Mantenemos loading en true y sondeamos getSession() cada 300ms
           if (isOAuthReturn) {
             console.log('[OAuth Return] Procesando retorno de autenticación Google...');
             let attempts = 0;
-            const maxAttempts = 14; // 14 * 250ms = 3.5 segundos máximo
+            const maxAttempts = 15; // 15 * 300ms = 4.5 segundos máximo
 
             const checkSessionInterval = setInterval(async () => {
-              if (!isMounted) {
+              if (!isMounted || sessionApplied) {
                 clearInterval(checkSessionInterval);
                 return;
               }
               attempts++;
-              const { data } = await supabase.auth.getSession();
-              if (data?.session?.user) {
-                clearInterval(checkSessionInterval);
-                console.log('[OAuth Return] ¡Sesión de Google detectada exitosamente!');
-                await applyUserSession(data.session);
-                return;
+              try {
+                const { data } = await supabase.auth.getSession();
+                if (data?.session?.user) {
+                  clearInterval(checkSessionInterval);
+                  console.log('[OAuth Return] ¡Sesión de Google detectada exitosamente!');
+                  await applyUserSession(data.session);
+                  return;
+                }
+              } catch (e) {
+                console.warn('[OAuth Return] Error verificando sesión:', e);
               }
 
               // Si ya se superaron los intentos y aún no hay sesión por auto-detección
               if (attempts >= maxAttempts) {
                 clearInterval(checkSessionInterval);
-                console.warn('[OAuth Return] Intentando intercambio de código de respaldo...');
-                if (authCode) {
+                // Si llegaron tokens directos en hash (fallback)
+                if (accessToken && refreshToken) {
                   try {
-                    const { data: exchData, error: exchError } = await supabase.auth.exchangeCodeForSession(authCode);
-                    if (!exchError && exchData?.session?.user) {
-                      console.log('[OAuth Return] ¡Intercambio directo de código exitoso!');
-                      await applyUserSession(exchData.session);
+                    const { data: setRes } = await supabase.auth.setSession({
+                      access_token: accessToken,
+                      refresh_token: refreshToken
+                    });
+                    if (setRes?.session?.user) {
+                      await applyUserSession(setRes.session);
                       return;
                     }
                   } catch (e) {
-                    console.warn('[OAuth Return] Falló intercambio de código respaldo:', e.message);
+                    console.warn('[OAuth Return] Falló setSession fallback:', e);
                   }
                 }
 
                 // Si todo falló, revisar storage
                 fallbackToStorage();
               }
-            }, 250);
+            }, 300);
 
             return;
           }
@@ -415,20 +421,16 @@ export function AuthProvider({ children }) {
     }
     try {
       localStorage.removeItem('amcaudales_user_session');
-      // En amcaudales.com, omitir redirectTo para que Supabase use su Site URL nativo https://amcaudales.com
-      const isCustomDomain = window.location.hostname.includes('amcaudales.com');
-      const options = {
-        queryParams: {
-          access_type: 'offline',
-          prompt: 'select_account'
-        }
-      };
-      if (!isCustomDomain) {
-        options.redirectTo = window.location.origin.replace(/\/+$/, '');
-      }
+      const currentOrigin = window.location.origin.replace(/\/+$/, '');
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options
+        options: {
+          redirectTo: currentOrigin,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'select_account'
+          }
+        }
       });
       if (error) {
         throw error;

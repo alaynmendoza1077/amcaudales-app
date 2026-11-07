@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 
 export default function LandingPage({ onStartTrial, onOpenExpress, onOpenLogin, onOpenProModal }) {
-  const { user, userPlan, loginAsAlayn } = useAuth();
+  const { user, userPlan } = useAuth();
   const [selectedPlanTab, setSelectedPlanTab] = useState('monthly'); // 'monthly' | 'per_project'
 
   return (
@@ -18,7 +18,6 @@ export default function LandingPage({ onStartTrial, onOpenExpress, onOpenLogin, 
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
           <button onClick={onOpenExpress} style={navExpressBtnStyle}>🧮 Calc Express</button>
-          <button onClick={() => loginAsAlayn?.()} style={navAlaynBtnStyle} title="Acceso directo verificado para Ing. Alayn Mendoza con Plan Pro">⭐ Soy Alayn Mendoza</button>
           <button onClick={onOpenLogin} style={navLoginBtnStyle}>🔑 Iniciar Sesión</button>
           <button onClick={onStartTrial} style={navRegisterBtnStyle}>⚡ Empezar Gratis</button>
         </div>
@@ -658,18 +657,6 @@ const navExpressBtnStyle = {
   fontSize: '0.82rem',
   fontWeight: '600',
   cursor: 'pointer'
-};
-
-const navAlaynBtnStyle = {
-  background: 'linear-gradient(135deg, rgba(56, 189, 248, 0.25) 0%, rgba(59, 130, 246, 0.35) 100%)',
-  border: '1px solid #38bdf8',
-  color: '#38bdf8',
-  padding: '8px 16px',
-  borderRadius: '8px',
-  fontSize: '0.82rem',
-  fontWeight: '800',
-  cursor: 'pointer',
-  boxShadow: '0 2px 10px rgba(56, 189, 248, 0.3)'
 };
 
 const navLoginBtnStyle = {

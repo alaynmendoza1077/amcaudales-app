@@ -13,7 +13,7 @@ export const isCloudConfigured = Boolean(supabaseUrl && supabaseAnonKey);
 export const supabase = isCloudConfigured
   ? createClient(supabaseUrl, supabaseAnonKey, {
       auth: {
-        flowType: 'implicit',
+        flowType: 'pkce',
         persistSession: true,
         autoRefreshToken: true,
         detectSessionInUrl: true,

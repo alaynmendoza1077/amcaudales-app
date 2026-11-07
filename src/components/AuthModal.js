@@ -6,7 +6,6 @@ export default function AuthModal({ isOpen, onClose, initialTab = 'login', onAut
     login,
     register,
     loginAsAdmin,
-    loginAsAlayn,
     loginWithGoogle,
     resetPassword,
     loginAsGuest,
@@ -185,36 +184,6 @@ export default function AuthModal({ isOpen, onClose, initialTab = 'login', onAut
                 <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
               </svg>
               <span>{tab === 'register' ? 'Registrarse con Google' : 'Continuar con Google'}</span>
-            </button>
-
-            {/* Acceso Directo de Creador para Alayn Mendoza */}
-            <button
-              type="button"
-              onClick={() => {
-                loginAsAlayn();
-                onClose();
-              }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px',
-                width: '100%',
-                padding: '11px',
-                marginTop: '10px',
-                background: 'linear-gradient(135deg, rgba(56, 189, 248, 0.15) 0%, rgba(59, 130, 246, 0.25) 100%)',
-                border: '1px solid #38bdf8',
-                borderRadius: '10px',
-                color: '#38bdf8',
-                fontWeight: '700',
-                fontSize: '0.88rem',
-                cursor: 'pointer',
-                boxShadow: '0 4px 14px rgba(56, 189, 248, 0.25)',
-                transition: 'all 0.2s ease'
-              }}
-              title="Acceso 1-clic verificado para Ing. Alayn Mendoza con Plan Pro activo y sincronización a la nube"
-            >
-              ⭐ Acceso Directo: Ing. Alayn Mendoza (Plan Pro)
             </button>
 
             <div style={separatorStyle}>
