@@ -316,14 +316,6 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
-    return () => {
-      isMounted = false;
-      if (subscription?.unsubscribe) {
-        subscription.unsubscribe();
-      }
-    };
-  }, []);
-
   const upgradeToPro = async () => {
     setUserPlan('pro');
     localStorage.setItem('amcaudales_user_plan', 'pro');
