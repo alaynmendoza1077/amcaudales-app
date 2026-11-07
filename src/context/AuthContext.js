@@ -503,10 +503,19 @@ export function AuthProvider({ children }) {
 
     if (!isGuest && isCloudConfigured && supabase) {
       try {
+        const userEmail = activeSession?.user?.email || user?.email || '';
+        const cleanSlug = userEmail ? userEmail.replace(/[^a-z0-9]/gi, '_') : '';
+        const possibleIds = [userId];
+        if (cleanSlug) {
+          possibleIds.push(`usr_${cleanSlug}`);
+          possibleIds.push(userEmail);
+          possibleIds.push(userEmail.toLowerCase());
+        }
+
         const { data, error } = await supabase
           .from('projects')
-          .select('id, title, updated_at, created_at')
-          .eq('user_id', userId)
+          .select('id, title, updated_at, created_at, user_id')
+          .in('user_id', possibleIds)
           .order('updated_at', { ascending: false });
 
         if (!error && Array.isArray(data)) {
