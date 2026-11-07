@@ -670,6 +670,63 @@ export function AuthProvider({ children }) {
 
     const combinedList = [...cloudList, ...recoveredLocalProjects].filter(Boolean);
     setCloudProjects(combinedList);
+
+    // Auto-sincronización transparente en segundo plano a Supabase Cloud:
+    // Si el usuario está autenticado con Google y tiene proyectos locales con datos,
+    // los subimos de forma automática para que se sincronicen de inmediato en todos los computadores
+    if (activeSession?.user?.id && !isGuest && recoveredLocalProjects.length > 0 && isCloudConfigured && supabase) {
+      setTimeout(async () => {
+        let uploadedAny = false;
+        for (const lp of recoveredLocalProjects) {
+          const pNorm = normalizeTitle(lp.title);
+          const inCloud = cloudList.some(cp => cp && (cp.id === lp.id || normalizeTitle(cp.title) === pNorm));
+          if (!inCloud) {
+            try {
+              let payload = lp.project_data;
+              if (!payload) {
+                try {
+                  const raw = localStorage.getItem('AMC_current_project_state');
+                  if (raw) payload = JSON.parse(raw);
+                } catch (e) {}
+              }
+              if (!payload || typeof payload !== 'object') {
+                payload = { title: lp.title, created_at: new Date().toISOString(), version: '3.0' };
+              }
+              const targetId = (isValidUUID(lp.id)) ? lp.id : generateUUID();
+              const cleanTitle = lp.title.replace(/\s*\(Borrador Activo\)$/i, '').trim();
+
+              const { error: upErr } = await supabase.from('projects').upsert({
+                id: targetId,
+                user_id: activeSession.user.id,
+                title: cleanTitle,
+                updated_at: lp.updated_at || new Date().toISOString(),
+                project_data: payload
+              });
+
+              if (!upErr) {
+                uploadedAny = true;
+              }
+            } catch (e) {
+              console.warn('Auto-sync background error:', e);
+            }
+          }
+        }
+
+        if (uploadedAny) {
+          const { data: refreshedData } = await supabase
+            .from('projects')
+            .select('id, title, updated_at, created_at, user_id')
+            .order('updated_at', { ascending: false });
+
+          if (Array.isArray(refreshedData) && refreshedData.length > 0) {
+            const freshCloud = refreshedData
+              .filter(p => p && p.id && !String(p.title || '').startsWith('AUTH_ACCOUNT:'))
+              .map(p => ({ ...p, isCloud: true }));
+            setCloudProjects(freshCloud);
+          }
+        }
+      }, 700);
+    }
   };
 
   /**
