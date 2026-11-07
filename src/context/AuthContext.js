@@ -577,11 +577,13 @@ export function AuthProvider({ children }) {
           const list = JSON.parse(raw);
           if (Array.isArray(list)) {
             list.forEach(p => {
-              if (p && p.id && !String(p.id).startsWith('sys_account_') && !cloudList.some(cp => cp && cp.id === p.id) && !recoveredLocalProjects.some(rp => rp && rp.id === p.id)) {
+              const alreadyInCloud = cloudList.some(cp => cp && (cp.id === p.id || (cp.title && p.title && cp.title.trim().toLowerCase() === p.title.trim().toLowerCase())));
+              if (p && p.id && !String(p.id).startsWith('sys_account_') && !alreadyInCloud && !recoveredLocalProjects.some(rp => rp && rp.id === p.id)) {
                 recoveredLocalProjects.push({
                   id: p.id,
                   title: p.title ? `${p.title}` : 'Proyecto Local',
                   updated_at: p.updated_at || new Date().toISOString(),
+                  project_data: p.project_data || null,
                   isCloud: false,
                   isLocalRecovered: true
                 });
@@ -598,11 +600,14 @@ export function AuthProvider({ children }) {
         const parsedCurrent = JSON.parse(rawCurrent);
         if (parsedCurrent && (parsedCurrent.P || parsedCurrent.T)) {
           const activeProjId = 'proj_active_draft';
-          if (!cloudList.some(cp => cp && cp.id === activeProjId) && !recoveredLocalProjects.some(rp => rp && rp.id === activeProjId)) {
+          const draftTitle = parsedCurrent.P?.proyecto ? `${parsedCurrent.P.proyecto}` : '';
+          const draftAlreadyInCloud = cloudList.some(cp => cp && (cp.id === activeProjId || (draftTitle && cp.title && cp.title.trim().toLowerCase() === draftTitle.trim().toLowerCase())));
+          if (!draftAlreadyInCloud && !recoveredLocalProjects.some(rp => rp && rp.id === activeProjId)) {
             recoveredLocalProjects.unshift({
               id: activeProjId,
-              title: parsedCurrent.P?.proyecto ? `${parsedCurrent.P.proyecto} (Borrador Activo)` : 'Borrador de Trabajo previo',
+              title: draftTitle ? `${draftTitle} (Borrador Activo)` : 'Borrador de Trabajo previo',
               updated_at: parsedCurrent.timestamp || new Date().toISOString(),
+              project_data: parsedCurrent,
               isCloud: false,
               isDraft: true,
               isLocalRecovered: true

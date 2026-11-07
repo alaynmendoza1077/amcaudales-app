@@ -180,7 +180,8 @@ export default function UserProjectsModal({ isOpen, onClose, onLoadProject, onSa
 
   const handleUploadLocalToCloud = async (p) => {
     setLoading(true);
-    showNotification(`Sincronizando "${p.title}" a la Nube...`, 'info', 0);
+    const cleanTitle = (p.title || 'Proyecto AMC').replace(/\s*\(Borrador Activo\)$/i, '').trim();
+    showNotification(`Sincronizando "${cleanTitle}" a la Nube...`, 'info', 0);
     try {
       let payload = null;
       if (p.project_data) {
@@ -188,11 +189,44 @@ export default function UserProjectsModal({ isOpen, onClose, onLoadProject, onSa
       } else {
         payload = await loadProjectFromCloud(p.id);
       }
-      await executeSave(p.title, false, payload);
+      await executeSave(cleanTitle, false, payload);
     } catch (err) {
       showNotification(`Error al subir a la Nube: ${err.message}`, 'error', 5000);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleUploadAllLocalsToCloud = async () => {
+    const locals = safeProjects.filter(p => p && !p.isCloud);
+    if (locals.length === 0) return;
+
+    setLoading(true);
+    showNotification(`Sincronizando ${locals.length} proyectos locales a la Nube...`, 'info', 0);
+
+    let successCount = 0;
+    for (const p of locals) {
+      try {
+        const cleanTitle = (p.title || 'Proyecto AMC').replace(/\s*\(Borrador Activo\)$/i, '').trim();
+        let payload = p.project_data;
+        if (!payload) {
+          payload = await loadProjectFromCloud(p.id);
+        }
+        await executeSave(cleanTitle, false, payload);
+        successCount++;
+      } catch (err) {
+        console.warn('Error subiendo proyecto local:', p.title, err);
+      }
+    }
+
+    setLoading(false);
+    if (successCount > 0) {
+      showNotification(`✅ ¡${successCount} proyectos subidos a la Nube con éxito! Ahora están disponibles en ambos PCs.`, 'success', 5000);
+      if (typeof refreshProjects === 'function') {
+        await refreshProjects();
+      }
+    } else {
+      showNotification('No se pudieron sincronizar los proyectos a la nube.', 'error', 4000);
     }
   };
 
@@ -597,6 +631,49 @@ export default function UserProjectsModal({ isOpen, onClose, onLoadProject, onSa
                   ℹ️ <strong>Sincronización Multi-PC:</strong> Los proyectos con etiqueta <span style={{ color: '#34d399', fontWeight: 'bold' }}>☁️ Nube</span> se sincronizan en todos tus computadores. En tu segundo PC, simplemente inicia sesión con Google (<strong>alaynmendoza@gmail.com</strong>) y aparecerán aquí automáticamente.
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* Banner de Sincronización Rápida cuando hay Proyectos Locales */}
+          {localCount > 0 && !isGuest && (
+            <div style={{
+              margin: '0 0 12px 0',
+              padding: '10px 14px',
+              backgroundColor: 'rgba(245, 158, 11, 0.12)',
+              border: '1px solid rgba(245, 158, 11, 0.45)',
+              borderRadius: '10px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '10px'
+            }}>
+              <div style={{ flex: '1 1 200px' }}>
+                <div style={{ color: '#fbbf24', fontWeight: '700', fontSize: '0.82rem' }}>
+                  💾 Tienes {localCount} {localCount === 1 ? 'proyecto guardado' : 'proyectos guardados'} solo en este computador
+                </div>
+                <div style={{ color: '#cbd5e1', fontSize: '0.74rem', marginTop: '2px' }}>
+                  Para que aparezcan en tu otro PC, súbelos ahora a la Nube con 1 clic.
+                </div>
+              </div>
+              <button
+                onClick={handleUploadAllLocalsToCloud}
+                disabled={loading}
+                style={{
+                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '7px 14px',
+                  fontSize: '0.8rem',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 8px rgba(16, 185, 129, 0.4)',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                ☁️ Subir {localCount === 1 ? 'Proyecto' : 'Todos'} a la Nube
+              </button>
             </div>
           )}
 
