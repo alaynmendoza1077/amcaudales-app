@@ -7,6 +7,7 @@ export default function AuthModal({ isOpen, onClose, initialTab = 'login', onAut
     register,
     loginAsAdmin,
     loginWithGoogle,
+    checkCloudSession,
     resetPassword,
     loginAsGuest,
     isCloudConfigured
@@ -105,10 +106,31 @@ export default function AuthModal({ isOpen, onClose, initialTab = 'login', onAut
     resetMessages();
     setLoading(true);
     try {
-      setSuccessMsg(`Redirigiendo a Google... (Entorno: ${window.location.host})`);
+      setSuccessMsg(`Conectando con Google... (${window.location.host})`);
       await loginWithGoogle();
     } catch (err) {
       setErrorMsg(err.message || 'No fue posible conectar con Google. Por favor intente nuevamente.');
+      setLoading(false);
+    }
+  };
+
+  const handleCheckCloudSession = async () => {
+    resetMessages();
+    setLoading(true);
+    try {
+      const res = await checkCloudSession();
+      if (res.success) {
+        setSuccessMsg(`¡Sesión detectada en la nube! Bienvenido ${res.user?.user_metadata?.full_name || res.user?.email}`);
+        setTimeout(() => {
+          onClose();
+          onAuthSuccess?.();
+        }, 700);
+      } else {
+        setErrorMsg(res.message || 'No se detectó una sesión activa en la nube para este navegador.');
+      }
+    } catch (e) {
+      setErrorMsg(e.message || 'Error al comprobar sesión.');
+    } finally {
       setLoading(false);
     }
   };
@@ -188,6 +210,25 @@ export default function AuthModal({ isOpen, onClose, initialTab = 'login', onAut
 
             <div style={separatorStyle}>
               <span>{tab === 'register' ? 'o regístrate con tu correo' : 'o ingresa con tu correo electrónico'}</span>
+            </div>
+
+            <div style={{ textAlign: 'center', marginTop: '6px' }}>
+              <button
+                type="button"
+                onClick={handleCheckCloudSession}
+                disabled={loading}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#60a5fa',
+                  fontSize: '0.78rem',
+                  textDecoration: 'underline',
+                  cursor: 'pointer',
+                  padding: '2px 4px'
+                }}
+              >
+                🔄 ¿Ya autorizaste tu cuenta en Google? Clic para verificar sesión
+              </button>
             </div>
           </div>
         )}

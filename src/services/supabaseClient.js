@@ -16,7 +16,9 @@ export const supabase = isCloudConfigured
         flowType: 'pkce',
         persistSession: true,
         autoRefreshToken: true,
-        detectSessionInUrl: true
+        // Desactivado en el cliente para evitar carreras de código PKCE (single-use token race condition)
+        // El intercambio de ?code= se gestiona de forma determinista y visible en AuthContext.js
+        detectSessionInUrl: false
       }
     })
   : null;

@@ -163,7 +163,7 @@ class GlobalErrorBoundary extends React.Component {
 }
 
 function AppContent() {
-  const { user, saveProjectToCloud, userPlan, loginAsGuest, loading } = useAuth();
+  const { user, saveProjectToCloud, userPlan, loginAsGuest, loading, oauthBanner, setOauthBanner } = useAuth();
   const [activeModule, setActiveModule] = useState('home');
   const [initialData, setInitialData] = useState(null);
   const [showNewProjectModal, setShowNewProjectModal] = useState(false);
@@ -180,6 +180,73 @@ function AppContent() {
     }
     prevUserRef.current = user;
   }, [user]);
+
+  const renderOAuthBanner = () => {
+    if (!oauthBanner) return null;
+    const isError = oauthBanner.type === 'error';
+    return (
+      <div style={{
+        position: 'fixed',
+        top: '18px',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        zIndex: 9999999,
+        maxWidth: '92%',
+        width: '580px',
+        padding: '16px 20px',
+        borderRadius: '14px',
+        backgroundColor: isError ? 'rgba(30, 10, 18, 0.95)' : 'rgba(10, 30, 20, 0.95)',
+        border: isError ? '1px solid #ef4444' : '1px solid #10b981',
+        boxShadow: '0 20px 45px rgba(0, 0, 0, 0.8), 0 0 25px ' + (isError ? 'rgba(239, 68, 68, 0.35)' : 'rgba(16, 185, 129, 0.35)'),
+        backdropFilter: 'blur(12px)',
+        color: '#ffffff',
+        fontFamily: '"Inter", -apple-system, sans-serif'
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '1.25rem' }}>{isError ? '⚠️' : '✅'}</span>
+            <strong style={{ fontSize: '1rem', color: isError ? '#fca5a5' : '#86efac' }}>
+              {oauthBanner.title || (isError ? 'Aviso de Acceso' : 'Sesión Confirmada')}
+            </strong>
+          </div>
+          <button
+            onClick={() => setOauthBanner(null)}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: '#94a3b8',
+              fontSize: '1.3rem',
+              cursor: 'pointer',
+              lineHeight: '1',
+              padding: '0 4px'
+            }}
+          >
+            ×
+          </button>
+        </div>
+        <p style={{ margin: '0 0 8px 0', fontSize: '0.88rem', color: '#f1f5f9', lineHeight: '1.45' }}>
+          {oauthBanner.message}
+        </p>
+        {oauthBanner.details && (
+          <pre style={{
+            margin: 0,
+            padding: '8px 12px',
+            borderRadius: '8px',
+            backgroundColor: 'rgba(0, 0, 0, 0.55)',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            fontSize: '0.75rem',
+            color: '#cbd5e1',
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-all',
+            maxHeight: '110px',
+            overflowY: 'auto'
+          }}>
+            {oauthBanner.details}
+          </pre>
+        )}
+      </div>
+    );
+  };
 
   const handleSetModule = (mod, data = null) => {
     if ((mod === 'presupuesto') && userPlan === 'free') {
@@ -247,6 +314,7 @@ function AppContent() {
   if (!user) {
     return (
       <>
+        {renderOAuthBanner()}
         <LandingPage
           onStartTrial={() => {
             loginAsGuest();
@@ -276,6 +344,7 @@ function AppContent() {
   // ── Si HAY usuario autenticado: Mostrar App completa ──
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: '#050a15' }}>
+      {renderOAuthBanner()}
       <NavbarUserHeader
         onSaveCloud={handleSaveCloud}
         onLoadCloud={handleLoadCloud}

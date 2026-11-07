@@ -60,6 +60,7 @@ export function AuthProvider({ children }) {
   });
   const [loading, setLoading] = useState(true);
   const [cloudProjects, setCloudProjects] = useState([]);
+  const [oauthBanner, setOauthBanner] = useState(null);
 
   const hashPassword = async (pass) => {
     const raw = String(pass || '').trim();
@@ -128,18 +129,22 @@ export function AuthProvider({ children }) {
     const refreshToken = hashParams.get('refresh_token');
     const oauthError = urlParams.get('error') || hashParams.get('error');
     const oauthErrorDesc = urlParams.get('error_description') || hashParams.get('error_description');
-    const isOAuthReturn = Boolean(authCode || accessToken);
 
     if (oauthError) {
       console.error('[Google OAuth Error]:', oauthError, oauthErrorDesc);
-      alert(`Aviso de inicio de sesión Google: ${oauthErrorDesc || oauthError}`);
+      setOauthBanner({
+        type: 'error',
+        title: 'Aviso de Autenticación con Google',
+        message: oauthErrorDesc || oauthError,
+        details: `Código: ${oauthError}\nDetalle: ${oauthErrorDesc || 'Error devuelto por el proveedor'}\nDominio: ${window.location.origin}`
+      });
       if (window.history && window.history.replaceState) {
         window.history.replaceState(null, '', window.location.pathname);
       }
     }
 
     // Helper universal para aplicar y persistir la sesión autenticada
-    const applyUserSession = async (sbSession) => {
+    const applyUserSession = async (sbSession, source = 'supabase') => {
       if (!isMounted || !sbSession?.user || sessionApplied) return;
       sessionApplied = true;
       const authUserObj = buildAuthUser(sbSession.user);
@@ -150,6 +155,17 @@ export function AuthProvider({ children }) {
       localStorage.setItem('amcaudales_user_plan', 'pro');
       localStorage.setItem('amcaudales_auth_user', JSON.stringify(authUserObj));
       localStorage.removeItem('amcaudales_user_session');
+
+      setOauthBanner({
+        type: 'success',
+        title: '¡Sesión Iniciada con Éxito!',
+        message: `Bienvenido, ${authUserObj.user_metadata?.full_name || authUserObj.email}. Has ingresado correctamente con tu cuenta Google.`
+      });
+
+      // Limpiar el banner de éxito tras 6 segundos
+      setTimeout(() => {
+        if (isMounted) setOauthBanner(null);
+      }, 6000);
 
       if (isMounted) setLoading(false);
 
@@ -204,7 +220,7 @@ export function AuthProvider({ children }) {
       setLoading(false);
     };
 
-    // 1. Suscribirse a onAuthStateChange PRIMERO
+    // 1. Suscribirse a onAuthStateChange para escuchar cambios de sesión y refresco de tokens
     let subscription = null;
     if (isCloudConfigured && supabase) {
       try {
@@ -213,7 +229,7 @@ export function AuthProvider({ children }) {
           console.log('[Supabase Auth Event]:', event, newSession?.user?.email);
 
           if (newSession?.user) {
-            await applyUserSession(newSession);
+            await applyUserSession(newSession, `event_${event}`);
           } else if (event === 'SIGNED_OUT') {
             setUser(null);
             setSession(null);
@@ -235,67 +251,50 @@ export function AuthProvider({ children }) {
         if (isCloudConfigured && supabase) {
           // A: Si llegaron tokens en el hash (#access_token=...&refresh_token=...)
           if (accessToken && refreshToken) {
+            console.log('[OAuth Return] Tokens detectados en hash, aplicando setSession...');
             try {
               const { data: setRes, error: setErr } = await supabase.auth.setSession({
                 access_token: accessToken,
                 refresh_token: refreshToken
               });
               if (!setErr && setRes?.session?.user) {
-                await applyUserSession(setRes.session);
+                await applyUserSession(setRes.session, 'hash_tokens');
                 return;
+              } else if (setErr) {
+                console.warn('[OAuth Return] Error setSession:', setErr.message);
               }
             } catch (e) {
               console.warn('[OAuth Return] Error setSession hash:', e);
             }
           }
 
-          // B: Si la URL trae código de autorización (?code=...)
+          // B: Si la URL trae código de autorización PKCE (?code=...)
           if (authCode) {
-            console.log('[OAuth Return] Intercambiando código de autorización...');
+            console.log('[OAuth Return] authCode detectado en URL, realizando intercambio...');
             try {
               const { data: exchData, error: exchError } = await supabase.auth.exchangeCodeForSession(authCode);
               if (!exchError && exchData?.session?.user) {
                 console.log('[OAuth Return] ¡Intercambio de código exitoso!');
-                await applyUserSession(exchData.session);
+                await applyUserSession(exchData.session, 'exchange_code');
                 return;
+              } else if (exchError) {
+                console.error('[OAuth Return] Error en exchangeCodeForSession:', exchError.message);
+                setOauthBanner({
+                  type: 'error',
+                  title: 'Aviso al autenticar con Google',
+                  message: exchError.message,
+                  details: `Código: ${authCode.substring(0, 10)}...\nError: ${exchError.message}\nVerifica que https://amcaudales.com esté en Redirect URLs de Supabase.`
+                });
               }
             } catch (e) {
-              console.warn('[OAuth Return] exchangeCodeForSession info:', e.message);
+              console.warn('[OAuth Return] exchangeCodeForSession catch:', e.message);
             }
           }
 
-          // C: Consultar getSession() activo (o procesado en paralelo por detectSessionInUrl)
+          // C: Consultar getSession() activo (sesión persistida en Supabase)
           const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
           if (!sessionError && sessionData?.session?.user && isMounted) {
-            await applyUserSession(sessionData.session);
-            return;
-          }
-
-          // D: Si es un retorno de OAuth pero aún se está procesando, dar un breve período de espera
-          if (isOAuthReturn) {
-            let attempts = 0;
-            const maxAttempts = 10;
-            const checkSessionInterval = setInterval(async () => {
-              if (!isMounted || sessionApplied) {
-                clearInterval(checkSessionInterval);
-                return;
-              }
-              attempts++;
-              try {
-                const { data } = await supabase.auth.getSession();
-                if (data?.session?.user) {
-                  clearInterval(checkSessionInterval);
-                  await applyUserSession(data.session);
-                  return;
-                }
-              } catch (e) {}
-
-              if (attempts >= maxAttempts) {
-                clearInterval(checkSessionInterval);
-                fallbackToStorage();
-              }
-            }, 300);
-
+            await applyUserSession(sessionData.session, 'get_session');
             return;
           }
         }
@@ -308,6 +307,14 @@ export function AuthProvider({ children }) {
     };
 
     initializeAuth();
+
+    return () => {
+      isMounted = false;
+      if (subscription?.unsubscribe) {
+        subscription.unsubscribe();
+      }
+    };
+  }, []);
 
     return () => {
       isMounted = false;
@@ -428,8 +435,8 @@ export function AuthProvider({ children }) {
     }
     try {
       localStorage.removeItem('amcaudales_user_session');
-      const baseOrigin = window.location.origin.replace(/\/+$/, '');
-      const redirectTarget = `${baseOrigin}/`;
+      // Redirigir al origen exacto del navegador sin sufijos extra
+      const redirectTarget = window.location.origin;
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
@@ -450,6 +457,38 @@ export function AuthProvider({ children }) {
     } catch (err) {
       console.error('Error signInWithOAuth Google:', err);
       throw new Error(err.message || 'Error al conectar con Google OAuth.');
+    }
+  };
+
+  /**
+   * Helper bajo demanda para verificar si hay sesión activa en Supabase Cloud
+   */
+  const checkCloudSession = async () => {
+    if (!isCloudConfigured || !supabase) {
+      return { success: false, message: 'Supabase no está configurado.' };
+    }
+    try {
+      const { data, error } = await supabase.auth.getSession();
+      if (error) throw error;
+      if (data?.session?.user) {
+        const authUserObj = buildAuthUser(data.session.user);
+        setUser(authUserObj);
+        setSession(data.session);
+        setUserPlan('pro');
+        localStorage.setItem('amcaudales_user_plan', 'pro');
+        localStorage.setItem('amcaudales_auth_user', JSON.stringify(authUserObj));
+        localStorage.removeItem('amcaudales_user_session');
+        fetchUserProjects(authUserObj.id, data.session).catch(console.warn);
+        setOauthBanner({
+          type: 'success',
+          title: '¡Sesión Detectada!',
+          message: `Sesión recuperada con éxito: ${authUserObj.user_metadata?.full_name || authUserObj.email}`
+        });
+        return { success: true, user: authUserObj };
+      }
+      return { success: false, message: 'No hay ninguna sesión activa en Supabase Cloud para este navegador.' };
+    } catch (e) {
+      return { success: false, message: e.message };
     }
   };
 
@@ -1005,6 +1044,9 @@ export function AuthProvider({ children }) {
         loginAsEmpas,
         loginAsAlayn,
         loginWithGoogle,
+        checkCloudSession,
+        oauthBanner,
+        setOauthBanner,
         resetPassword,
         loading,
         cloudProjects,
