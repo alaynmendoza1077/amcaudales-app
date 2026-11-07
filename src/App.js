@@ -230,6 +230,18 @@ function AppContent() {
     prevUserRef.current = user;
   }, [user]);
 
+  // Auto-cierre garantizado del banner OAuth a los 3.5 segundos
+  React.useEffect(() => {
+    if (oauthBanner) {
+      const timer = setTimeout(() => {
+        if (typeof setOauthBanner === 'function') {
+          setOauthBanner(null);
+        }
+      }, 3500);
+      return () => clearTimeout(timer);
+    }
+  }, [oauthBanner, setOauthBanner]);
+
   const renderOAuthBanner = () => {
     if (!oauthBanner) return null;
     const isError = oauthBanner.type === 'error';
@@ -259,18 +271,24 @@ function AppContent() {
             </strong>
           </div>
           <button
-            onClick={() => setOauthBanner(null)}
+            onClick={(e) => {
+              e.stopPropagation();
+              setOauthBanner(null);
+            }}
             style={{
-              background: 'transparent',
+              background: 'rgba(255, 255, 255, 0.15)',
               border: 'none',
-              color: '#94a3b8',
-              fontSize: '1.3rem',
+              borderRadius: '6px',
+              color: '#ffffff',
+              fontSize: '1.1rem',
+              fontWeight: 'bold',
               cursor: 'pointer',
               lineHeight: '1',
-              padding: '0 4px'
+              padding: '3px 9px'
             }}
+            title="Cerrar aviso"
           >
-            ×
+            ✕
           </button>
         </div>
         <p style={{ margin: '0 0 8px 0', fontSize: '0.88rem', color: '#f1f5f9', lineHeight: '1.45' }}>

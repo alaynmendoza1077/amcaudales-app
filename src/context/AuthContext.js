@@ -185,16 +185,22 @@ export function AuthProvider({ children }) {
       localStorage.setItem('amcaudales_auth_user', JSON.stringify(authUserObj));
       localStorage.removeItem('amcaudales_user_session');
 
-      setOauthBanner({
-        type: 'success',
-        title: '¡Sesión Iniciada con Éxito!',
-        message: `Bienvenido, ${authUserObj.user_metadata?.full_name || authUserObj.email}. Has ingresado correctamente con tu cuenta Google.`
-      });
+      // Solo mostrar banner si es un retorno explícito de OAuth, no en cargas automáticas de sesión
+      const isActualOAuthReturn = source === 'hash_tokens' || source === 'exchange_code' || source === 'event_SIGNED_IN';
+      if (isActualOAuthReturn) {
+        setOauthBanner({
+          type: 'success',
+          title: '¡Sesión Iniciada con Éxito!',
+          message: `Bienvenido, ${authUserObj.user_metadata?.full_name || authUserObj.email}. Has ingresado correctamente con tu cuenta Google.`
+        });
 
-      // Limpiar el banner de éxito tras 6 segundos
-      setTimeout(() => {
-        if (isMounted) setOauthBanner(null);
-      }, 6000);
+        // Limpiar el banner de éxito tras 4 segundos automáticamente
+        setTimeout(() => {
+          setOauthBanner(null);
+        }, 4000);
+      } else {
+        setOauthBanner(null);
+      }
 
       if (isMounted) setLoading(false);
 
@@ -564,6 +570,7 @@ export function AuthProvider({ children }) {
 
     const localKeys = [
       `amcaudales_projects_${userId}`,
+      'amcaudales_projects_usr_alaynmendoza',
       'amcaudales_projects_usr_guest',
       'amcaudales_projects_usr_active',
       'amcaudales_projects_usr_super_admin'
@@ -870,6 +877,13 @@ export function AuthProvider({ children }) {
     const canSaveToSupabase = Boolean(isCloudConfigured && supabase);
 
     if (canSaveToSupabase) {
+      if (!activeSession?.user?.id) {
+        const localTargetId = (existingProjectId && isValidUUID(existingProjectId)) ? existingProjectId : generateUUID();
+        saveLocalProject(effectiveUser.id, localTargetId, title, timestamp, projectDataPayload);
+        await fetchUserProjects(effectiveUser.id, null);
+        throw new Error('⚠️ Tu navegador en este computador no tiene la sesión de Supabase conectada. Por favor haz clic en "Conectar con Google" en la barra superior o inicia sesión con Google para sincronizar proyectos entre computadores.');
+      }
+
       const cloudOnlyList = cloudProjects.filter(p => p.isCloud);
       const isUpdatingCurrentCloudProj = existingProjectId && isValidUUID(existingProjectId) && cloudOnlyList.some(p => p.id === existingProjectId);
       let targetProjId = (existingProjectId && isValidUUID(existingProjectId)) ? existingProjectId : generateUUID();

@@ -10,6 +10,8 @@ export default function UserProjectsModal({ isOpen, onClose, onLoadProject, onSa
     loadProjectFromCloud,
     deleteProjectFromCloud,
     user,
+    session,
+    loginWithGoogle,
     userPlan,
     isCloudConfigured,
     auditCloudConnection,
@@ -42,6 +44,7 @@ export default function UserProjectsModal({ isOpen, onClose, onLoadProject, onSa
   if (!isOpen) return null;
 
   const isGuest = Boolean(!user || user.isGuest || user.id === 'usr_guest' || user.email === 'invitado@amcaudales.com');
+  const hasCloudSession = Boolean(session?.user?.id);
   const safeProjects = Array.isArray(cloudProjects) ? cloudProjects.filter(Boolean) : [];
   const cloudCount = safeProjects.filter(p => p && p.isCloud).length;
   const localCount = safeProjects.filter(p => p && !p.isCloud).length;
@@ -324,8 +327,30 @@ export default function UserProjectsModal({ isOpen, onClose, onLoadProject, onSa
                   </span>
                 )}
                 <div style={{ marginTop: '4px', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                  {isCloudConfigured ? (
+                  {hasCloudSession ? (
                     <span style={cloudStatusBadge}>☁️ Nube Supabase Sincronizada</span>
+                  ) : !isGuest ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontSize: '0.72rem', color: '#f87171', fontWeight: 'bold' }}>
+                        ⚠️ Sesión Nube Desconectada en este PC
+                      </span>
+                      <button
+                        onClick={() => loginWithGoogle().catch(err => showNotification(err.message, 'error'))}
+                        style={{
+                          background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+                          color: '#fff',
+                          border: 'none',
+                          borderRadius: '6px',
+                          padding: '2px 8px',
+                          fontSize: '0.72rem',
+                          fontWeight: 'bold',
+                          cursor: 'pointer'
+                        }}
+                        title="Conectar sesión de Google en este computador para sincronizar con tus otros equipos"
+                      >
+                        🔗 Conectar con Google
+                      </button>
+                    </div>
                   ) : (
                     <span style={localStatusBadge}>💾 Almacenamiento Local</span>
                   )}
@@ -353,6 +378,49 @@ export default function UserProjectsModal({ isOpen, onClose, onLoadProject, onSa
               msgType === 'error' ? errorBannerStyle : msgBannerStyle
             }>
               {msg}
+            </div>
+          )}
+
+          {/* Banner de Advertencia de Sesión Desconectada en este PC */}
+          {!hasCloudSession && !isGuest && (
+            <div style={{
+              margin: '0 0 14px 0',
+              padding: '12px 16px',
+              backgroundColor: 'rgba(239, 68, 68, 0.15)',
+              border: '1px solid #ef4444',
+              borderRadius: '12px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '10px'
+            }}>
+              <div style={{ flex: '1 1 240px' }}>
+                <div style={{ color: '#fca5a5', fontWeight: '800', fontSize: '0.86rem' }}>
+                  ⚠️ Sesión de Supabase no conectada en este computador
+                </div>
+                <div style={{ color: '#e2e8f0', fontSize: '0.78rem', marginTop: '2px', lineHeight: '1.4' }}>
+                  Tu navegador muestra tu usuario local, pero no ha iniciado sesión con Google en Supabase Cloud. Por eso tus proyectos se guardan como <strong>💾 Locales</strong> y no suben a la nube. Conecta con Google para activar la sincronización con tu otro computador.
+                </div>
+              </div>
+              <button
+                onClick={() => loginWithGoogle().catch(err => showNotification(err.message, 'error'))}
+                disabled={loading}
+                style={{
+                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '9px 16px',
+                  fontSize: '0.84rem',
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 10px rgba(16, 185, 129, 0.4)',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                🔑 Conectar con Google Ahora
+              </button>
             </div>
           )}
 

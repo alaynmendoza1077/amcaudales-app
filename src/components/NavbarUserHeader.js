@@ -5,12 +5,13 @@ import UserProjectsModal from './UserProjectsModal';
 import UpgradeProModal from './UpgradeProModal';
 
 export default function NavbarUserHeader({ onSaveCloud, onLoadCloud }) {
-  const { user, logout, isCloudConfigured, userPlan, cloudProjects } = useAuth();
+  const { user, session, loginWithGoogle, logout, isCloudConfigured, userPlan, cloudProjects } = useAuth();
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showProjectsModal, setShowProjectsModal] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   const isGuest = Boolean(!user || user.isGuest || user.id === 'usr_guest' || user.email === 'invitado@amcaudales.com');
+  const hasCloudSession = Boolean(session?.user?.id);
   const safeProjects = Array.isArray(cloudProjects) ? cloudProjects.filter(Boolean) : [];
   const cloudCount = safeProjects.filter(p => p && p.isCloud).length;
 
@@ -92,9 +93,28 @@ export default function NavbarUserHeader({ onSaveCloud, onLoadCloud }) {
                     👋 ¡Bienvenido, <strong style={{ color: '#38bdf8' }}>{displayName}</strong>!
                   </div>
                   <div style={userPlanSubtextStyle}>
-                    <span style={{ color: '#34d399', fontWeight: 'bold' }}>
-                      👑 Plan Pro • Sincronización en la Nube
-                    </span>
+                    {hasCloudSession ? (
+                      <span style={{ color: '#34d399', fontWeight: 'bold' }}>
+                        👑 Plan Pro • Sincronización en la Nube
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => loginWithGoogle().catch(err => console.warn(err))}
+                        style={{
+                          background: 'rgba(239, 68, 68, 0.2)',
+                          border: '1px solid #ef4444',
+                          color: '#fca5a5',
+                          borderRadius: '4px',
+                          padding: '1px 6px',
+                          fontSize: '0.68rem',
+                          fontWeight: 'bold',
+                          cursor: 'pointer'
+                        }}
+                        title="Haz clic aquí para vincular con Google en este equipo y activar sincronización con tus otros PCs"
+                      >
+                        ⚠️ Nube Desconectada (Clic para Conectar)
+                      </button>
+                    )}
                     {user?.email && (
                       <span style={{ color: '#94a3b8', fontSize: '0.72rem', marginLeft: '6px' }}>
                         ({user.email})
