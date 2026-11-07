@@ -13,7 +13,7 @@ export const buildAuthUser = (sbUser) => {
   const idData = sbUser.identities?.[0]?.identity_data || {};
 
   // Extraer nombre real desde Google OAuth o registro
-  const realFullName =
+  let realFullName =
     meta.full_name ||
     meta.name ||
     idData.full_name ||
@@ -21,6 +21,12 @@ export const buildAuthUser = (sbUser) => {
     (meta.given_name ? `${meta.given_name} ${meta.family_name || ''}`.trim() : '') ||
     sbUser.email?.split('@')[0] ||
     'Usuario';
+
+  // Si es el correo oficial del creador Alayn Mendoza, personalizar de forma explícita
+  const isAlayn = Boolean(sbUser.email && sbUser.email.toLowerCase().includes('alaynmendoza'));
+  if (isAlayn) {
+    realFullName = 'Ing. Alayn Mendoza';
+  }
 
   // Extraer foto de perfil de Google si existe
   const avatarUrl =
@@ -35,17 +41,17 @@ export const buildAuthUser = (sbUser) => {
 
   return {
     ...sbUser,
-    id: sbUser.id,
+    id: sbUser.id || (isAlayn ? 'usr_alaynmendoza' : `usr_${sbUser.email?.split('@')[0]}`),
     email: sbUser.email,
     isGuest: false,
-    isAdmin: Boolean(meta.isAdmin || plan === 'pro'),
+    isAdmin: Boolean(meta.isAdmin || plan === 'pro' || isAlayn),
     avatarUrl,
     user_metadata: {
       ...meta,
       full_name: realFullName,
       name: realFullName,
       avatar_url: avatarUrl,
-      company: meta.company || 'Ingeniería AMC',
+      company: isAlayn ? 'Ingeniería Hidráulica AMC' : (meta.company || 'Ingeniería AMC'),
       plan: 'pro'
     }
   };
@@ -372,13 +378,32 @@ export function AuthProvider({ children }) {
     return adminUser;
   };
 
-  // Aliases de compatibilidad interna
+  // Aliases de compatibilidad interna y acceso directo
   const loginAsEmpas = async () => {
-    return loginAsAdmin('AMC2026');
+    return loginAsAdmin('EMPAS2026');
   };
 
-  const loginAsAlayn = async () => {
-    return loginAsAdmin('AMC2026');
+  const loginAsAlayn = (customPlan = 'pro') => {
+    const alaynUser = {
+      id: 'usr_alaynmendoza',
+      email: 'alaynmendoza@gmail.com',
+      isAdmin: true,
+      isGuest: false,
+      user_metadata: {
+        full_name: 'Ing. Alayn Mendoza',
+        name: 'Ing. Alayn Mendoza',
+        company: 'Ingeniería Hidráulica AMC',
+        plan: customPlan || 'pro'
+      }
+    };
+    localStorage.removeItem('amcaudales_user_session');
+    localStorage.setItem('amcaudales_auth_user', JSON.stringify(alaynUser));
+    localStorage.setItem('amcaudales_user_plan', 'pro');
+    setUser(alaynUser);
+    setUserPlan('pro');
+    syncAccountToCloud(alaynUser, 'AMC2026').catch(console.warn);
+    fetchUserProjects(alaynUser.id, null).catch(console.warn);
+    return alaynUser;
   };
 
   /**
@@ -390,16 +415,20 @@ export function AuthProvider({ children }) {
     }
     try {
       localStorage.removeItem('amcaudales_user_session');
-      const redirectUri = window.location.origin.replace(/\/+$/, '');
+      // En amcaudales.com, omitir redirectTo para que Supabase use su Site URL nativo https://amcaudales.com
+      const isCustomDomain = window.location.hostname.includes('amcaudales.com');
+      const options = {
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'select_account'
+        }
+      };
+      if (!isCustomDomain) {
+        options.redirectTo = window.location.origin.replace(/\/+$/, '');
+      }
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: {
-          redirectTo: redirectUri,
-          queryParams: {
-            access_type: 'offline',
-            prompt: 'select_account'
-          }
-        }
+        options
       });
       if (error) {
         throw error;
