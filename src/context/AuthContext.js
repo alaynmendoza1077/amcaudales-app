@@ -390,7 +390,7 @@ export function AuthProvider({ children }) {
     }
     try {
       localStorage.removeItem('amcaudales_user_session');
-      const redirectUri = window.location.origin + window.location.pathname;
+      const redirectUri = window.location.origin.replace(/\/+$/, '');
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
@@ -597,18 +597,23 @@ export function AuthProvider({ children }) {
 
     const isMasterKey = ['ADMIN2026', 'AMC2026', 'AMCAUDALES2026', 'EMPAS2026'].includes(cleanPassword.toUpperCase());
 
-    // 1. Acceso con Clave Maestra de Administrador o Cuenta Institucional EMPAS
+    // 1. Acceso con Clave Maestra de Administrador, EMPAS o Alayn Mendoza
     if (isMasterKey) {
       const cleanSlug = rawEmail.toLowerCase().replace(/[^a-z0-9]/g, '_');
       const isEmpas = rawEmail.toLowerCase().includes('empas') || cleanPassword.toUpperCase() === 'EMPAS2026';
+      const isAlayn = rawEmail.toLowerCase().includes('alayn') || rawEmail.toLowerCase().includes('mendoza');
       const adminUser = {
         id: `usr_${cleanSlug}`,
         email: rawEmail.includes('@') ? rawEmail.toLowerCase() : `${rawEmail.toLowerCase()}@amcaudales.com`,
         isAdmin: true,
         isGuest: false,
         user_metadata: {
-          full_name: isEmpas ? 'EMPAS S.A. E.S.P.' : (rawEmail.includes('@') ? rawEmail.split('@')[0].toUpperCase() : rawEmail.toUpperCase()),
-          company: isEmpas ? 'Empresa Pública de Alcantarillado de Santander' : 'Ingeniería AMC',
+          full_name: isAlayn
+            ? 'Ing. Alayn Mendoza'
+            : (isEmpas ? 'EMPAS S.A. E.S.P.' : (rawEmail.includes('@') ? rawEmail.split('@')[0].toUpperCase() : rawEmail.toUpperCase())),
+          company: isEmpas
+            ? 'Empresa Pública de Alcantarillado de Santander'
+            : 'Ingeniería Hidráulica AMC',
           plan: 'pro'
         }
       };

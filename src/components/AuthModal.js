@@ -105,7 +105,7 @@ export default function AuthModal({ isOpen, onClose, initialTab = 'login', onAut
     resetMessages();
     setLoading(true);
     try {
-      setSuccessMsg('Redirigiendo a Google...');
+      setSuccessMsg(`Redirigiendo a Google... (Entorno: ${window.location.host})`);
       await loginWithGoogle();
     } catch (err) {
       setErrorMsg(err.message || 'No fue posible conectar con Google. Por favor intente nuevamente.');
