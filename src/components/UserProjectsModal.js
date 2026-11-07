@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { saveFileWithDialog } from '../utils/fileSaver';
 import AuthModal from './AuthModal';
@@ -95,26 +95,29 @@ export default function UserProjectsModal({ isOpen, onClose, onLoadProject, onSa
     }
   };
 
-  const executeSave = async (title, forceOverwrite = false) => {
+  const fileInputRef = useRef(null);
+
+  const executeSave = async (title, forceOverwrite = false, customPayload = null) => {
     setLoading(true);
     showNotification('Guardando proyecto...', 'info', 0);
     try {
-      const res = await onSaveCurrentProject(title, forceOverwrite);
+      const res = await onSaveCurrentProject(title, forceOverwrite, customPayload);
 
       // Si el backend reporta que se superó el límite del plan
       if (res && res.limitReached) {
         if (res.plan === 'free') {
           setOverwriteConfirm({
             existingProject: res.existingProject,
-            title: title
+            title: title,
+            customPayload: customPayload
           });
           showNotification('⚠️ Límite de Plan Gratis: Solo 1 proyecto en la nube. Confirma si deseas sobreescribir.', 'warning', 0);
           setLoading(false);
-          return;
+          return res;
         } else if (res.plan === 'pro') {
           showNotification('Has alcanzado el límite mensual de 20 proyectos en la nube de tu Plan Pro.', 'warning', 5000);
           setLoading(false);
-          return;
+          return res;
         }
       }
 
@@ -126,8 +129,61 @@ export default function UserProjectsModal({ isOpen, onClose, onLoadProject, onSa
         // Guardado local (invitado o contingencia)
         showNotification(`💾 Proyecto "${title}" guardado en este computador (Local). Para sincronizar entre PCs, inicia sesión en la Nube.`, 'info', 4000);
       }
+      return res;
     } catch (err) {
       showNotification(`Error al guardar: ${err.message}`, 'error', 5000);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUploadAMCFile = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setLoading(true);
+    showNotification(`Leyendo archivo "${file.name}"...`, 'info', 0);
+
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      try {
+        const rawContent = ev.target.result;
+        const parsed = JSON.parse(rawContent);
+
+        // Extraer título sugerido del archivo o del objeto
+        const fileTitle = (parsed.P?.proyecto || parsed.title || file.name.replace(/\.[^/.]+$/, '').replace(/_/g, ' ')).trim();
+
+        showNotification(`Subiendo "${fileTitle}" a la Nube de Supabase...`, 'info', 0);
+        await executeSave(fileTitle, false, parsed);
+      } catch (err) {
+        showNotification(`Error al leer o subir archivo .AMC: ${err.message}`, 'error', 5000);
+      } finally {
+        setLoading(false);
+        if (e.target) e.target.value = '';
+      }
+    };
+    reader.onerror = () => {
+      showNotification('Error al leer el archivo desde el disco.', 'error');
+      setLoading(false);
+      if (e.target) e.target.value = '';
+    };
+    reader.readAsText(file);
+  };
+
+  const handleUploadLocalToCloud = async (p) => {
+    setLoading(true);
+    showNotification(`Sincronizando "${p.title}" a la Nube...`, 'info', 0);
+    try {
+      let payload = null;
+      if (p.project_data) {
+        payload = p.project_data;
+      } else {
+        payload = await loadProjectFromCloud(p.id);
+      }
+      await executeSave(p.title, false, payload);
+    } catch (err) {
+      showNotification(`Error al subir a la Nube: ${err.message}`, 'error', 5000);
     } finally {
       setLoading(false);
     }
@@ -399,23 +455,23 @@ export default function UserProjectsModal({ isOpen, onClose, onLoadProject, onSa
             </div>
           )}
 
-          {/* Sección Guardar Proyecto Actual */}
+          {/* Sección Guardar Proyecto Actual y Subir .AMC */}
           <div style={saveBoxStyle}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap', gap: '6px' }}>
               <h4 style={{ margin: 0, fontSize: '0.85rem', color: '#e2e8f0', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-                💾 Guardar Diseño Actual
+                💾 Guardar Diseño Actual o Subir .AMC a la Nube
               </h4>
               <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
-                {isGuest ? 'Modo Local' : (userPlan === 'pro' ? 'Sincronización Pro' : 'Sincronización Gratis (1 Proj)')}
+                {isGuest ? 'Modo Local' : (userPlan === 'pro' || user?.isAdmin ? 'Sincronización Pro (Ilimitada)' : 'Sincronización Gratis (1 Proj)')}
               </span>
             </div>
-            <div style={{ display: 'flex', gap: '8px' }}>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
               <input
                 type="text"
                 value={newProjectTitle}
                 onChange={(e) => setNewProjectTitle(e.target.value)}
                 placeholder="Nombre del Proyecto (ej. Alcantarillado Sector Norte)"
-                style={inputStyle}
+                style={{ ...inputStyle, flex: '1 1 220px' }}
               />
               <button
                 onClick={handleSaveClick}
@@ -425,6 +481,38 @@ export default function UserProjectsModal({ isOpen, onClose, onLoadProject, onSa
               >
                 {isGuest ? '💾 Guardar' : '☁️ Guardar en Nube'}
               </button>
+              {!isGuest && (
+                <>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".amc,.json"
+                    style={{ display: 'none' }}
+                    onChange={handleUploadAMCFile}
+                  />
+                  <button
+                    onClick={() => fileInputRef.current && fileInputRef.current.click()}
+                    disabled={loading}
+                    style={{
+                      background: 'rgba(59, 130, 246, 0.2)',
+                      border: '1px solid rgba(59, 130, 246, 0.6)',
+                      color: '#93c5fd',
+                      borderRadius: '8px',
+                      padding: '8px 14px',
+                      fontSize: '0.8rem',
+                      fontWeight: '700',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      whiteSpace: 'nowrap'
+                    }}
+                    title="Selecciona un archivo .AMC de tu computador para subirlo a la Nube y abrirlo desde cualquier PC"
+                  >
+                    📂 Subir .AMC a Nube
+                  </button>
+                </>
+              )}
             </div>
           </div>
 
@@ -461,7 +549,13 @@ export default function UserProjectsModal({ isOpen, onClose, onLoadProject, onSa
                 <div>• Sesión Activa: <strong>{auditResult.hasValidSession ? `Sí (${auditResult.sessionUser})` : (auditResult.isGuest ? 'Modo Invitado' : 'No')}</strong></div>
                 <div>• Plan Actual: <strong>{auditResult.userPlan}</strong></div>
                 <div>• Proyectos en Nube: <strong>{auditResult.cloudProjectsCount}</strong> | Locales: <strong>{auditResult.localProjectsCount}</strong></div>
+                {auditResult.totalTableProjects !== undefined && (
+                  <div>• Total Registros en Base de Datos: <strong>{auditResult.totalTableProjects}</strong></div>
+                )}
                 {auditResult.details && <div style={{ color: '#fca5a5', marginTop: '4px' }}>Detalles: {auditResult.details}</div>}
+                <div style={{ marginTop: '8px', padding: '6px 10px', background: 'rgba(59, 130, 246, 0.12)', borderRadius: '6px', borderLeft: '3px solid #38bdf8', color: '#93c5fd', fontSize: '0.73rem', lineHeight: '1.4' }}>
+                  ℹ️ <strong>Sincronización Multi-PC:</strong> Los proyectos con etiqueta <span style={{ color: '#34d399', fontWeight: 'bold' }}>☁️ Nube</span> se sincronizan en todos tus computadores. En tu segundo PC, simplemente inicia sesión con Google (<strong>alaynmendoza@gmail.com</strong>) y aparecerán aquí automáticamente.
+                </div>
               </div>
             </div>
           )}
@@ -513,6 +607,29 @@ export default function UserProjectsModal({ isOpen, onClose, onLoadProject, onSa
                     >
                       Abrir 📂
                     </button>
+
+                    {!p.isCloud && !isGuest && (
+                      <button
+                        onClick={() => handleUploadLocalToCloud(p)}
+                        disabled={loading}
+                        style={{
+                          background: 'rgba(16, 185, 129, 0.2)',
+                          border: '1px solid #10b981',
+                          color: '#34d399',
+                          borderRadius: '8px',
+                          padding: '7px 11px',
+                          fontWeight: '700',
+                          fontSize: '0.78rem',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                        title="Subir este proyecto local a la Nube de Supabase para abrirlo desde cualquier PC"
+                      >
+                        ☁️ A Nube
+                      </button>
+                    )}
 
                     <button
                       onClick={() => handleDownloadAMC(p)}

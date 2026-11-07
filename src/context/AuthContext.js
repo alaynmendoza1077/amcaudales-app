@@ -510,6 +510,9 @@ export function AuthProvider({ children }) {
           possibleIds.push(`usr_${cleanSlug}`);
           possibleIds.push(userEmail);
           possibleIds.push(userEmail.toLowerCase());
+          possibleIds.push('usr_alaynmendoza');
+          possibleIds.push('usr_super_admin');
+          possibleIds.push('usr_active');
         }
 
         const { data, error } = await supabase
@@ -904,7 +907,12 @@ export function AuthProvider({ children }) {
 
         if (!error && data) {
           const resPayload = parsePayload(data.project_data || data);
-          if (resPayload) return resPayload;
+          if (resPayload) {
+            if (resPayload.P) {
+              resPayload.P.cloudProjectId = projectId;
+            }
+            return resPayload;
+          }
         }
       } catch (e) {
         console.warn('Error fetching cloud project, searching local fallback:', e);

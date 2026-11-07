@@ -1149,7 +1149,10 @@ const handleBack = () => {
             alert("Error al restaurar proyecto desde la Nube.");
           }
         }}
-        onSaveCurrentProject={(title, forceOverwrite = false) => {
+        onSaveCurrentProject={(title, forceOverwrite = false, customPayload = null) => {
+          if (customPayload) {
+            return saveProjectToCloud(customPayload, title, null, forceOverwrite);
+          }
           return import('../tabs/ProjectConsolidatorTab').then(({ recalcPbItems }) => {
             var fullData = {
               v: "v36",

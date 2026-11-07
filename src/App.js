@@ -268,13 +268,15 @@ function AppContent() {
     handleSetModule('reposicion', { type: 'setup', projectSetup });
   };
 
-  const handleSaveCloud = async (title, forceOverwrite = false) => {
-    let currentPayload = null;
-    try {
-      const raw = localStorage.getItem('AMC_current_project_state');
-      if (raw) currentPayload = JSON.parse(raw);
-    } catch (e) {
-      console.warn('No se pudo extraer estado directo:', e);
+  const handleSaveCloud = async (title, forceOverwrite = false, customPayload = null) => {
+    let currentPayload = customPayload;
+    if (!currentPayload) {
+      try {
+        const raw = localStorage.getItem('AMC_current_project_state');
+        if (raw) currentPayload = JSON.parse(raw);
+      } catch (e) {
+        console.warn('No se pudo extraer estado directo:', e);
+      }
     }
 
     if (!currentPayload) {
