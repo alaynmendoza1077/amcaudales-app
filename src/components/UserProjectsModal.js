@@ -34,8 +34,9 @@ export default function UserProjectsModal({ isOpen, onClose, onLoadProject, onSa
   if (!isOpen) return null;
 
   const isGuest = Boolean(!user || user.isGuest || user.id === 'usr_guest' || user.email === 'invitado@amcaudales.com');
-  const cloudCount = cloudProjects.filter(p => p.isCloud).length;
-  const localCount = cloudProjects.filter(p => !p.isCloud).length;
+  const safeProjects = Array.isArray(cloudProjects) ? cloudProjects.filter(Boolean) : [];
+  const cloudCount = safeProjects.filter(p => p && p.isCloud).length;
+  const localCount = safeProjects.filter(p => p && !p.isCloud).length;
 
   const rawModalName = user?.user_metadata?.full_name || user?.user_metadata?.name || '';
   let displayModalName = rawModalName;
@@ -519,7 +520,7 @@ export default function UserProjectsModal({ isOpen, onClose, onLoadProject, onSa
           {/* Encabezado Lista de Proyectos y Contador */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '16px 0 10px 0', flexWrap: 'wrap', gap: '8px' }}>
             <h4 style={{ margin: 0, fontSize: '0.88rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-              Proyectos Disponibles ({cloudProjects.length})
+              Proyectos Disponibles ({safeProjects.length})
               <span style={{ fontSize: '0.75rem', textTransform: 'none', marginLeft: '8px', color: '#64748b' }}>
                 ({cloudCount} en Nube • {localCount} Locales)
               </span>
@@ -562,95 +563,100 @@ export default function UserProjectsModal({ isOpen, onClose, onLoadProject, onSa
 
           {/* Lista de Proyectos Guardados */}
           <div style={projectListContainerStyle}>
-            {cloudProjects.length === 0 ? (
+            {safeProjects.length === 0 ? (
               <div style={emptyStyle}>
                 No tienes proyectos guardados aún en la plataforma. ¡Ingresa un nombre arriba y haz clic en Guardar!
               </div>
             ) : (
-              cloudProjects.map((p) => (
-                <div key={p.id} style={projectCardStyle}>
-                  {/* Título y Detalles del Proyecto (Sin truncar, wrap completo) */}
-                  <div style={{ flex: 1, minWidth: 0, paddingRight: '14px' }}>
-                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
-                      <span style={projTitleStyle} title={p.title}>
-                        {p.title}
-                      </span>
-                      <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                        {p.isCloud ? (
-                          <span style={cloudBadgeTag} title="Alojado en Supabase. Accesible desde cualquier computador.">
-                            ☁️ Nube
-                          </span>
-                        ) : (
-                          <span style={localBadgeTag} title="Alojado únicamente en este computador y navegador.">
-                            💾 Local
-                          </span>
-                        )}
-                        {p.isDraft && (
-                          <span style={draftBadgeTag} title="Borrador en memoria de trabajo activa">
-                            📝 Borrador
-                          </span>
-                        )}
+              safeProjects.map((p) => {
+                if (!p) return null;
+                const safeTitle = p.title || 'Proyecto sin título';
+                const safeDate = p.updated_at ? new Date(p.updated_at).toLocaleString('es-CO') : 'Reciente';
+                return (
+                  <div key={p.id || Math.random()} style={projectCardStyle}>
+                    {/* Título y Detalles del Proyecto (Sin truncar, wrap completo) */}
+                    <div style={{ flex: 1, minWidth: 0, paddingRight: '14px' }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
+                        <span style={projTitleStyle} title={safeTitle}>
+                          {safeTitle}
+                        </span>
+                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                          {p.isCloud ? (
+                            <span style={cloudBadgeTag} title="Alojado en Supabase. Accesible desde cualquier computador.">
+                              ☁️ Nube
+                            </span>
+                          ) : (
+                            <span style={localBadgeTag} title="Alojado únicamente en este computador y navegador.">
+                              💾 Local
+                            </span>
+                          )}
+                          {p.isDraft && (
+                            <span style={draftBadgeTag} title="Borrador en memoria de trabajo activa">
+                              📝 Borrador
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div style={projDateStyle}>
+                        Última actualización: {safeDate}
                       </div>
                     </div>
-                    <div style={projDateStyle}>
-                      Última actualización: {new Date(p.updated_at).toLocaleString('es-CO')}
+
+                    {/* Acciones del Proyecto */}
+                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexShrink: 0 }}>
+                      <button
+                        onClick={() => handleSelectProject(p.id)}
+                        disabled={loading || deletingId === p.id}
+                        style={loadBtnStyle}
+                        title="Cargar y abrir este proyecto en el módulo de cálculo"
+                      >
+                        Abrir 📂
+                      </button>
+
+                      {!p.isCloud && !isGuest && (
+                        <button
+                          onClick={() => handleUploadLocalToCloud(p)}
+                          disabled={loading}
+                          style={{
+                            background: 'rgba(16, 185, 129, 0.2)',
+                            border: '1px solid #10b981',
+                            color: '#34d399',
+                            borderRadius: '8px',
+                            padding: '7px 11px',
+                            fontWeight: '700',
+                            fontSize: '0.78rem',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                          title="Subir este proyecto local a la Nube de Supabase para abrirlo desde cualquier PC"
+                        >
+                          ☁️ A Nube
+                        </button>
+                      )}
+
+                      <button
+                        onClick={() => handleDownloadAMC(p)}
+                        disabled={loading || downloadingId === p.id}
+                        style={amcDownloadBtnStyle}
+                        title="Descargar archivo .AMC directamente a tu computador"
+                      >
+                        {downloadingId === p.id ? '...' : '📥 .AMC'}
+                      </button>
+
+                      <button
+                        onClick={() => handleDelete(p.id, safeTitle)}
+                        disabled={loading || deletingId === p.id}
+                        style={deleteBtnStyle}
+                        title="Eliminar este proyecto permanentemente"
+                      >
+                        {deletingId === p.id ? '...' : '🗑️'}
+                      </button>
                     </div>
                   </div>
-
-                  {/* Acciones del Proyecto */}
-                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexShrink: 0 }}>
-                    <button
-                      onClick={() => handleSelectProject(p.id)}
-                      disabled={loading || deletingId === p.id}
-                      style={loadBtnStyle}
-                      title="Cargar y abrir este proyecto en el módulo de cálculo"
-                    >
-                      Abrir 📂
-                    </button>
-
-                    {!p.isCloud && !isGuest && (
-                      <button
-                        onClick={() => handleUploadLocalToCloud(p)}
-                        disabled={loading}
-                        style={{
-                          background: 'rgba(16, 185, 129, 0.2)',
-                          border: '1px solid #10b981',
-                          color: '#34d399',
-                          borderRadius: '8px',
-                          padding: '7px 11px',
-                          fontWeight: '700',
-                          fontSize: '0.78rem',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '4px'
-                        }}
-                        title="Subir este proyecto local a la Nube de Supabase para abrirlo desde cualquier PC"
-                      >
-                        ☁️ A Nube
-                      </button>
-                    )}
-
-                    <button
-                      onClick={() => handleDownloadAMC(p)}
-                      disabled={loading || downloadingId === p.id}
-                      style={amcDownloadBtnStyle}
-                      title="Descargar archivo .AMC directamente a tu computador"
-                    >
-                      {downloadingId === p.id ? '...' : '📥 .AMC'}
-                    </button>
-
-                    <button
-                      onClick={() => handleDelete(p.id, p.title)}
-                      disabled={loading || deletingId === p.id}
-                      style={deleteBtnStyle}
-                      title="Eliminar este proyecto permanentemente"
-                    >
-                      {deletingId === p.id ? '...' : '🗑️'}
-                    </button>
-                  </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>

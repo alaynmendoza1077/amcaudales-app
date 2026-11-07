@@ -11,7 +11,8 @@ export default function NavbarUserHeader({ onSaveCloud, onLoadCloud }) {
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   const isGuest = Boolean(!user || user.isGuest || user.id === 'usr_guest' || user.email === 'invitado@amcaudales.com');
-  const cloudCount = cloudProjects.filter(p => p.isCloud).length;
+  const safeProjects = Array.isArray(cloudProjects) ? cloudProjects.filter(Boolean) : [];
+  const cloudCount = safeProjects.filter(p => p && p.isCloud).length;
 
   const rawFullName = user?.user_metadata?.full_name || user?.user_metadata?.name || '';
   const avatarUrl = user?.avatarUrl || user?.user_metadata?.avatar_url || user?.user_metadata?.picture || null;
@@ -57,8 +58,8 @@ export default function NavbarUserHeader({ onSaveCloud, onLoadCloud }) {
             title="Ver tus proyectos guardados (Locales y en la Nube)"
           >
             📂 Mis Proyectos
-            {cloudProjects.length > 0 && (
-              <span style={projectCountPillStyle}>{cloudProjects.length}</span>
+            {safeProjects.length > 0 && (
+              <span style={projectCountPillStyle}>{safeProjects.length}</span>
             )}
           </button>
 

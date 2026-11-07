@@ -548,7 +548,7 @@ export function AuthProvider({ children }) {
           const list = JSON.parse(raw);
           if (Array.isArray(list)) {
             list.forEach(p => {
-              if (p && p.id && !String(p.id).startsWith('sys_account_') && !cloudList.some(cp => cp.id === p.id) && !recoveredLocalProjects.some(rp => rp.id === p.id)) {
+              if (p && p.id && !String(p.id).startsWith('sys_account_') && !cloudList.some(cp => cp && cp.id === p.id) && !recoveredLocalProjects.some(rp => rp && rp.id === p.id)) {
                 recoveredLocalProjects.push({
                   id: p.id,
                   title: p.title ? `${p.title}` : 'Proyecto Local',
@@ -569,7 +569,7 @@ export function AuthProvider({ children }) {
         const parsedCurrent = JSON.parse(rawCurrent);
         if (parsedCurrent && (parsedCurrent.P || parsedCurrent.T)) {
           const activeProjId = 'proj_active_draft';
-          if (!cloudList.some(cp => cp.id === activeProjId) && !recoveredLocalProjects.some(rp => rp.id === activeProjId)) {
+          if (!cloudList.some(cp => cp && cp.id === activeProjId) && !recoveredLocalProjects.some(rp => rp && rp.id === activeProjId)) {
             recoveredLocalProjects.unshift({
               id: activeProjId,
               title: parsedCurrent.P?.proyecto ? `${parsedCurrent.P.proyecto} (Borrador Activo)` : 'Borrador de Trabajo previo',
@@ -583,7 +583,7 @@ export function AuthProvider({ children }) {
       }
     } catch (e) {}
 
-    const combinedList = [...cloudList, ...recoveredLocalProjects];
+    const combinedList = [...cloudList, ...recoveredLocalProjects].filter(Boolean);
     setCloudProjects(combinedList);
   };
 

@@ -102,11 +102,23 @@ class GlobalErrorBoundary extends React.Component {
 
   handleReset = () => {
     this.setState({ hasError: false, error: null });
+    try {
+      window.sessionStorage.removeItem('chunk_refresh_retry');
+    } catch(e) {}
+    window.location.reload();
+  };
+
+  handleHardCleanReset = () => {
+    try {
+      window.localStorage.removeItem('AMC_current_project_state');
+      window.sessionStorage.clear();
+    } catch (e) {}
     window.location.href = window.location.origin;
   };
 
   render() {
     if (this.state.hasError) {
+      const errMsg = this.state.error?.message || String(this.state.error || 'Excepción no identificada');
       return (
         <div style={{
           display: 'flex',
@@ -125,17 +137,38 @@ class GlobalErrorBoundary extends React.Component {
             border: '1px solid #3b82f6',
             borderRadius: '16px',
             padding: '2.5rem',
-            maxWidth: '540px',
+            maxWidth: '560px',
             boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)'
           }}>
             <div style={{ fontSize: '2.5rem', marginBottom: '0.8rem' }}>🚀</div>
             <h2 style={{ fontSize: '1.4rem', fontWeight: '800', color: '#38bdf8', margin: '0 0 0.8rem 0' }}>
               AMCaudales Pro • Entorno Restablecido
             </h2>
-            <p style={{ color: '#cbd5e1', fontSize: '0.9rem', lineHeight: '1.6', marginBottom: '1.5rem' }}>
-              Se ha optimizado el rendimiento. Haz clic abajo para volver inmediatamente a tu panel de trabajo sin perder tu sesión.
+            <p style={{ color: '#cbd5e1', fontSize: '0.9rem', lineHeight: '1.6', marginBottom: '1.2rem' }}>
+              Se ha detectado un cambio de versión o ajuste de sincronización. Haz clic abajo para volver inmediatamente a tu panel de trabajo.
             </p>
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+
+            {errMsg && (
+              <div style={{
+                margin: '0 0 1.5rem 0',
+                padding: '10px 14px',
+                borderRadius: '8px',
+                backgroundColor: 'rgba(0, 0, 0, 0.45)',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
+                color: '#fca5a5',
+                fontSize: '0.8rem',
+                textAlign: 'left',
+                maxHeight: '120px',
+                overflowY: 'auto',
+                fontFamily: 'monospace',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-all'
+              }}>
+                <strong>Detalle técnico:</strong> {errMsg}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
               <button
                 onClick={this.handleReset}
                 style={{
@@ -143,15 +176,31 @@ class GlobalErrorBoundary extends React.Component {
                   backgroundImage: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
                   color: '#ffffff',
                   fontWeight: 'bold',
-                  padding: '12px 28px',
+                  padding: '11px 24px',
                   borderRadius: '10px',
                   border: 'none',
                   cursor: 'pointer',
-                  fontSize: '0.95rem',
+                  fontSize: '0.92rem',
                   boxShadow: '0 4px 12px rgba(59, 130, 246, 0.4)'
                 }}
               >
                 ⚡ Ingresar al Módulo Activo
+              </button>
+              <button
+                onClick={this.handleHardCleanReset}
+                style={{
+                  backgroundColor: 'rgba(239, 68, 68, 0.15)',
+                  border: '1px solid rgba(239, 68, 68, 0.5)',
+                  color: '#fca5a5',
+                  fontWeight: 'bold',
+                  padding: '11px 20px',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  fontSize: '0.88rem'
+                }}
+                title="Limpia la memoria caché temporal de este computador y recarga"
+              >
+                🧹 Limpiar Caché y Recargar
               </button>
             </div>
           </div>
