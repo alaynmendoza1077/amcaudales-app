@@ -30,6 +30,7 @@ export default function UserProjectsModal({ isOpen, onClose, onLoadProject, onSa
   const [guestConfirm, setGuestConfirm] = useState(false);
   const [overwriteConfirm, setOverwriteConfirm] = useState(null); // { existingProject, title }
   const [auditResult, setAuditResult] = useState(null);
+  const fileInputRef = useRef(null);
 
   if (!isOpen) return null;
 
@@ -95,8 +96,6 @@ export default function UserProjectsModal({ isOpen, onClose, onLoadProject, onSa
       setDownloadingId(null);
     }
   };
-
-  const fileInputRef = useRef(null);
 
   const executeSave = async (title, forceOverwrite = false, customPayload = null) => {
     setLoading(true);
