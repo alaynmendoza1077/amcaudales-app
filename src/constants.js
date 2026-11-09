@@ -65,7 +65,7 @@ var PU={
   c4000:"1647394",cPobre:"651913",acero2590:"13692",acero4200:"14065",ladrPozo:"307629",
   rotPavAcom:"79199",rotAndAcom:"79007",excAcom:"51786",cimAcom:"196692",tubAcom:"187549",
   cajaAcom:"469928",sillaYee:"567589",rellAcom:"56151",repPavAcom:"210949",andAcom:"164016",
-  juntaPVC:"24892",repPavEmpas:"210949",selloAsf:"116355",
+  juntaPVC:"24892",repPavBanco:"210949",repPavEmpas:"210949",selloAsf:"116355",
   demolTub:"21514",compCharn:"769375",aroContra:"850158",aroContra2:"494218",
   proctor:"133303",densCampo:"206817",compresion:"12897",
   repSardLimp:"12525",demPare:"215569",demLinea:"12853"

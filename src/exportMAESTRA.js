@@ -69,7 +69,7 @@ async function exportMAESTRA(P = {}, R = [], T = [], sumLat = [], sumTrans = [],
 
   /* R1-R4: encabezado */
   rows.push(["HOJA MAESTRA - PANEL DE CONTROL UNICO"]);
-  rows.push(["EMPRESA PUBLICA DE ALCANTARILLADO DE SANTANDER - AMCaudales"]);
+  rows.push(["SISTEMA DE ALCANTARILLADO - PRESUPUESTO OFICIAL - AMCaudales"]);
   rows.push(["Exportado desde AMCaudales v36 Pro"]);
   rows.push([]);
 
@@ -383,7 +383,7 @@ async function exportMAESTRA(P = {}, R = [], T = [], sumLat = [], sumTrans = [],
     // Fila 1: Empresa
     wsPb.mergeCells('A1:F1');
     var c1 = wsPb.getCell('A1');
-    c1.value = 'EMPRESA PUBLICA DE ALCANTARILLADO DE SANTANDER S.A. E.S.P.';
+    c1.value = (P.entidad || P.empresa || 'SISTEMA DE ALCANTARILLADO - PRESUPUESTO OFICIAL').toUpperCase();
     c1.font  = pbFont(true, 12, 'FFFFFFFF');
     c1.fill  = pbFill('FF003B73');
     c1.alignment = { horizontal:'center', vertical:'middle' };
@@ -399,7 +399,7 @@ async function exportMAESTRA(P = {}, R = [], T = [], sumLat = [], sumTrans = [],
     // Fila 10: Subgerencia
     try { wsPb.mergeCells('A10:F10'); } catch(e) {}
     var c10 = wsPb.getCell('A10');
-    c10.value = 'SUBGERENCIA DE ALCANTARILLADO';
+    c10.value = (P.dependencia || 'SUBGERENCIA DE INFRAESTRUCTURA Y ALCANTARILLADO').toUpperCase();
     c10.font  = pbFont(true, 11, 'FFFFFFFF');
     c10.fill  = pbFill('FF003B73');
     c10.alignment = { horizontal:'center', vertical:'middle' };

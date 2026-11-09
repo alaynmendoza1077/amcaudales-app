@@ -350,6 +350,120 @@ export default function CalcTab(props){
     {(sub==="perfil" || props.isExport)?function(){
       if(dR.length<1)return <div className="c"><p style={{color:"#7088A8"}}>Minimo 1 tramo necesario</p></div>;
       
+      // Auditoría técnica completa de cotas y pozos según RAS 2017
+      var pozData = calcPozosCompleto(R, T, P);
+      var pzMap = {};
+      (pozData.pz || []).forEach(function(p){ if(p && p.nodo) pzMap[p.nodo] = p; });
+
+      // Helper universal para encadenar y orientar tramos de forma continua e hidráulicamente consistente
+      var buildContinuousChain = function(pipesList) {
+        if (!Array.isArray(pipesList) || pipesList.length === 0) return [];
+        if (pipesList.length === 1) {
+          var p0 = Object.assign({}, pipesList[0]);
+          if (String(p0.de).trim() === String(p0.a).trim()) {
+            p0.effectiveDe = String(p0.de).trim() + " (Entrada)";
+            p0.effectiveA = String(p0.a).trim();
+          } else {
+            p0.effectiveDe = String(p0.de).trim();
+            p0.effectiveA = String(p0.a).trim();
+          }
+          p0.effectiveCrDE = p0.crDE;
+          p0.effectiveCrA = p0.crA;
+          p0.effectiveCfDE = p0.cfDE;
+          p0.effectiveCfA = p0.cfA;
+          return [p0];
+        }
+
+        // Construir adyacencia de nodos y conteo de grados
+        var nodeDegree = {};
+        var pipeEdges = pipesList.map(function(p, pIdx) {
+          var u = String(p.de || "").trim();
+          var v = String(p.a || "").trim();
+          nodeDegree[u] = (nodeDegree[u] || 0) + 1;
+          nodeDegree[v] = (nodeDegree[v] || 0) + 1;
+          return {
+            idx: pIdx,
+            raw: p,
+            u: u,
+            v: v
+          };
+        });
+
+        // Encontrar nodos extremos (grado 1 en la selección)
+        var endpoints = Object.keys(nodeDegree).filter(function(k) { return nodeDegree[k] === 1; });
+        var startNode = null;
+
+        if (endpoints.length > 0) {
+          // Seleccionar como inicio el extremo más elevado en cota (aguas arriba)
+          var bestZ = -999999;
+          endpoints.forEach(function(ep) {
+            var pz = pzMap[ep];
+            var zVal = pz ? parseFloat(pz.cr || pz.cf || 0) : 0;
+            if (!pz) {
+              var touching = pipesList.find(function(p) { return String(p.de).trim() === ep || String(p.a).trim() === ep; });
+              if (touching) {
+                zVal = String(touching.de).trim() === ep ? parseFloat(touching.crDE || touching.cfDE || 0) : parseFloat(touching.crA || touching.cfA || 0);
+              }
+            }
+            if (zVal > bestZ) {
+              bestZ = zVal;
+              startNode = ep;
+            }
+          });
+        }
+
+        if (!startNode) {
+          // Si no hay grado 1 (ciclo o ruta cerrada), iniciar en el primer tramo
+          startNode = String(pipesList[0].de || "").trim();
+        }
+
+        // Recorrer el grafo desde startNode asegurando continuidad estricta
+        var orderedChain = [];
+        var visited = {};
+        var currentNode = startNode;
+
+        for (var step = 0; step < pipesList.length; step++) {
+          var nextEdge = pipeEdges.find(function(e) {
+            return !visited[e.idx] && (e.u === currentNode || e.v === currentNode);
+          });
+
+          if (!nextEdge) {
+            // Si hay tramos desconectados, tomar el siguiente disponible no visitado
+            nextEdge = pipeEdges.find(function(e) { return !visited[e.idx]; });
+            if (!nextEdge) break;
+            currentNode = nextEdge.u;
+          }
+
+          visited[nextEdge.idx] = true;
+          var rawP = Object.assign({}, nextEdge.raw);
+          var isForward = (nextEdge.u === currentNode);
+          var nextNode = isForward ? nextEdge.v : nextEdge.u;
+
+          if (isForward) {
+            rawP.effectiveDe = nextEdge.u;
+            rawP.effectiveA = nextNode;
+            rawP.effectiveCrDE = rawP.crDE;
+            rawP.effectiveCrA = rawP.crA;
+            rawP.effectiveCfDE = rawP.cfDE;
+            rawP.effectiveCfA = rawP.cfA;
+          } else {
+            // Invertir tramo para que la continuidad hidráulica fluya sin saltos
+            rawP.effectiveDe = nextEdge.v;
+            rawP.effectiveA = nextNode;
+            rawP.effectiveCrDE = rawP.crA;
+            rawP.effectiveCrA = rawP.crDE;
+            rawP.effectiveCfDE = rawP.cfA;
+            rawP.effectiveCfA = rawP.cfDE;
+            rawP.isFlipped = true;
+          }
+
+          orderedChain.push(rawP);
+          currentNode = nextNode;
+        }
+
+        return orderedChain;
+      };
+
       // Identificar colectores desde cabeceras
       var adjMap={}; dR.forEach(function(r){ adjMap[r.de]=r; });
       var allA={}; dR.forEach(function(r){ allA[r.a]=1; });
@@ -362,7 +476,8 @@ export default function CalcTab(props){
           vis2[cur2.id]=1; chain2.push(cur2); cur2=adjMap[cur2.a];
         }
         if(chain2.length>=1){
-          colectores.push({cab:cab, chain:chain2, len:chain2.reduce(function(s,r){return s+(r.L||0);},0)});
+          var continuousChain = buildContinuousChain(chain2);
+          colectores.push({cab:cab, chain:continuousChain, len:continuousChain.reduce(function(s,r){return s+(r.L||0);},0)});
         }
       });
       colectores.sort(function(a,b){ return b.len - a.len; });
@@ -371,36 +486,24 @@ export default function CalcTab(props){
       if (props.selMap && props.selMap.length > 0) {
         var selItems = props.selMap.filter(function(x){ return x; });
         if (selItems.length > 0) {
-          var customChain = [];
+          var matchedPipes = [];
           selItems.forEach(function(x){
+            var xId = x.id != null ? String(x.id).trim() : "";
             var xDe = String(x.de || x.DE1 || x.DE || "").trim().toLowerCase();
             var xA = String(x.a || x.A1 || x.A || "").trim().toLowerCase();
             var match = dR.find(function(r){
-              return String(r.de).trim().toLowerCase() === xDe && String(r.a).trim().toLowerCase() === xA;
+              if (xId !== "" && String(r.id).trim() === xId) return true;
+              var rDe = String(r.de || "").trim().toLowerCase();
+              var rA = String(r.a || "").trim().toLowerCase();
+              return (rDe === xDe && rA === xA) || (rDe === xA && rA === xDe);
             });
-            if(match) customChain.push(match);
-          });
-          if (customChain.length > 0) {
-            var deMap = {};
-            customChain.forEach(function(r){ deMap[r.de] = r; });
-            var allA_custom = {};
-            customChain.forEach(function(r){ allA_custom[r.a] = 1; });
-            var startNode = customChain[0].de;
-            customChain.forEach(function(r){
-              if (!allA_custom[r.de]) startNode = r.de;
-            });
-            var sortedChain = [];
-            var cur = deMap[startNode];
-            var vis = {};
-            while(cur && !vis[cur.id]) {
-              vis[cur.id] = 1;
-              sortedChain.push(cur);
-              cur = deMap[cur.a];
+            if(match && !matchedPipes.some(function(mp){ return mp.id === match.id; })) {
+              matchedPipes.push(match);
             }
-            customChain.forEach(function(r){
-              if(!vis[r.id]) { vis[r.id] = 1; sortedChain.push(r); }
-            });
-            customChain = sortedChain;
+          });
+
+          if (matchedPipes.length > 0) {
+            var customChain = buildContinuousChain(matchedPipes);
 
             colectores.unshift({
               cab: "RUTA PERSONALIZADA (Selección Visor)",
@@ -413,25 +516,25 @@ export default function CalcTab(props){
 
       var selIdx = props.perfilIdx || 0;
       if (selIdx >= colectores.length) selIdx = 0;
-      var chain = colectores.length > 0 ? colectores[selIdx].chain : dR.slice(0, Math.min(dR.length, 30));
-
-      // Auditoría técnica completa de cotas y pozos según RAS 2017
-      var pozData = calcPozosCompleto(R, T, P);
-      var pzMap = {};
-      (pozData.pz || []).forEach(function(p){ if(p && p.nodo) pzMap[p.nodo] = p; });
+      var chain = colectores.length > 0 ? colectores[selIdx].chain : buildContinuousChain(dR.slice(0, Math.min(dR.length, 30)));
 
       var xAcc = 0;
       var profileNodes = [];
       chain.forEach(function(r, i){
-        var nodeName = r.de;
-        var pzObj = pzMap[nodeName];
-        var cr = pzObj ? parseFloat(pzObj.cr) : parseFloat(r.crDE);
-        var cf = pzObj ? parseFloat(pzObj.cf) : parseFloat(r.cfDE);
-        if(isNaN(cr)) cr = parseFloat(r.crDE) || 0;
-        if(isNaN(cf)) cf = parseFloat(r.cfDE) || 0;
+        var nodeName = r.effectiveDe || r.de;
+        // Evitar que dos nodos consecutivos tengan el mismo nombre si provienen de datos duplicados
+        if (i > 0 && nodeName === profileNodes[i-1].name) {
+          nodeName = (r.effectiveA || r.a) + " (N" + (i + 1) + ")";
+        }
+
+        var pzObj = pzMap[nodeName] || pzMap[r.effectiveDe] || pzMap[r.de];
+        var cr = pzObj ? parseFloat(pzObj.cr) : parseFloat(r.effectiveCrDE != null ? r.effectiveCrDE : r.crDE);
+        var cf = pzObj ? parseFloat(pzObj.cf) : parseFloat(r.effectiveCfDE != null ? r.effectiveCfDE : r.cfDE);
+        if(isNaN(cr)) cr = parseFloat(r.effectiveCrDE != null ? r.effectiveCrDE : r.crDE) || 0;
+        if(isNaN(cf)) cf = parseFloat(r.effectiveCfDE != null ? r.effectiveCfDE : r.cfDE) || 0;
         var prof = +(cr - cf).toFixed(2);
-        var cfDE_out = parseFloat(r.cfDE);
-        var cfA_in = i > 0 ? parseFloat(chain[i-1].cfA) : null;
+        var cfDE_out = parseFloat(r.effectiveCfDE != null ? r.effectiveCfDE : r.cfDE);
+        var cfA_in = i > 0 ? parseFloat(chain[i-1].effectiveCfA != null ? chain[i-1].effectiveCfA : chain[i-1].cfA) : null;
         var drop = (cfA_in != null && !isNaN(cfA_in) && !isNaN(cfDE_out)) ? +(cfA_in - cfDE_out).toFixed(2) : 0;
 
         profileNodes.push({
@@ -452,12 +555,16 @@ export default function CalcTab(props){
         xAcc += parseFloat(r.L) || 10;
 
         if (i === chain.length - 1) {
-          var endNodeName = r.a;
-          var endPzObj = pzMap[endNodeName];
-          var endCr = endPzObj ? parseFloat(endPzObj.cr) : parseFloat(r.crA);
-          var endCf = endPzObj ? parseFloat(endPzObj.cf) : parseFloat(r.cfA);
-          if(isNaN(endCr)) endCr = parseFloat(r.crA) || 0;
-          if(isNaN(endCf)) endCf = parseFloat(r.cfA) || 0;
+          var endNodeName = r.effectiveA || r.a;
+          if (endNodeName === nodeName) {
+            endNodeName = String(r.effectiveA || r.a) + " (Final)";
+          }
+
+          var endPzObj = pzMap[endNodeName] || pzMap[r.effectiveA] || pzMap[r.a];
+          var endCr = endPzObj ? parseFloat(endPzObj.cr) : parseFloat(r.effectiveCrA != null ? r.effectiveCrA : r.crA);
+          var endCf = endPzObj ? parseFloat(endPzObj.cf) : parseFloat(r.effectiveCfA != null ? r.effectiveCfA : r.cfA);
+          if(isNaN(endCr)) endCr = parseFloat(r.effectiveCrA != null ? r.effectiveCrA : r.crA) || 0;
+          if(isNaN(endCf)) endCf = parseFloat(r.effectiveCfA != null ? r.effectiveCfA : r.cfA) || 0;
           var endProf = +(endCr - endCf).toFixed(2);
 
           profileNodes.push({
@@ -469,7 +576,7 @@ export default function CalcTab(props){
             prof: endProf,
             pz: endPzObj,
             cfDE_out: null,
-            cfA_in: parseFloat(r.cfA),
+            cfA_in: parseFloat(r.effectiveCfA != null ? r.effectiveCfA : r.cfA),
             drop: 0,
             pipeOut: null,
             pipeIn: r
@@ -578,14 +685,16 @@ export default function CalcTab(props){
               var n2 = profileNodes[ci+1];
               if(!n1 || !n2) return null;
               var x1 = sx(n1.x); var x2 = sx(n2.x);
-              var y1b = sy(r.cfDE); var y2b = sy(r.cfA);
+              var curCfDE = r.effectiveCfDE != null ? r.effectiveCfDE : r.cfDE;
+              var curCfA = r.effectiveCfA != null ? r.effectiveCfA : r.cfA;
+              var y1b = sy(curCfDE); var y2b = sy(curCfA);
               var diamM = (parseFloat(r.D) || 0.2);
               if(diamM > 10) diamM = diamM / 1000;
-              var y1c = sy(parseFloat(r.cfDE) + diamM);
-              var y2c = sy(parseFloat(r.cfA) + diamM);
+              var y1c = sy(parseFloat(curCfDE) + diamM);
+              var y2c = sy(parseFloat(curCfA) + diamM);
               var tirM = Math.min(diamM, (parseFloat(r.Y) || 0) / 1000);
-              var y1w = sy(parseFloat(r.cfDE) + tirM);
-              var y2w = sy(parseFloat(r.cfA) + tirM);
+              var y1w = sy(parseFloat(curCfDE) + tirM);
+              var y2w = sy(parseFloat(curCfA) + tirM);
 
               var midX = (x1 + x2) / 2;
               var midYb = (y1b + y2b) / 2;

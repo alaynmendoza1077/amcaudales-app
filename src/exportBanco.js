@@ -90,10 +90,10 @@ export async function exportBancoExcel(P = {}, usedItems = [], capTot = {}, cd =
       ws.addRow([]);
     }
 
-    // Fila 1: Título Empresa
+    // Fila 1: Título Entidad / Empresa
     ws.mergeCells('A1:F1');
     const r1 = ws.getCell('A1');
-    r1.value = 'EMPRESA PUBLICA DE ALCANTARILLADO DE SANTANDER S.A. E.S.P.';
+    r1.value = (P.entidad || P.empresa || 'SISTEMA DE ALCANTARILLADO - PRESUPUESTO OFICIAL').toUpperCase();
     r1.font = fontWhiteBold(12);
     r1.alignment = { horizontal: 'center', vertical: 'middle' };
     r1.fill = fillHeader;
@@ -109,7 +109,7 @@ export async function exportBancoExcel(P = {}, usedItems = [], capTot = {}, cd =
     // Fila 10: Subgerencia
     ws.mergeCells('A10:F10');
     const r10 = ws.getCell('A10');
-    r10.value = 'SUBGERENCIA DE ALCANTARILLADO';
+    r10.value = (P.dependencia || 'SUBGERENCIA DE INFRAESTRUCTURA Y ALCANTARILLADO').toUpperCase();
     r10.font = fontWhiteBold(11);
     r10.alignment = { horizontal: 'center', vertical: 'middle' };
     r10.fill = fillHeader;

@@ -900,10 +900,8 @@ export function AuthProvider({ children }) {
         user_metadata: {
           full_name: isAlayn
             ? 'Ing. Alayn Mendoza'
-            : (isEmpas ? 'EMPAS S.A. E.S.P.' : (rawEmail.includes('@') ? rawEmail.split('@')[0].toUpperCase() : rawEmail.toUpperCase())),
-          company: isEmpas
-            ? 'Empresa Pública de Alcantarillado de Santander'
-            : 'Ingeniería Hidráulica AMC',
+            : (rawEmail.includes('@') ? rawEmail.split('@')[0].toUpperCase() : rawEmail.toUpperCase()),
+          company: 'Ingeniería Hidráulica AMC',
           plan: 'pro'
         }
       };
