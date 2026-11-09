@@ -497,7 +497,7 @@ export default function ReposicionModule({ onBack, initialData }){
           })
           .catch((err) => {
             console.error('Error guardando en la Nube:', err);
-            alert("Error al guardar en la nube. Verifica tu conexión.");
+            alert(`⚠️ Error al guardar en la Nube:\n\n${err.message || 'Verifica tu conexión y sesión.'}`);
           });
       } else {
         alert("Modo Invitado: Inicia sesión para guardar proyectos en tu cuenta de la Nube.");
@@ -1146,7 +1146,7 @@ const handleBack = () => {
             alert("¡Proyecto cargado exitosamente desde la Nube!");
           } catch(err) {
             console.error(err);
-            alert("Error al restaurar proyecto desde la Nube.");
+            alert(`⚠️ Error al restaurar proyecto desde la Nube:\n\n${err.message || err}`);
           }
         }}
         onSaveCurrentProject={(title, forceOverwrite = false, customPayload = null) => {

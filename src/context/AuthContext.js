@@ -343,8 +343,32 @@ export function AuthProvider({ children }) {
 
     initializeAuth();
 
+    // Sincronización automática al volver a la pestaña en PC o Móvil
+    const handleVisibilityOrFocus = () => {
+      if (document.visibilityState === 'visible' && isMounted) {
+        if (isCloudConfigured && supabase) {
+          supabase.auth.getSession().then(({ data }) => {
+            if (data?.session?.user && !sessionApplied) {
+              applyUserSession(data.session, 'visibility_resume');
+            } else if (data?.session) {
+              setSession(data.session);
+            }
+          }).catch(() => {});
+        }
+        const currentUser = user || (localStorage.getItem('amcaudales_auth_user') ? JSON.parse(localStorage.getItem('amcaudales_auth_user')) : null);
+        if (currentUser?.id) {
+          fetchUserProjects(currentUser.id, session).catch(() => {});
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+    window.addEventListener('focus', handleVisibilityOrFocus);
+
     return () => {
       isMounted = false;
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+      window.removeEventListener('focus', handleVisibilityOrFocus);
       if (subscription?.unsubscribe) {
         subscription.unsubscribe();
       }
@@ -572,6 +596,24 @@ export function AuthProvider({ children }) {
                 .filter(p => p && p.id && !String(p.title || '').startsWith('AUTH_ACCOUNT:'))
                 .map(p => ({ ...p, isCloud: true }));
             }
+          }
+
+          // 3. Filtro adicional por owner_email en project_data si no se hallaron por ID
+          if (cloudList.length === 0 && userEmail) {
+            try {
+              const { data: emailData } = await supabase
+                .from('projects')
+                .select('id, title, updated_at, created_at, user_id')
+                .filter('project_data->>owner_email', 'eq', userEmail.toLowerCase())
+                .order('updated_at', { ascending: false });
+
+              if (Array.isArray(emailData) && emailData.length > 0) {
+                const freshFromEmail = emailData
+                  .filter(p => p && p.id && !String(p.title || '').startsWith('AUTH_ACCOUNT:'))
+                  .map(p => ({ ...p, isCloud: true }));
+                cloudList = [...cloudList, ...freshFromEmail];
+              }
+            } catch (e) {}
           }
         }
       } catch (err) {
@@ -936,7 +978,24 @@ export function AuthProvider({ children }) {
     } else {
       existingList.unshift(updatedObj);
     }
-    localStorage.setItem(key, JSON.stringify(existingList));
+
+    try {
+      localStorage.setItem(key, JSON.stringify(existingList));
+    } catch (quotaErr) {
+      console.warn('LocalStorage saturado (cuota 5MB). Guardando índice de metadatos ligero:', quotaErr);
+      try {
+        // En caso de proyectos pesados con GIS / SWMM, salvar solo metadatos para evitar QuotaExceededError
+        const lightweightList = existingList.map(p => ({
+          id: p.id,
+          title: p.title,
+          updated_at: p.updated_at,
+          isCloud: p.isCloud
+        }));
+        localStorage.setItem(key, JSON.stringify(lightweightList));
+      } catch (e) {
+        console.warn('No se pudo guardar ni índice ligero local:', e);
+      }
+    }
     return updatedObj;
   };
 
@@ -948,7 +1007,7 @@ export function AuthProvider({ children }) {
     try {
       localStorage.setItem('AMC_current_project_state', JSON.stringify(projectDataPayload));
     } catch (e) {
-      console.warn('No se pudo guardar AMC_current_project_state:', e);
+      console.warn('No se pudo guardar AMC_current_project_state (posible cuota excedida):', e);
     }
 
     if (isGuest) {
@@ -963,11 +1022,20 @@ export function AuthProvider({ children }) {
     if (isCloudConfigured && supabase) {
       try {
         const { data: sessData } = await supabase.auth.getSession();
-        if (sessData?.session) {
+        if (sessData?.session?.user) {
           activeSession = sessData.session;
           setSession(activeSession);
+        } else {
+          // Intentar refresh transparente del token si la pestaña fue reanudada en móvil o PC
+          const { data: refData } = await supabase.auth.refreshSession();
+          if (refData?.session?.user) {
+            activeSession = refData.session;
+            setSession(activeSession);
+          }
         }
-      } catch (e) {}
+      } catch (e) {
+        console.warn('Verificación sesión en Supabase:', e);
+      }
     }
 
     const realUserId = (activeSession?.user?.id && isValidUUID(activeSession.user.id))
@@ -978,13 +1046,6 @@ export function AuthProvider({ children }) {
     const canSaveToSupabase = Boolean(isCloudConfigured && supabase);
 
     if (canSaveToSupabase) {
-      if (!activeSession?.user?.id) {
-        const localTargetId = (existingProjectId && isValidUUID(existingProjectId)) ? existingProjectId : generateUUID();
-        saveLocalProject(effectiveUser.id, localTargetId, title, timestamp, projectDataPayload);
-        await fetchUserProjects(effectiveUser.id, null);
-        throw new Error('⚠️ Tu navegador en este computador no tiene la sesión de Supabase conectada. Por favor haz clic en "Conectar con Google" en la barra superior o inicia sesión con Google para sincronizar proyectos entre computadores.');
-      }
-
       const cloudOnlyList = cloudProjects.filter(p => p.isCloud);
       const isUpdatingCurrentCloudProj = existingProjectId && isValidUUID(existingProjectId) && cloudOnlyList.some(p => p.id === existingProjectId);
       let targetProjId = (existingProjectId && isValidUUID(existingProjectId)) ? existingProjectId : generateUUID();
@@ -1006,7 +1067,7 @@ export function AuthProvider({ children }) {
         }
       }
 
-      // Asegurar que project_data NUNCA sea null ni undefined (para cumplir restricción not-null en Postgres)
+      // Asegurar que project_data NUNCA sea null ni undefined
       let validPayload = projectDataPayload;
       if (!validPayload || typeof validPayload !== 'object') {
         try {
@@ -1018,6 +1079,14 @@ export function AuthProvider({ children }) {
         validPayload = { title, created_at: new Date().toISOString(), version: '3.0' };
       }
 
+      // Inyectar el email del propietario en project_data para recuperación garantizada multi-dispositivo
+      const enrichedPayload = {
+        ...validPayload,
+        owner_email: effectiveUser.email || (activeSession?.user?.email) || null,
+        owner_id: realUserId,
+        saved_from_client: 'AMCaudales Pro v37'
+      };
+
       try {
         const { data, error } = await supabase
           .from('projects')
@@ -1026,27 +1095,42 @@ export function AuthProvider({ children }) {
             user_id: realUserId,
             title,
             updated_at: timestamp,
-            project_data: validPayload
+            project_data: enrichedPayload
           })
           .select();
 
         if (error) {
           console.error('Error Supabase upsert:', error);
+          // Si no había sesión activa en Supabase y RLS bloqueó la escritura
+          if (!activeSession?.user?.id) {
+            try { saveLocalProject(effectiveUser.id, targetProjId, title, timestamp, validPayload); } catch(e){}
+            await fetchUserProjects(effectiveUser.id, null);
+            throw new Error(`⚠️ Sesión desconectada de Supabase en este equipo (${error.message}). Por favor inicia sesión con Google en este computador/móvil para sincronizar proyectos en la Nube.`);
+          }
           throw new Error('Error al sincronizar con Supabase: ' + (error.message || JSON.stringify(error)));
         }
 
-        if (data && data.length > 0) {
+        try {
           saveLocalProject(realUserId, targetProjId, title, timestamp, validPayload);
-          await fetchUserProjects(realUserId, activeSession);
+        } catch(e) {}
+        await fetchUserProjects(realUserId, activeSession);
+
+        if (data && data.length > 0) {
           return { ...data[0], isCloud: true };
         }
+        return { id: targetProjId, title, updated_at: timestamp, isCloud: true };
       } catch (err) {
         throw err;
       }
     }
 
     const fallbackId = existingProjectId || 'proj_local_' + Date.now();
-    const localSaved = saveLocalProject(realUserId, fallbackId, title, timestamp, projectDataPayload);
+    let localSaved = null;
+    try {
+      localSaved = saveLocalProject(realUserId, fallbackId, title, timestamp, projectDataPayload);
+    } catch(e) {
+      localSaved = { id: fallbackId, title, updated_at: timestamp, isCloud: false };
+    }
     await fetchUserProjects(realUserId, activeSession);
     return localSaved;
   };
@@ -1060,13 +1144,46 @@ export function AuthProvider({ children }) {
       if (rawCurrent) return parsePayload(rawCurrent);
     }
 
+    let supabaseErrorMsg = '';
+
     if (!isGuest && isCloudConfigured && supabase && isValidUUID(projectId)) {
       try {
+        // Verificar y refrescar token si es necesario antes de solicitar los datos
+        try {
+          const { data: sessCheck } = await supabase.auth.getSession();
+          if (!sessCheck?.session?.user) {
+            await supabase.auth.refreshSession();
+          }
+        } catch(e) {}
+
         const { data, error } = await supabase
           .from('projects')
           .select('*')
           .eq('id', projectId)
           .single();
+
+        if (error) {
+          console.warn('Error Supabase select por id:', error.message);
+          supabaseErrorMsg = error.message;
+
+          // Intento de contingencia: si .single() falló por 0 o múltiples filas, intentar sin .single()
+          const { data: multiData, error: multiErr } = await supabase
+            .from('projects')
+            .select('*')
+            .eq('id', projectId)
+            .limit(1);
+
+          if (!multiErr && Array.isArray(multiData) && multiData.length > 0) {
+            const row = multiData[0];
+            const resPayload = parsePayload(row.project_data || row);
+            if (resPayload) {
+              if (resPayload.P) {
+                resPayload.P.cloudProjectId = projectId;
+              }
+              return resPayload;
+            }
+          }
+        }
 
         if (!error && data) {
           const resPayload = parsePayload(data.project_data || data);
@@ -1078,7 +1195,8 @@ export function AuthProvider({ children }) {
           }
         }
       } catch (e) {
-        console.warn('Error fetching cloud project, searching local fallback:', e);
+        console.warn('Excepción al consultar proyecto en la Nube:', e);
+        supabaseErrorMsg = e.message;
       }
     }
 
@@ -1105,7 +1223,11 @@ export function AuthProvider({ children }) {
       }
     }
 
-    throw new Error('Proyecto no encontrado en la nube ni en almacenamiento local.');
+    if (supabaseErrorMsg) {
+      throw new Error(`Error de Supabase al abrir el proyecto: ${supabaseErrorMsg}. Si cambiaste de equipo, verifica que iniciaste sesión con la misma cuenta de Google.`);
+    }
+
+    throw new Error('Proyecto no encontrado en la nube ni en almacenamiento local de este computador/móvil.');
   };
 
   const deleteProjectFromCloud = async (projectId) => {

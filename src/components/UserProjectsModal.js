@@ -80,7 +80,7 @@ export default function UserProjectsModal({ isOpen, onClose, onLoadProject, onSa
         onClose();
       }, 700);
     } catch (err) {
-      showNotification(`Error: ${err.message}`, 'error', 4000);
+      showNotification(`⚠️ Error al abrir proyecto: ${err.message}`, 'error', 7000);
     } finally {
       setLoading(false);
     }
@@ -817,8 +817,8 @@ export default function UserProjectsModal({ isOpen, onClose, onLoadProject, onSa
                       </div>
                     </div>
 
-                    {/* Acciones del Proyecto */}
-                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexShrink: 0 }}>
+                    {/* Acciones del Proyecto (Wrap para móviles) */}
+                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
                       <button
                         onClick={() => handleSelectProject(p.id)}
                         disabled={loading || deletingId === p.id}
@@ -924,11 +924,13 @@ const cardStyle = {
   border: '1px solid rgba(59, 130, 246, 0.35)',
   borderRadius: '20px',
   boxShadow: '0 25px 60px rgba(0, 0, 0, 0.85), 0 0 40px rgba(59, 130, 246, 0.15)',
-  padding: '24px',
+  padding: '20px',
   color: '#f0f4f8',
   fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
   display: 'flex',
-  flexDirection: 'column'
+  flexDirection: 'column',
+  boxSizing: 'border-box',
+  overflowX: 'hidden'
 };
 
 const headerStyle = {
@@ -1223,7 +1225,8 @@ const projectCardStyle = {
   borderRadius: '10px',
   border: '1px solid rgba(255, 255, 255, 0.08)',
   transition: 'border 0.2s',
-  gap: '10px'
+  gap: '10px',
+  flexWrap: 'wrap'
 };
 
 const projTitleStyle = {
