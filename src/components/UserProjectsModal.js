@@ -15,6 +15,7 @@ export default function UserProjectsModal({ isOpen, onClose, onLoadProject, onSa
     userPlan,
     isCloudConfigured,
     auditCloudConnection,
+    forceSyncAllProjectsFromCloud,
     refreshProjects,
     cleanLocalDuplicates
   } = useAuth();
@@ -252,8 +253,15 @@ export default function UserProjectsModal({ isOpen, onClose, onLoadProject, onSa
       return;
     }
 
+    const isProOrAdmin = Boolean(
+      user?.isAdmin ||
+      userPlan === 'pro' ||
+      user?.email?.toLowerCase().includes('alaynmendoza') ||
+      user?.email?.toLowerCase().includes('admin')
+    );
+
     // 2. Si es usuario autenticado con Plan Gratis, verificar límite de 1 proyecto
-    if (userPlan === 'free' && !user?.isAdmin && cloudCount >= 1) {
+    if (!isProOrAdmin && userPlan === 'free' && cloudCount >= 1) {
       const existing = cloudProjects.find(p => p.isCloud);
       setOverwriteConfirm({
         existingProject: existing,
@@ -723,9 +731,57 @@ export default function UserProjectsModal({ isOpen, onClose, onLoadProject, onSa
                 <div>• Plan Actual: <strong>{auditResult.userPlan}</strong></div>
                 <div>• Proyectos en Nube: <strong>{auditResult.cloudProjectsCount}</strong> | Locales: <strong>{auditResult.localProjectsCount}</strong></div>
                 {auditResult.totalTableProjects !== undefined && (
-                  <div>• Total Registros en Base de Datos: <strong>{auditResult.totalTableProjects}</strong></div>
+                  <div>• Total Registros en Base de Datos: <strong>{auditResult.totalTableProjects}</strong>
+                    {auditResult.engineeringProjectsCount !== undefined && (
+                      <span style={{ color: '#38bdf8', marginLeft: '6px' }}>
+                        ({auditResult.engineeringProjectsCount} proyectos de ingeniería • {auditResult.systemAccountsCount || 0} cuentas)
+                      </span>
+                    )}
+                  </div>
+                )}
+                {auditResult.engineeringTitles && auditResult.engineeringTitles.length > 0 && (
+                  <div style={{ margin: '4px 0', color: '#86efac' }}>
+                    • Proyectos detectados en BD: <strong>{auditResult.engineeringTitles.join(', ')}</strong>
+                  </div>
                 )}
                 {auditResult.details && <div style={{ color: '#fca5a5', marginTop: '4px' }}>Detalles: {auditResult.details}</div>}
+                
+                {/* Botón de Sincronización Forzada Total si hay registros en la base de datos */}
+                {auditResult.totalTableProjects > 0 && (
+                  <div style={{ marginTop: '8px' }}>
+                    <button
+                      onClick={async () => {
+                        setLoading(true);
+                        showNotification('Sincronizando todos los proyectos de la base de datos...', 'info', 0);
+                        try {
+                          if (typeof forceSyncAllProjectsFromCloud === 'function') {
+                            const res = await forceSyncAllProjectsFromCloud();
+                            showNotification(`¡${res.length} proyecto(s) cargado(s) exitosamente desde la Nube!`, 'success', 3500);
+                          }
+                        } catch(e) {
+                          showNotification('Error al forzar sincronización: ' + e.message, 'error', 4000);
+                        } finally {
+                          setLoading(false);
+                        }
+                      }}
+                      disabled={loading}
+                      style={{
+                        background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '6px',
+                        padding: '6px 12px',
+                        fontSize: '0.76rem',
+                        fontWeight: 'bold',
+                        cursor: 'pointer',
+                        boxShadow: '0 2px 8px rgba(16, 185, 129, 0.4)'
+                      }}
+                    >
+                      ⚡ Forzar Carga de Todos los Proyectos en Pantalla
+                    </button>
+                  </div>
+                )}
+
                 <div style={{ marginTop: '8px', padding: '6px 10px', background: 'rgba(59, 130, 246, 0.12)', borderRadius: '6px', borderLeft: '3px solid #38bdf8', color: '#93c5fd', fontSize: '0.73rem', lineHeight: '1.4' }}>
                   ℹ️ <strong>Sincronización Multi-PC:</strong> Los proyectos con etiqueta <span style={{ color: '#34d399', fontWeight: 'bold' }}>☁️ Nube</span> se sincronizan en todos tus computadores. En tu segundo PC, simplemente inicia sesión con Google (<strong>alaynmendoza@gmail.com</strong>) y aparecerán aquí automáticamente.
                 </div>

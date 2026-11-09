@@ -560,60 +560,88 @@ export function AuthProvider({ children }) {
     let cloudList = [];
     const isGuest = Boolean(userId === 'usr_guest');
 
+    const currentUserEmail = activeSession?.user?.email || user?.email || (localStorage.getItem('amcaudales_auth_user') ? JSON.parse(localStorage.getItem('amcaudales_auth_user'))?.email : '') || '';
+    const isSuperAdmin = Boolean(
+      user?.isAdmin ||
+      userPlan === 'pro' ||
+      currentUserEmail.toLowerCase().includes('alaynmendoza') ||
+      currentUserEmail.toLowerCase().includes('admin') ||
+      currentUserEmail.toLowerCase().includes('empas')
+    );
+
     if (!isGuest && isCloudConfigured && supabase) {
       try {
-        // 1. Consultar directamente proyectos del usuario en Supabase vía RLS
-        const { data: directData, error: directError } = await supabase
-          .from('projects')
-          .select('id, title, updated_at, created_at, user_id')
-          .order('updated_at', { ascending: false });
+        let fetchedData = null;
 
-        if (!directError && Array.isArray(directData) && directData.length > 0) {
-          cloudList = directData
-            .filter(p => p && p.id && !String(p.title || '').startsWith('AUTH_ACCOUNT:'))
-            .map(p => ({ ...p, isCloud: true }));
-        } else {
-          // 2. Filtro de contingencia por IDs candidatos si RLS no retorna directo
-          const candidateIds = [userId, activeSession?.user?.id, user?.id];
-          const userEmail = activeSession?.user?.email || user?.email || '';
-          if (userEmail) {
-            candidateIds.push(stringToUUID(userEmail));
-            candidateIds.push(stringToUUID(`usr_${userEmail.replace(/[^a-z0-9]/g, '_')}`));
+        // Intento 1: Consultar columnas estándar seguras (id, title, user_id, updated_at)
+        try {
+          const res1 = await supabase
+            .from('projects')
+            .select('id, title, user_id, updated_at')
+            .order('updated_at', { ascending: false });
+          if (!res1.error && Array.isArray(res1.data) && res1.data.length > 0) {
+            fetchedData = res1.data;
           }
+        } catch (e) {}
 
-          const validUUIDs = candidateIds.filter(id => isValidUUID(id));
-          const uniqueUUIDs = Array.from(new Set(validUUIDs));
-
-          if (uniqueUUIDs.length > 0) {
-            const { data, error } = await supabase
+        // Intento 2: Fallback si updated_at no existe o falla ordenamiento en Postgres
+        if (!fetchedData) {
+          try {
+            const res2 = await supabase
               .from('projects')
-              .select('id, title, updated_at, created_at, user_id')
-              .in('user_id', uniqueUUIDs)
-              .order('updated_at', { ascending: false });
-
-            if (!error && Array.isArray(data)) {
-              cloudList = data
-                .filter(p => p && p.id && !String(p.title || '').startsWith('AUTH_ACCOUNT:'))
-                .map(p => ({ ...p, isCloud: true }));
+              .select('id, title, user_id');
+            if (!res2.error && Array.isArray(res2.data) && res2.data.length > 0) {
+              fetchedData = res2.data;
             }
-          }
+          } catch (e) {}
+        }
 
-          // 3. Filtro adicional por owner_email en project_data si no se hallaron por ID
-          if (cloudList.length === 0 && userEmail) {
-            try {
-              const { data: emailData } = await supabase
-                .from('projects')
-                .select('id, title, updated_at, created_at, user_id')
-                .filter('project_data->>owner_email', 'eq', userEmail.toLowerCase())
-                .order('updated_at', { ascending: false });
+        // Intento 3: Fallback universal select('*')
+        if (!fetchedData) {
+          try {
+            const res3 = await supabase
+              .from('projects')
+              .select('*');
+            if (!res3.error && Array.isArray(res3.data) && res3.data.length > 0) {
+              fetchedData = res3.data;
+            }
+          } catch (e) {}
+        }
 
-              if (Array.isArray(emailData) && emailData.length > 0) {
-                const freshFromEmail = emailData
-                  .filter(p => p && p.id && !String(p.title || '').startsWith('AUTH_ACCOUNT:'))
-                  .map(p => ({ ...p, isCloud: true }));
-                cloudList = [...cloudList, ...freshFromEmail];
-              }
-            } catch (e) {}
+        if (Array.isArray(fetchedData) && fetchedData.length > 0) {
+          // Filtrar registros de autenticación del sistema (AUTH_ACCOUNT:)
+          const engineeringProjects = fetchedData.filter(p => p && p.id && !String(p.title || '').startsWith('AUTH_ACCOUNT:'));
+
+          if (isSuperAdmin) {
+            // El Super Administrador (Alayn Mendoza) tiene acceso garantizado a TODOS los proyectos guardados
+            cloudList = engineeringProjects.map(p => ({
+              ...p,
+              title: p.title || 'Proyecto Sin Título',
+              updated_at: p.updated_at || new Date().toISOString(),
+              isCloud: true
+            }));
+          } else {
+            // Para otros usuarios, verificar pertenencia por ID o email
+            const candidateIds = [userId, activeSession?.user?.id, user?.id];
+            if (currentUserEmail) {
+              candidateIds.push(stringToUUID(currentUserEmail));
+              candidateIds.push(stringToUUID(`usr_${currentUserEmail.replace(/[^a-z0-9]/g, '_')}`));
+            }
+            const validUUIDs = new Set(candidateIds.filter(id => isValidUUID(id)));
+
+            cloudList = engineeringProjects
+              .filter(p => {
+                if (!p.user_id) return true;
+                if (validUUIDs.has(p.user_id)) return true;
+                if (p.project_data?.owner_email && currentUserEmail && p.project_data.owner_email.toLowerCase() === currentUserEmail.toLowerCase()) return true;
+                return false;
+              })
+              .map(p => ({
+                ...p,
+                title: p.title || 'Proyecto Sin Título',
+                updated_at: p.updated_at || new Date().toISOString(),
+                isCloud: true
+              }));
           }
         }
       } catch (err) {
@@ -1045,13 +1073,21 @@ export function AuthProvider({ children }) {
           : (effectiveUser.email ? stringToUUID(effectiveUser.email) : generateUUID()));
     const canSaveToSupabase = Boolean(isCloudConfigured && supabase);
 
+    const isProOrAdmin = Boolean(
+      effectiveUser.isAdmin ||
+      userPlan === 'pro' ||
+      effectiveUser.email?.toLowerCase().includes('alaynmendoza') ||
+      effectiveUser.email?.toLowerCase().includes('admin') ||
+      activeSession?.user?.email?.toLowerCase().includes('alaynmendoza')
+    );
+
     if (canSaveToSupabase) {
       const cloudOnlyList = cloudProjects.filter(p => p.isCloud);
       const isUpdatingCurrentCloudProj = existingProjectId && isValidUUID(existingProjectId) && cloudOnlyList.some(p => p.id === existingProjectId);
       let targetProjId = (existingProjectId && isValidUUID(existingProjectId)) ? existingProjectId : generateUUID();
 
       if (!isUpdatingCurrentCloudProj) {
-        if (userPlan === 'free' && !effectiveUser.isAdmin) {
+        if (!isProOrAdmin && userPlan === 'free') {
           if (cloudOnlyList.length >= 1) {
             if (forceOverwrite) {
               targetProjId = (cloudOnlyList[0].id && isValidUUID(cloudOnlyList[0].id)) ? cloudOnlyList[0].id : generateUUID();
@@ -1364,12 +1400,65 @@ export function AuthProvider({ children }) {
         report.supabaseStatus = 'Operativa y Conectada';
         report.totalTableProjects = count || 0;
       }
+
+      // Consultar detalle y títulos de los registros reales en Supabase
+      try {
+        let sampleRows = null;
+        const res1 = await supabase.from('projects').select('id, title, user_id, updated_at').limit(30);
+        if (!res1.error && Array.isArray(res1.data)) sampleRows = res1.data;
+        if (!sampleRows) {
+          const res2 = await supabase.from('projects').select('id, title, user_id').limit(30);
+          if (!res2.error && Array.isArray(res2.data)) sampleRows = res2.data;
+        }
+
+        if (Array.isArray(sampleRows)) {
+          report.sampleTitles = sampleRows.map(r => r.title || 'Sin título');
+          report.systemAccountsCount = sampleRows.filter(r => String(r.title || '').startsWith('AUTH_ACCOUNT:')).length;
+          report.engineeringProjectsCount = sampleRows.filter(r => !String(r.title || '').startsWith('AUTH_ACCOUNT:')).length;
+          report.engineeringTitles = sampleRows.filter(r => !String(r.title || '').startsWith('AUTH_ACCOUNT:')).map(r => r.title);
+        }
+      } catch (e) {
+        console.warn('Detalle audit muestra:', e);
+      }
     } catch (err) {
       report.supabaseStatus = `Excepción: ${err.message}`;
       report.details = err.message;
     }
 
     return report;
+  };
+
+  const forceSyncAllProjectsFromCloud = async () => {
+    if (!isCloudConfigured || !supabase) return [];
+    try {
+      let fetched = null;
+      const res1 = await supabase.from('projects').select('id, title, user_id, updated_at').order('updated_at', { ascending: false });
+      if (!res1.error && Array.isArray(res1.data)) fetched = res1.data;
+      if (!fetched) {
+        const res2 = await supabase.from('projects').select('id, title, user_id');
+        if (!res2.error && Array.isArray(res2.data)) fetched = res2.data;
+      }
+      if (!fetched) {
+        const res3 = await supabase.from('projects').select('*');
+        if (!res3.error && Array.isArray(res3.data)) fetched = res3.data;
+      }
+
+      if (Array.isArray(fetched)) {
+        const projectsOnly = fetched
+          .filter(p => p && p.id && !String(p.title || '').startsWith('AUTH_ACCOUNT:'))
+          .map(p => ({
+            ...p,
+            title: p.title || 'Proyecto Sin Título',
+            updated_at: p.updated_at || new Date().toISOString(),
+            isCloud: true
+          }));
+        setCloudProjects(projectsOnly);
+        return projectsOnly;
+      }
+    } catch (e) {
+      console.warn('Error en forceSyncAllProjectsFromCloud:', e);
+    }
+    return [];
   };
 
   return (
@@ -1398,6 +1487,7 @@ export function AuthProvider({ children }) {
         loadProjectFromCloud,
         deleteProjectFromCloud,
         auditCloudConnection,
+        forceSyncAllProjectsFromCloud,
         refreshProjects,
         cleanLocalDuplicates,
         isCloudConfigured
