@@ -7,6 +7,7 @@ import proj4 from 'proj4';
 import shp from 'shpjs';
 import * as turf from '@turf/turf';
 import Drawing from 'dxf-writer';
+import { generarPoligonosVoronoiSync } from '../calcAreasAferentes';
 
 // Asegurar defs de proj4
 proj4.defs("EPSG:3116", "+proj=tmerc +lat_0=4.59620041666667 +lon_0=-74.0775079166667 +k=1 +x_0=1000000 +y_0=1000000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs");
@@ -76,6 +77,7 @@ export default function MapResumenTab({
 }) {
     const mapRef = useRef(null);
     const renderLayerRef = useRef(null);
+    const [mapReady, setMapReady] = useState(false);
 
     useEffect(() => {
         const handleResize = () => {
@@ -194,10 +196,12 @@ export default function MapResumenTab({
         let baseList = Array.isArray(autoAreasPoly) ? autoAreasPoly : (autoAreasPoly && Array.isArray(autoAreasPoly.features) ? autoAreasPoly.features : []);
         if ((!baseList || baseList.length === 0) && inpData && Array.isArray(inpData.verts) && inpData.verts.length > 0) {
             let grouped = {};
+            let deByKey = {};
             inpData.verts.forEach(v => {
                 let key = String(v.DE || v.SubName || v.IDNODO || v.Nombre || "").trim();
                 if (!key) return;
                 if (!grouped[key]) grouped[key] = [];
+                if (v.IDNODO && !deByKey[key]) deByKey[key] = String(v.IDNODO).trim();
                 let vx = cleanNumber(v.CoordX !== undefined ? v.CoordX : v.X);
                 let vy = cleanNumber(v.CoordY !== undefined ? v.CoordY : v.Y);
                 if (vx !== null && vy !== null) grouped[key].push([vx, vy]);
@@ -207,15 +211,37 @@ export default function MapResumenTab({
                 let ring = grouped[k];
                 if (ring.length >= 3) {
                     if (ring[0][0] !== ring[ring.length - 1][0] || ring[0][1] !== ring[ring.length - 1][1]) ring = [...ring, [...ring[0]]];
-                    let adMatch = inpData.ad ? inpData.ad.find(a => String(a.IDNODO || a.Subcatchment || a.Nombre || "").trim() === k || String(k).startsWith(String(a.IDNODO || "").trim() + "-")) : null;
+                    let resolvedDe = deByKey[k] || k;
+                    let adMatch = inpData.ad ? inpData.ad.find(a => String(a.IDNODO || a.Subcatchment || a.Nombre || "").trim() === resolvedDe || String(a.IDNODO || a.Subcatchment || a.Nombre || "").trim() === k) : null;
                     built.push({
                         type: "Feature",
-                        properties: { id: idx + 1, label: "Tramo " + k, de: k.split("-")[0] || k, tramoId: k, areaHa: adMatch && adMatch.AREACUENCA ? parseFloat(adMatch.AREACUENCA) : 0, TIPOCUENCA: adMatch?.TIPOCUENCA || "RESIDENCIAL", isCompleta: true },
+                        properties: { id: idx + 1, label: "Tramo " + k, de: resolvedDe, tramoId: k, areaHa: adMatch && adMatch.AREACUENCA ? parseFloat(adMatch.AREACUENCA) : 0, TIPOCUENCA: adMatch?.TIPOCUENCA || "RESIDENCIAL", isCompleta: true },
                         geometry: { type: "Polygon", coordinates: [ring] }
                     });
                 }
             });
             baseList = built;
+        }
+        if (!baseList || baseList.length === 0) {
+            try {
+                const { displayMap, rawPozos } = getDisplayData();
+                if (displayMap && displayMap.length > 0) {
+                    const enriched = displayMap.map(dm => {
+                        const key = String(dm.de || "").trim().toLowerCase() + "_" + String(dm.a || "").trim().toLowerCase();
+                        const matchT = Array.isArray(T) ? T.find(t => t && !t.sep && String(t.de || "").trim().toLowerCase() + "_" + String(t.a || "").trim().toLowerCase() === key) : null;
+                        const matchR = Array.isArray(R) ? R.find(r => r && !r.sep && String(r.de || "").trim().toLowerCase() + "_" + String(r.a || "").trim().toLowerCase() === key) : null;
+                        return {
+                            ...dm,
+                            areaParcial: (matchR && matchR.aT > 0) ? matchR.aT : ((matchT && matchT.areaParcial > 0) ? matchT.areaParcial : (dm.areaParcial || 0)),
+                            tipoArea: (matchT && matchT.tipoArea) || dm.tipoArea || "RESIDENCIAL"
+                        };
+                    });
+                    const syn = generarPoligonosVoronoiSync(enriched, rawPozos, 20.0);
+                    if (syn && Array.isArray(syn.features) && syn.features.length > 0) {
+                        baseList = syn.features;
+                    }
+                }
+            } catch (eSynRes) {}
         }
         return (baseList || []).map(feat => {
             if (!feat || !feat.geometry || !feat.geometry.coordinates) return null;
@@ -485,14 +511,15 @@ export default function MapResumenTab({
                 
                 if (feat.geometry && feat.geometry.coordinates) {
                     let areaHa = p.areaHa !== undefined ? p.areaHa : 0;
-                    let areaLabel = `<b>Área:</b> ${Number(areaHa).toFixed(3)} Ha`;
+                    let areaLabel = `<b>Área:</b> ${Number(areaHa).toFixed(4)} Ha`;
 
                     let polyLayer = L.geoJSON(feat, {
-                        style: { color: '#fb923c', weight: 2, fillColor: '#fdba74', fillOpacity: 0.4, pmIgnore: true }
+                        style: { color: '#fb923c', weight: 2, fillColor: '#fdba74', fillOpacity: 0.35, pmIgnore: true }
                     });
                     
-                polyLayer.bindTooltip(areaLabel, { permanent: true, direction: 'center', className: 'resumen-area-label' });
+                    polyLayer.bindTooltip(areaLabel, { permanent: true, direction: 'center', className: 'resumen-area-label' });
                     polyLayer.addTo(fg);
+                    try { polyLayer.bringToBack(); } catch (eb) {}
                 }
             });
         }
@@ -507,7 +534,7 @@ export default function MapResumenTab({
                     mapRef.current.invalidateSize();
                 }
                 if(typeof mapRef.current.fitBounds === 'function') {
-                    mapRef.current.fitBounds(fg.getBounds(), { padding: [30, 30] });
+                    mapRef.current.fitBounds(fg.getBounds(), { padding: [40, 40], maxZoom: 19 });
                 }
             }
         }, 500);
@@ -536,7 +563,7 @@ export default function MapResumenTab({
             // Notice t1 is inside run, so we handle it with isCancelled.
         };
 
-    }, [isActive, isExport, selMap, R, T, inpData, autoAreasPoly, showTramos, showPozos, showAreas, renderTick, localEpsg]);
+    }, [isActive, isExport, mapReady, selMap, R, T, inpData, autoAreasPoly, showTramos, showPozos, showAreas, renderTick, localEpsg]);
 
     const handleEpsgChange = (e) => {
         let val = e.target.value;
@@ -781,6 +808,7 @@ export default function MapResumenTab({
                 zoom={14}
                 style={{ height: '100%', width: '100%', background: '#0f172a', minHeight: isExport ? '750px' : undefined }}
                 ref={mapRef}
+                whenReady={() => setMapReady(true)}
                 zoomControl={true}
                 maxZoom={22}
             >

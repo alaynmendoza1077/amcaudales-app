@@ -55,11 +55,13 @@ export function exportLibro(P, R, T, inpData, autoAreasPoly) {
     let autoVertsMap = {};
     if (autoAreasPoly) {
         autoAreasPoly.forEach(feat => {
-            let nId = String(feat.properties.pozoId || feat.properties.id || "").trim();
+            if (!feat || !feat.properties) return;
+            let nId = String(feat.properties.de || feat.properties.IDNODO || feat.properties.pozoId || "").trim();
             if (!nId && feat.properties.label) {
                 let lbl = feat.properties.label; // e.g. "Tramo P1-P2"
                 nId = lbl.replace("Tramo ", "").split("-")[0];
             }
+            if (!nId && feat.properties.id) nId = String(feat.properties.id).trim();
             if (nId) {
                 autoAreaMap[nId] = feat.properties.areaHa;
                 if (feat.geometry) autoVertsMap[nId] = feat.geometry;

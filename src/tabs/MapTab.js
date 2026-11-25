@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { MapContainer, TileLayer, Polygon, FeatureGroup, useMap } from 'react-leaflet';
 import { cIDF, formatDiam } from '../engine';
 import { IDF } from '../constants';
-import { calcularAreas } from '../calcAreasAferentes';
+import { calcularAreas, generarPoligonosVoronoiSync } from '../calcAreasAferentes';
 import L from 'leaflet';
 import * as turf from '@turf/turf';
 import shp from 'shpjs';
@@ -420,8 +420,9 @@ const GeomanSetup = ({ sT, setSelTramos, tramosConCoordsRef, setBufferArea }) =>
   return null;
 };
 
-function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, setSelMap, autoAreasPoly, setAutoAreasPoly, isExport }) {
-      const [selTramos, setSelTramos] = useState([]); // Arreglo de datos crudos seleccionados
+function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, selMap, setSelMap, autoAreasPoly, setAutoAreasPoly, isExport }) {
+      const [selTramos, setSelTramos] = useState(() => (Array.isArray(selMap) && selMap.length > 0 ? selMap : []));
+      useEffect(() => { if (Array.isArray(selMap) && selMap.length > 0 && selTramos.length === 0) setSelTramos(selMap); }, [selMap]);
     const [bufferArea, setBufferArea] = useState(0);
     const [epsgCode, setEpsgCode] = useState(window.currentGlobalEpsg || "EPSG:3116");
 
@@ -432,7 +433,7 @@ function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, se
     };
 
   useEffect(() => {
-    if (setSelMap) setSelMap(selTramos.filter(t => t !== null));
+    if (setSelMap && (selTramos.length > 0 || !Array.isArray(selMap) || selMap.length === 0)) setSelMap(selTramos.filter(t => t !== null));
   }, [selTramos, setSelMap]);
   const mapBoundsRef = useRef(null);
 
@@ -442,7 +443,7 @@ function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, se
               if (mapRef.current && mapRef.current._mapPane) {
                   mapRef.current.invalidateSize();
                   if (mapBoundsRef.current && mapBoundsRef.current.isValid()) {
-                      mapRef.current.fitBounds(mapBoundsRef.current);
+                      mapRef.current.fitBounds(mapBoundsRef.current, { padding: [50, 50], maxZoom: 19 });
                   }
               }
           }, 300);
@@ -589,7 +590,15 @@ function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, se
       }
       if (!autoAreasPoly || autoAreasPoly.length === 0) return;
 
-      let fc = { type: "FeatureCollection", features: autoAreasPoly };
+      const normalizedAutoFeats = (Array.isArray(autoAreasPoly) ? autoAreasPoly : []).map(ft => {
+          if (!ft || !ft.geometry || !ft.geometry.coordinates) return null;
+          let cf = JSON.parse(JSON.stringify(ft));
+          const toW = (pt) => { if (!Array.isArray(pt) || pt.length < 2) return pt; let x = Number(pt[0]), y = Number(pt[1]); if (Math.abs(x) <= 180 && Math.abs(y) <= 90) return [x, y]; let ll = projectToLatLng(x, y); return [ll[0], ll[1]]; };
+          if (cf.geometry.type === 'Polygon') cf.geometry.coordinates = cf.geometry.coordinates.map(r => r.map(toW));
+          else if (cf.geometry.type === 'MultiPolygon') cf.geometry.coordinates = cf.geometry.coordinates.map(p => p.map(r => r.map(toW)));
+          return cf;
+      }).filter(Boolean);
+      let fc = { type: "FeatureCollection", features: normalizedAutoFeats };
       autoAreasLayerRef.current = L.geoJSON(fc, {
           style: function(feature) {
               return {
@@ -603,7 +612,7 @@ function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, se
           onEachFeature: function(feature, layer) {
               if (feature.properties && feature.properties.areaHa !== undefined) {
                   let label = feature.properties.label || feature.properties.pozoId || '';
-                  layer.bindTooltip(`${label}<br/><b>${feature.properties.areaHa.toFixed(2)} Ha</b>`, {
+                  layer.bindTooltip(`${label}<br/><b>${Number(feature.properties.areaHa || 0).toFixed(4)} Ha</b>`, {
                       permanent: true,
                       direction: 'center',
                       className: 'auto-area-tooltip'
@@ -614,12 +623,13 @@ function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, se
       if (verAutoAreas) {
           if (!mapRef.current.hasLayer(autoAreasLayerRef.current)) {
               autoAreasLayerRef.current.addTo(mapRef.current);
+              try { autoAreasLayerRef.current.bringToBack(); } catch(eb) {}
           }
           try {
               let b = autoAreasLayerRef.current.getBounds();
               if (b.isValid()) {
                   mapBoundsRef.current = b;
-                  if (mapLoaded) mapRef.current.fitBounds(b, { padding: [20, 20] });
+                  if (mapLoaded) mapRef.current.fitBounds(b, { padding: [50, 50], maxZoom: 19 });
               }
           } catch (e) {}
       }
@@ -629,21 +639,28 @@ function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, se
 
     const handleCalcularAreas = (modoSeleccionado) => {
         const coordinatedTramos = (tramosConCoordsRef.current && tramosConCoordsRef.current.length > 0 ? tramosConCoordsRef.current : (T || [])).map(tr => { if (!tr || (tr.coords && tr.coords.length >= 2)) return tr; let rawPz = (inpData && inpData.pozos && inpData.pozos.length > 0) ? inpData.pozos : (pozosDrawnRef.current || []); let p1 = rawPz.find(p => String(p.IdNodo || p.IDNODO || p.id || p.Nombre || "").trim().toLowerCase() === String(tr.de || "").trim().toLowerCase()); let p2 = rawPz.find(p => String(p.IdNodo || p.IDNODO || p.id || p.Nombre || "").trim().toLowerCase() === String(tr.a || "").trim().toLowerCase()); if (p1 && p2) { let x1 = parseNum(p1.CoordX !== undefined ? p1.CoordX : p1.x), y1 = parseNum(p1.CoordY !== undefined ? p1.CoordY : p1.y); let x2 = parseNum(p2.CoordX !== undefined ? p2.CoordX : p2.x), y2 = parseNum(p2.CoordY !== undefined ? p2.CoordY : p2.y); if (x1 && y1 && x2 && y2) { let ll1 = projectToLatLng(x1, y1), ll2 = projectToLatLng(x2, y2); return { ...tr, coords: [[ll1[1], ll1[0]], [ll2[1], ll2[0]]] }; } } return tr; });
+        const isGlobalBaseNetwork = !inpData && (!T || T.length === 0);
         let tramosObjetivo = [];
         
         if (modoSeleccionado) {
-            if (selTramos.length === 0) {
+            if (selTramos.filter(Boolean).length === 0 && (isGlobalBaseNetwork || coordinatedTramos.filter(t => t && !t.sep).length === 0)) {
                 alert("No hay ningún tramo seleccionado.");
                 return;
             }
             // Match selected tramos to their coordinated versions
-            tramosObjetivo = selTramos.map(st => {
+            const baseSelList = selTramos.filter(Boolean).length > 0 ? selTramos : coordinatedTramos.filter(t => t && !t.sep);
+            tramosObjetivo = baseSelList.map(st => {
                 if (!st) return null;
                 let found = coordinatedTramos.find(ct => String(ct.de).trim() === String(st.de).trim() && String(ct.a).trim() === String(st.a).trim());
                 return found || st;
             }).filter(t => t !== null);
         } else {
-            tramosObjetivo = coordinatedTramos.filter(t => t && !t.sep);
+            if (isGlobalBaseNetwork) {
+                if (selTramos.filter(Boolean).length === 0) { alert("Selecciona primero en el mapa el tramo o colector de tu proyecto (clic o Shift+Clic) antes de autogenerar las áreas."); return; }
+                tramosObjetivo = selTramos.filter(Boolean).map(st => coordinatedTramos.find(ct => String(ct.de).trim() === String(st.de).trim() && String(ct.a).trim() === String(st.a).trim()) || st);
+            } else {
+                tramosObjetivo = coordinatedTramos.filter(t => t && !t.sep);
+            }
             if (tramosObjetivo.length === 0) {
                 alert("No hay tramos en la red para calcular.");
                 return;
@@ -663,7 +680,7 @@ function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, se
                     setCalcProgress({ current: cur, total: tot });
                 }, radioInputVal);
             let tramosActualizados = [...T];
-            if (tramosActualizados.length === 0 && coordinatedTramos.length > 0) {
+            if (tramosActualizados.length === 0 && !isGlobalBaseNetwork && coordinatedTramos.length > 0) {
                 tramosActualizados = [...coordinatedTramos];
             }
             let totalArea = 0;
@@ -746,6 +763,10 @@ function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, se
                     }
                     
                     let geomPoli = ensureGeoJSON(res.areaPoli);
+                    if (!geomPoli && res.de && res.a) {
+                        const syn = generarPoligonosVoronoiSync([res], pozosParaAreas, radioInputVal);
+                        if (syn.features && syn.features[0]) { geomPoli = syn.features[0].geometry; if (!res.areaCalc) res.areaCalc = syn.features[0].properties.areaHa || 0; }
+                    }
                     if (geomPoli) {
                         features.push({
                             type: "Feature",
@@ -872,6 +893,8 @@ function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, se
       });
       
       osmCalles.addTo(map);
+      layerTramos.addTo(map);
+      layerPozos.addTo(map);
 
       let pozosToDraw = [];
       let tramosToDraw = [];
@@ -1010,6 +1033,11 @@ function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, se
                if (!e) e = lowerPozoMap[eId.toLowerCase()] || lowerPozoMap[eA.toLowerCase()];
             }
             
+            let fallbackTrCoords = (!s || !e) && inpData && Array.isArray(inpData.tr) ? (inpData.tr.find(it => String(it.de || it.DE || "").trim().toLowerCase() === sDe.toLowerCase() && String(it.a || it.A || "").trim().toLowerCase() === eA.toLowerCase())?.coords) : null;
+            if ((!s || !e) && Array.isArray(fallbackTrCoords) && fallbackTrCoords.length >= 2) {
+               s = s || { id: sDe, lat: fallbackTrCoords[0][0], lng: fallbackTrCoords[0][1], cota_terreno: r.cotaRasante || r.crDE || 0, cota_fondo: r.cotaFondo || r.cfDE || 0 };
+               e = e || { id: eA, lat: fallbackTrCoords[fallbackTrCoords.length - 1][0], lng: fallbackTrCoords[fallbackTrCoords.length - 1][1], cota_terreno: r.cotaRasanteA || r.crA || 0, cota_fondo: r.cotaFondoA || r.cfA || 0 };
+            }
             if (s && e && s.lat !== undefined && s.lng !== undefined && e.lat !== undefined && e.lng !== undefined && !isNaN(s.lat) && !isNaN(e.lat)) {
               r.coords = [[s.lat, s.lng], [e.lat, e.lng]];
               r.cotaRasante = cleanDecimal(
@@ -1069,27 +1097,35 @@ function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, se
         });
         tramosConCoordsRef.current = rData;
         pozosDrawnRef.current = pozosToDraw;
+        if ((inpData || (T && T.length > 0)) && (!autoAreasPoly || autoAreasPoly.length === 0) && setAutoAreasPoly && rData && rData.length > 0) {
+          try {
+            const synInit = generarPoligonosVoronoiSync(rData, pozosToDraw, radio || 20.0);
+            if (synInit && synInit.features && synInit.features.length > 0) {
+              setAutoAreasPoly(synInit.features);
+            }
+          } catch (eSyn) {}
+        }
         
         try {
           let bounds = layerTramos.getBounds();
           if(bounds.isValid()) {
               mapBoundsRef.current = bounds;
-              map.fitBounds(bounds);
+              map.fitBounds(bounds, { padding: [50, 50], maxZoom: 19 });
           } else if (layerPozos.getBounds) {
               let pBounds = layerPozos.getBounds();
               if(pBounds.isValid()) {
                   mapBoundsRef.current = pBounds;
-                  map.fitBounds(pBounds);
+                  map.fitBounds(pBounds, { padding: [50, 50], maxZoom: 19 });
               }
           }
         } catch(e) {}
       }
 
       let layerAreasAferentes = L.featureGroup();
-      if (inpData && inpData.verts && inpData.verts.length > 0) {
+      if (inpData && inpData.verts && inpData.verts.length > 0 && (!autoAreasPoly || autoAreasPoly.length === 0)) {
           let groupedVerts = {};
           inpData.verts.forEach(v => {
-              let nid = String(v.IDNODO || v.Subcatchment || v.Nombre || "");
+              let nid = String(v.DE || v.SubName || v.IDNODO || v.Subcatchment || v.Nombre || "");
               if (!nid) return;
               if (!groupedVerts[nid]) groupedVerts[nid] = [];
               if (v.CoordX && v.CoordY) groupedVerts[nid].push(v);
@@ -1630,14 +1666,46 @@ function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, se
     let baseT = (T && T.length > 0) ? [...T] : [];
     let fullNetwork = (tramosConCoordsRef.current && tramosConCoordsRef.current.length > 0) ? tramosConCoordsRef.current : baseT;
     
-    let selectedItems = selTramos.length > 0 ? [...selTramos] : [];
-    let itemsToProcess = onlySelection && selectedItems.length > 0 ? selectedItems : fullNetwork;
+    let selectedItems = selTramos.filter(Boolean);
+    const isGlobalBase = !inpData && (!T || T.length === 0) && fullNetwork.length > 500;
+    if (isGlobalBase && selectedItems.length === 0) {
+        alert("Primero selecciona los tramos en el mapa antes de inyectar la red.");
+        return;
+    }
+    let itemsToProcess = (onlySelection || isGlobalBase) && selectedItems.length > 0 ? selectedItems : fullNetwork;
     let sourceMap = {};
     selectedItems.forEach(st => {
         if (st && st.de && st.a) {
             sourceMap[String(st.de).trim() + "_" + String(st.a).trim()] = st;
         }
     });
+    let synPolyMap = {};
+    let synResMap = {};
+    let synAdList = [];
+    try {
+        const polyArrExisting = Array.isArray(autoAreasPoly) ? autoAreasPoly : ((autoAreasPoly && autoAreasPoly.features) || []);
+        const needsSynthesis = itemsToProcess.some(it => {
+            if (!it || it.sep) return false;
+            const cIt = sourceMap[String(it.de).trim() + "_" + String(it.a).trim()] || it;
+            if (cIt.areaPoli) return false;
+            const hasEx = polyArrExisting.some(f => f && f.properties && String(f.properties.de || "").trim().toLowerCase() === String(it.de || "").trim().toLowerCase() && (!f.properties.a || String(f.properties.a || "").trim().toLowerCase() === String(it.a || "").trim().toLowerCase()));
+            return !hasEx;
+        });
+        if (needsSynthesis && itemsToProcess.length > 0 && itemsToProcess.length <= 1000) {
+            const synExp = generarPoligonosVoronoiSync(itemsToProcess, (inpData && inpData.pozos) || pozosDrawnRef.current || [], radio || 20.0);
+            if (synExp && synExp.features) {
+                synExp.features.forEach(f => {
+                    if (f && f.properties) {
+                        synPolyMap[String(f.properties.de || "").trim().toLowerCase() + "_" + String(f.properties.a || "").trim().toLowerCase()] = f;
+                    }
+                });
+                (synExp.resultados || []).forEach(r => {
+                    if (r) synResMap[String(r.de || "").trim().toLowerCase() + "_" + String(r.a || "").trim().toLowerCase()] = r;
+                });
+                synAdList = synExp.ad || [];
+            }
+        }
+    } catch (eSynExp) {}
 
     let newVerts = [];
     let newTr = [];
@@ -1750,6 +1818,10 @@ function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, se
                 areaFeature = found;
             }
         }
+        const synKey = String(t.de || "").trim().toLowerCase() + "_" + String(t.a || "").trim().toLowerCase();
+        if (!areaFeature && synPolyMap[synKey]) {
+            areaFeature = synPolyMap[synKey];
+        }
         if (areaFeature) {
            injectedAreas.add(String(t.de));
            let geom = areaFeature.geometry;
@@ -1778,6 +1850,9 @@ function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, se
             }
         } else {
             areaParcialVal = parseFloat(calcT.areaParcial || calcT.area || t.areaParcial) || 0;
+            if (areaParcialVal <= 0 && synResMap[synKey] && synResMap[synKey].areaCalc > 0) {
+                areaParcialVal = parseFloat(synResMap[synKey].areaCalc) || 0;
+            }
         }
 
         let crDE = +(calcT.cotaRasante || calcT.crDE || calcT.cotaRasante_from_datos || t.cotaRasante || 0);
@@ -1837,6 +1912,8 @@ function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, se
                 const rawGeom = tcMatch && tcMatch.areaPoli ? (tcMatch.areaPoli.type === "Feature" ? tcMatch.areaPoli.geometry : tcMatch.areaPoli) : null;
                 if (rawGeom && rawGeom.coordinates) {
                     exportedAutoAreas.push({ type: "Feature", geometry: rawGeom, properties: { id: t.id, de: t.de, a: t.a, tramoId: t.de + "-" + t.a, label: "Tramo " + t.de + "-" + t.a, DE: t.de, IDNODO: t.de, Nombre: t.de, areaHa: tcMatch.areaCalc || t.areaParcial || 0, TIPOCUENCA: t.tipoArea || "RESIDENCIAL", isCompleta: true } });
+                } else if (synPolyMap[key]) {
+                    exportedAutoAreas.push(synPolyMap[key]);
                 } else if (Array.isArray(autoAreasPoly)) {
                     const exF = autoAreasPoly.find(f => f && f.properties && String(f.properties.de || "").trim().toLowerCase() === String(t.de || "").trim().toLowerCase());
                     if (exF) exportedAutoAreas.push(exF);
@@ -1845,7 +1922,8 @@ function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, se
             if (exportedAutoAreas.length > 0) setAutoAreasPoly(exportedAutoAreas);
         }
         let finalPozos = Object.values(newPozosMap);
-        let updatedInpData = { ...inpData, pozos: finalPozos, verts: newVerts, tr: newTr, isAutoAreasApplied: true };
+        let finalAd = (inpData && inpData.ad && inpData.ad.length > 0) ? inpData.ad : synAdList;
+        let updatedInpData = { ...inpData, pozos: finalPozos, verts: newVerts, ad: finalAd, tr: newTr, isAutoAreasApplied: true };
         setInpData(updatedInpData);
     }
 
@@ -1914,6 +1992,7 @@ const handleExportPolygonVertices = () => {
             .sel-pipe-label { background: rgba(255,255,255,0.9); border: 1px solid #ef4444; border-radius: 4px; padding: 2px 4px; font-size: 9px; font-weight: bold; box-shadow: 0 1px 3px rgba(0,0,0,0.3); white-space: nowrap; }
             .sel-pozo-label { background: transparent; border: none; box-shadow: none; font-size: 10px; font-weight: bold; color: #b91c1c; text-shadow: 1px 1px 0 #fff, -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff; white-space: nowrap; }
             .area-outlet-label { background: transparent; border: none; box-shadow: none; font-size: 8px; font-weight: bold; color: #4b5563; text-shadow: 1px 1px 0 #fff, -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff; white-space: nowrap; transform: translate(-50%, -50%); }
+            .auto-area-tooltip { background: rgba(15, 23, 42, 0.88) !important; color: #34d399 !important; border: 1px solid #10b981 !important; border-radius: 6px !important; padding: 2px 6px !important; font-size: 10px !important; font-weight: 800 !important; box-shadow: 0 2px 6px rgba(0,0,0,0.45) !important; pointer-events: none !important; }
         `}</style>
       <div style={{ flex: 1, position: 'relative', zIndex: 0 }}>
         <MapContainer 
@@ -1921,7 +2000,7 @@ const handleExportPolygonVertices = () => {
             style={{ width: '100%', height: '100%', backgroundColor: '#f9fafb' }} ref={mapRef}
             whenReady={() => setMapLoaded(true)}
         >
-          <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+          <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" maxZoom={24} maxNativeZoom={19} />
           { !isExport && <GeomanSetup sT={sT} setSelTramos={setSelTramos} tramosConCoordsRef={tramosConCoordsRef} setBufferArea={setBufferArea} /> }
         </MapContainer>
       </div>
@@ -2104,8 +2183,8 @@ const handleExportPolygonVertices = () => {
             </button>
           </div>
           <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
-                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: '4px', fontSize: '10px', color: '#6b7280', marginTop: '5px' }}>
-                     <input type="checkbox" checked={verAutoAreas} onChange={e => setVerAutoAreas(e.target.checked)} /> Mostrar Áreas Autogeneradas
+                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: '6px', fontSize: '11px', color: '#e2e8f0', fontWeight: '600', marginTop: '5px' }}>
+                     <input type="checkbox" checked={verAutoAreas} onChange={e => setVerAutoAreas(e.target.checked)} /> Mostrar Áreas Autogeneradas ({Array.isArray(autoAreasPoly) ? autoAreasPoly.length : 0})
                 </label>
           </div>
           </div>

@@ -39,6 +39,8 @@ import ReportesTab from '../tabs/ReportesTab';
 import UrbanismoTab from '../tabs/UrbanismoTab';
 
 import TramosTab from '../tabs/TramosTab';
+import { generarPoligonosVoronoiSync } from '../calcAreasAferentes';
+import proj4 from 'proj4';
 
 var TABS=[
   {id:"dash",l:"Dashboard"},{id:"par",l:"Parámetros"},{id:"dat",l:"Datos"},
@@ -100,10 +102,76 @@ export default function ReposicionModule({ onBack, initialData }){
     if (P && ((T && T.length > 0) || P.proyecto)) {
       try {
         var fullDraft = { v: "v36", P, T, R, sumLat, sumTrans, pbItems, pbBancoItems, alivData, sumData, estSepData, urbanismoData, inpData, flowStage, tab, autoAreasPoly, selMap, outfalls, filterSel, timestamp: new Date().toISOString() };
-        localStorage.setItem('AMC_current_project_state', JSON.stringify(fullDraft));
+      localStorage.setItem('AMC_current_project_state', JSON.stringify(fullDraft));
       } catch(e){}
     }
   }, [P, T, R, inpData, urbanismoData, estSepData, sumLat, sumTrans, pbItems, pbBancoItems, alivData, sumData, flowStage, tab, autoAreasPoly, selMap, outfalls, filterSel]);
+
+  const sanitizeAMCData = useCallback((raw) => {
+    if (!raw || typeof raw !== 'object') return raw;
+    if (Array.isArray(raw.T)) {
+      raw.T = raw.T.map(t => {
+        if (!t || t.sep) return t;
+        let nextT = { ...t };
+        if (nextT.aR_prop > 0 && nextT.aV_prop === nextT.aR_prop && (nextT.areaPredCalc === undefined || nextT.areaPredCalc === nextT.areaViaCalc)) {
+          nextT.aV_prop = null;
+          nextT.areaViaCalc = 0;
+        }
+        return nextT;
+      });
+    }
+    if (Array.isArray(raw.pbItems)) {
+      raw.pbItems = raw.pbItems.map(it => {
+        if (!it || typeof it.d !== 'string') return it;
+        return { ...it, d: it.d.replace(/(?:Excavaciones\s+)+/gi, 'Excavaciones ') };
+      });
+    }
+    return raw;
+  }, []);
+
+  // Reconstrucción automática de polígonos de Áreas Aferentes para proyectos .AMC / Nube / INP que no tenían geometría guardada
+  useEffect(() => {
+    const validT = Array.isArray(T) ? T.filter(t => t && !t.sep && t.de && t.a) : [];
+    if (validT.length === 0) return;
+    const hasAuto = Array.isArray(autoAreasPoly) && autoAreasPoly.length > 0;
+    const hasVerts = inpData && Array.isArray(inpData.verts) && inpData.verts.length > 0;
+    if (hasAuto && hasVerts) return;
+
+    const rawPozos = (inpData && Array.isArray(inpData.pozos)) ? inpData.pozos : [];
+    const rawTr = (inpData && Array.isArray(inpData.tr)) ? inpData.tr : [];
+    const selList = Array.isArray(selMap) ? selMap.filter(Boolean) : [];
+    if (rawPozos.length === 0 && rawTr.length === 0 && selList.length === 0 && !validT.some(t => Array.isArray(t.coords) && t.coords.length >= 2)) return;
+
+    try {
+      const coordTramos = validT.map(t => {
+        const key = String(t.de).trim().toLowerCase() + "_" + String(t.a).trim().toLowerCase();
+        const mTr = rawTr.find(rt => String(rt.de || rt.DE1 || rt.DE || "").trim().toLowerCase() + "_" + String(rt.a || rt.A1 || rt.A || "").trim().toLowerCase() === key);
+        const mSel = selList.find(st => String(st.de || "").trim().toLowerCase() + "_" + String(st.a || "").trim().toLowerCase() === key);
+        const coords = (Array.isArray(t.coords) && t.coords.length >= 2)
+          ? t.coords
+          : ((mTr && Array.isArray(mTr.coords) && mTr.coords.length >= 2) ? mTr.coords : (mSel && Array.isArray(mSel.coords) ? mSel.coords : undefined));
+        return coords ? { ...t, coords } : t;
+      });
+      const syn = generarPoligonosVoronoiSync(coordTramos, rawPozos, 20.0);
+      if (syn && syn.features && syn.features.length > 0) {
+        if (!hasAuto) {
+          setAutoAreasPoly(syn.features);
+        }
+        if (!hasVerts) {
+          setInpData(prev => ({
+            ...(prev || {}),
+            pozos: (prev && prev.pozos) || rawPozos,
+            tr: (prev && prev.tr) || rawTr,
+            verts: syn.verts,
+            ad: (prev && prev.ad && prev.ad.length > 0) ? prev.ad : syn.ad,
+            isAutoAreasApplied: true
+          }));
+        }
+      }
+    } catch (eAutoRestore) {
+      console.warn("Aviso reconstruyendo áreas aferentes:", eAutoRestore);
+    }
+  }, [T, inpData, selMap, autoAreasPoly]);
 
   useEffect(function(){
     // Solo inicializar sumLat/sumTrans si NO hay datos AMC que cargar
@@ -141,7 +209,7 @@ export default function ReposicionModule({ onBack, initialData }){
        setTab('par');
     } else if (initialData && (initialData.type === 'amc' || initialData.type === 'amc_payload')) {
        try {
-         var data = typeof initialData.content === 'string' ? JSON.parse(initialData.content) : initialData.content;
+         var data = sanitizeAMCData(typeof initialData.content === 'string' ? JSON.parse(initialData.content) : initialData.content);
          if(data.P){
            var restoredP2 = Object.assign({}, DP, data.P);
            setP(restoredP2);
@@ -332,7 +400,17 @@ export default function ReposicionModule({ onBack, initialData }){
               let pts = groupedVerts[nid];
               let coords = [];
               pts.forEach(pt => {
-                  coords.push([pt.CoordX, pt.CoordY]);
+                  let cx = parseFloat(pt.CoordX), cy = parseFloat(pt.CoordY);
+                  if (!isNaN(cx) && !isNaN(cy)) {
+                      if (Math.abs(cx) > 180 || Math.abs(cy) > 90) {
+                          try {
+                              let wgs = proj4("EPSG:3116", "EPSG:4326", [cx, cy]);
+                              coords.push([wgs[0], wgs[1]]);
+                          } catch(ep) { coords.push([cx, cy]); }
+                      } else {
+                          coords.push([cx, cy]);
+                      }
+                  }
               });
               if (coords.length >= 3) {
                   if (coords[0][0] !== coords[coords.length-1][0] || coords[0][1] !== coords[coords.length-1][1]) {
@@ -602,7 +680,7 @@ export default function ReposicionModule({ onBack, initialData }){
       var reader=new FileReader();
       reader.onload=function(ev){
         try{
-          var data=JSON.parse(ev.target.result);
+          var data=sanitizeAMCData(JSON.parse(ev.target.result));
           // Restaurar P: usar merge de DP + data.P para que todas las claves (inclAcom_*, inclUrb_*, etc) persistan correctamente
           if(data.P){
             var restoredP = Object.assign({}, DP, data.P);
@@ -1008,7 +1086,7 @@ const handleBack = () => {
                         ));
                       })()}
                     {customReportConfig.fase1.swmm && <div className="print-page-break"><SwmmTab R={R} P={P} T={T} inpData={inpData} onLoadINP={onLoadINP} autoAreasPoly={autoAreasPoly} outfalls={outfalls} setOutfalls={setOutfalls}/></div>}
-                    {customReportConfig.fase1.visorEspacial && <div className="print-page-break" style={{height: "1000px"}}><MapTab T={T} setT={setT} onFL={onFL} selTramos={[]} setSelTramos={()=>{}} bufferArea={0} setBufferArea={()=>{}} bufferPoly={[]} setBufferPoly={()=>{}} autoAreasPoly={autoAreasPoly} setAutoAreasPoly={()=>{}} isExport={true} /></div>}
+                    {customReportConfig.fase1.visorEspacial && <div className="print-page-break" style={{height: "1000px"}}><MapTab T={T} sT={setT} P={P} setP={setP} inpData={inpData} setInpData={()=>{}} selMap={selMap} setSelMap={()=>{}} autoAreasPoly={autoAreasPoly} setAutoAreasPoly={()=>{}} isActive={true} isExport={true} /></div>}
                     {customReportConfig.fase1.mapRes && <div className="print-page-break" style={{height: "1000px"}}><MapResumenTab T={T} selMap={selMap} R={R} autoAreasPoly={autoAreasPoly} isActive={true} inpData={inpData} P={P} outfalls={outfalls} isExport={true} /></div>}
 
                       {/* Fase 2 */}
@@ -1087,7 +1165,7 @@ const handleBack = () => {
       {tab==="calc"? <CalcTab R={R} P={P} setP={setP} T={T} sT={setT} sub={sub} setSub={setSub} alivData={alivData} setAlivData={setAlivData} sumData={sumData} setSumData={setSumData} setSumLat={setSumLat} setSumTrans={setSumTrans} estSepData={estSepData} setEstSepData={setEstSepData} sumLat={sumLat} sumTrans={sumTrans} perfilIdx={perfilIdx} setPerfilIdx={setPerfilIdx} perfilZoom={perfilZoom} setPerfilZoom={setPerfilZoom} selMap={selMap} filterSel={filterSel}/>:null}
       
         <div style={{ display: tab==="map" ? "block" : "none", flex: 1, height: "100%" }}>
-         <MapTab T={T} sT={setT} P={P} setP={setP} inpData={inpData} setInpData={setInpData} setTab={setTab} isActive={tab==="map"} setSelMap={setSelMap} autoAreasPoly={autoAreasPoly} setAutoAreasPoly={setAutoAreasPoly} />
+         <MapTab T={T} sT={setT} P={P} setP={setP} inpData={inpData} setInpData={setInpData} setTab={setTab} isActive={tab==="map"} selMap={selMap} setSelMap={setSelMap} autoAreasPoly={autoAreasPoly} setAutoAreasPoly={setAutoAreasPoly} />
         </div>
       
         <div style={{ display: tab==="report" ? "block" : "none", height: "100%" }}>
@@ -1121,7 +1199,7 @@ const handleBack = () => {
         onClose={() => setShowCloudProjectsModal(false)}
         onLoadProject={(payload) => {
           try {
-            var data = typeof payload === 'string' ? JSON.parse(payload) : payload;
+            var data = sanitizeAMCData(typeof payload === 'string' ? JSON.parse(payload) : payload);
             if(data.P){
               var restoredP2 = Object.assign({}, DP, data.P);
               setP(restoredP2);

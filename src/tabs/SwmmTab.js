@@ -5,6 +5,7 @@ import {PU} from '../constants';
 import * as turf from '@turf/turf';
 import proj4 from 'proj4';
 import * as XLSX from 'xlsx';
+import { generarPoligonosVoronoiSync } from '../calcAreasAferentes';
 
 proj4.defs("EPSG:3116", "+proj=tmerc +lat_0=4.59620041666667 +lon_0=-74.0775079166667 +k=1 +x_0=1000000 +y_0=1000000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs");
 proj4.defs("EPSG:9377", "+proj=tmerc +lat_0=4 +lon_0=-73 +k=0.9992 +x_0=5000000 +y_0=2000000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs");
@@ -31,6 +32,19 @@ function SwmmTab(props) {
   var pozosData=(inpData&&inpData.pozos)||[];
   var vertsData=(inpData&&inpData.verts)||[];
   var wTramos=(inpData&&inpData.tr)||[];
+  var effectiveAutoPolys = (Array.isArray(props.autoAreasPoly) && props.autoAreasPoly.length > 0) ? props.autoAreasPoly : [];
+  if (effectiveAutoPolys.length === 0 && vertsData.length === 0 && (pozosData.length > 0 || wTramos.length > 0)) {
+    try {
+      var coordTramosSwmm = dR.map(function(r) {
+        var key = String(r.de || "").trim().toLowerCase() + "_" + String(r.a || "").trim().toLowerCase();
+        var mTr = wTramos.find(function(rt) { return String(rt.de || rt.DE1 || rt.DE || "").trim().toLowerCase() + "_" + String(rt.a || rt.A1 || rt.A || "").trim().toLowerCase() === key; });
+        var ap = (r.aR_p||0)+(r.aC_p||0)+(r.aI_p||0)+(r.aIn_p||0)+(r.aV_p||0)+(r.aRe_p||0);
+        return { id: r.id, de: r.de, a: r.a, areaParcial: ap, coords: mTr && Array.isArray(mTr.coords) ? mTr.coords : undefined };
+      });
+      var synSwmm = generarPoligonosVoronoiSync(coordTramosSwmm, pozosData, 20.0);
+      if (synSwmm && Array.isArray(synSwmm.features)) effectiveAutoPolys = synSwmm.features;
+    } catch (eSw) {}
+  }
   var pad=function(s,w){s=String(s); if(s.length>=w) return s+" "; while(s.length<w)s+=" ";return s;};
   var generateINP=function(){
     var nodeMap={};var ni=1;
@@ -81,9 +95,9 @@ function SwmmTab(props) {
             var tRef = props.T.find(function(tx){ return tx && String(tx.de||"").trim().toLowerCase() === String(r.de||"").trim().toLowerCase() && String(tx.a||"").trim().toLowerCase() === String(r.a||"").trim().toLowerCase(); });
             if (tRef) area = parseFloat(tRef.areaParcial || tRef.areaCalc || 0) || 0;
           }
-          if (area <= 0 && Array.isArray(props.autoAreasPoly)) {
+          if (area <= 0 && effectiveAutoPolys.length > 0) {
             var tIdArea = String(r.de||"").trim() + "-" + String(r.a||"").trim();
-            var pMatch = props.autoAreasPoly.find(function(pf){ return pf && pf.properties && (String(pf.properties.tramoId||"").trim().toLowerCase() === tIdArea.toLowerCase() || String(pf.properties.de||"").trim().toLowerCase() === String(r.de||"").trim().toLowerCase()); });
+            var pMatch = effectiveAutoPolys.find(function(pf){ return pf && pf.properties && (String(pf.properties.tramoId||"").trim().toLowerCase() === tIdArea.toLowerCase() || String(pf.properties.de||"").trim().toLowerCase() === String(r.de||"").trim().toLowerCase()); });
             if (pMatch) {
               area = parseFloat(pMatch.properties.areaHa || 0) || 0;
               if (area <= 0 && pMatch.geometry) { try { area = turf.area(pMatch) / 10000.0; } catch(ea){} }
@@ -369,12 +383,12 @@ function SwmmTab(props) {
               }
           }
           
-          if (!hasPoly && props.autoAreasPoly && props.autoAreasPoly.length > 0) {
-              var poly = props.autoAreasPoly.find(p => p.properties && p.properties.isCompleta && (
+          if (!hasPoly && effectiveAutoPolys.length > 0) {
+              var poly = effectiveAutoPolys.find(p => p.properties && p.properties.isCompleta && (
                   String(p.properties.de||"").trim().toLowerCase() === String(r.de).trim().toLowerCase() ||
                   String(p.properties.tramoId||"").trim().toLowerCase() === String(tId).trim().toLowerCase() ||
                   String(p.properties.id||"").trim().toLowerCase() === String(tId).trim().toLowerCase()
-              )) || props.autoAreasPoly.find(p => p.properties && (
+              )) || effectiveAutoPolys.find(p => p.properties && (
                   String(p.properties.id||"").trim().toLowerCase() === String(tId).trim().toLowerCase() ||
                   String(p.properties.id||"").trim().toLowerCase() === String(r.de).trim().toLowerCase() ||
                   String(p.properties.tramoId||"").trim().toLowerCase() === String(tId).trim().toLowerCase() || 
@@ -458,7 +472,7 @@ function SwmmTab(props) {
     <div className="c"><div className="ct">EPA SWMM 5.x (.inp)</div>
       <div style={{marginBottom:10,padding:"8px 12px",borderRadius:8,background:"rgba(15,23,42,0.85)",border:"1px solid rgba(59,130,246,0.35)",display:"flex",gap:16,flexWrap:"wrap",fontSize:12,color:"#e2e8f0"}}>
         <span><b>Subcuencas [SUBCATCHMENTS]:</b> <span style={{color:"#34d399",fontWeight:"bold"}}>{dR.length}</span></span>
-        <span><b>Polígonos [Polygons] listos:</b> <span style={{color:((Array.isArray(props.autoAreasPoly)&&props.autoAreasPoly.length>0)||vertsData.length>0)?"#38bdf8":"#f59e0b",fontWeight:"bold"}}>{Array.isArray(props.autoAreasPoly)&&props.autoAreasPoly.length>0 ? props.autoAreasPoly.length : (vertsData.length>0 ? "Sí (INP/Visor)" : "0 (Generar en Visor Espacial)")}</span></span>
+        <span><b>Polígonos [Polygons] listos:</b> <span style={{color:(effectiveAutoPolys.length>0||vertsData.length>0)?"#38bdf8":"#f59e0b",fontWeight:"bold"}}>{effectiveAutoPolys.length>0 ? effectiveAutoPolys.length : (vertsData.length>0 ? "Sí (INP/Visor)" : "0 (Generar en Visor Espacial)")}</span></span>
         <span><b>Área Total Aferente:</b> <span style={{color:"#fcd34d",fontWeight:"bold"}}>{dR.reduce(function(acc,rx){var ap=(rx.aR_p||0)+(rx.aC_p||0)+(rx.aI_p||0)+(rx.aIn_p||0)+(rx.aV_p||0)+(rx.aRe_p||0);return acc+ap;},0).toFixed(4)} Ha</span></span>
       </div>
       <div className="g3" style={{marginBottom:8}}>

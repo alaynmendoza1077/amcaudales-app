@@ -162,7 +162,7 @@ function coordsToJsts(coords_m) {
         geojson = { type: 'MultiPolygon', coordinates: polys };
     }
     try {
-        return geojsonReader.read(geojson);
+        let reader = geojsonReader || (jsts && jsts.io ? new jsts.io.GeoJSONReader() : null); return reader ? reader.read(geojson) : null;
     } catch(e) {
         return null;
     }
@@ -171,7 +171,7 @@ function coordsToJsts(coords_m) {
 function jstsToCoords(geom) {
     if (!geom || geom.isEmpty()) return null;
     try {
-        let geojson = geojsonWriter.write(geom);
+        let writer = geojsonWriter || (jsts && jsts.io ? new jsts.io.GeoJSONWriter() : null); if (!writer) return null; let geojson = writer.write(geom); if (geojson.type === 'GeometryCollection' && Array.isArray(geojson.geometries)) { let extracted = []; geojson.geometries.forEach(g => { if (g.type === 'Polygon') extracted.push(g.coordinates); else if (g.type === 'MultiPolygon') extracted.push(...g.coordinates); }); return extracted.length > 0 ? extracted : null; }
         if (geojson.type === 'Polygon') {
             return [geojson.coordinates];
         } else if (geojson.type === 'MultiPolygon') {
@@ -179,6 +179,36 @@ function jstsToCoords(geom) {
         }
     } catch(e) { }
     return null;
+}
+
+function metersCoordsToWgsFeature(coords_m, props = {}) {
+    if (!coords_m) return null;
+    let polys = getCoordsMeters(coords_m);
+    let cleanPolys = [];
+    for (let poly of polys) {
+        if (!Array.isArray(poly) || poly.length === 0) continue;
+        let cleanRings = [];
+        for (let ring of poly) {
+            if (!Array.isArray(ring) || ring.length < 3) continue;
+            let wgsRing = [];
+            for (let pt of ring) {
+                if (!pt || pt.length < 2) continue;
+                let wgs = projectToLatLng(pt[0], pt[1]);
+                if (wgs && isFinite(wgs[0]) && isFinite(wgs[1])) wgsRing.push([wgs[0], wgs[1]]);
+            }
+            if (wgsRing.length < 3) continue;
+            let first = wgsRing[0], last = wgsRing[wgsRing.length - 1];
+            if (first[0] !== last[0] || first[1] !== last[1]) wgsRing.push([first[0], first[1]]);
+            if (wgsRing.length >= 4) cleanRings.push(wgsRing);
+        }
+        if (cleanRings.length > 0) cleanPolys.push(cleanRings);
+    }
+    if (cleanPolys.length === 0) return null;
+    return {
+        type: "Feature",
+        properties: props,
+        geometry: cleanPolys.length === 1 ? { type: "Polygon", coordinates: cleanPolys[0] } : { type: "MultiPolygon", coordinates: cleanPolys }
+    };
 }
 
 function pointInJstsGeom(pt_m, jstsGeom) {
@@ -946,7 +976,7 @@ export async function calcularAreas(tramosACalcular, todosLosTramos, cartografia
         // 5b. Apply morphological closing (buffer +3m, -3m, remove holes)
         if (areaFinalShapeMeters) {
             try {
-                areaFinalShapeMeters = cierreMorfologicoMeters(areaFinalShapeMeters);
+                let closedM = cierreMorfologicoMeters(areaFinalShapeMeters); if (closedM && calcularAreaMeters(closedM) > 1.0) areaFinalShapeMeters = closedM;
             } catch(e) {
                 console.warn(`[calcAreas] Cierre morfológico failed for tramo ${index}:`, e);
             }
@@ -954,7 +984,7 @@ export async function calcularAreas(tramosACalcular, todosLosTramos, cartografia
 
         if (areaFinalShapeMeters && obstaculoGlobalUnido) {
             let diffFinal = fastDifferenceMeters(areaFinalShapeMeters, obstaculoGlobalUnido);
-            if (diffFinal) areaFinalShapeMeters = diffFinal;
+            if (diffFinal && calcularAreaMeters(diffFinal) > 1.0) areaFinalShapeMeters = diffFinal;
         }
 
         // 6. Aplica simplify (limpiar) como Python hace al final
@@ -962,7 +992,7 @@ export async function calcularAreas(tramosACalcular, todosLosTramos, cartografia
             let jstsGeom = coordsToJsts(areaFinalShapeMeters);
             if (jstsGeom) {
                 jstsGeom = limpiarJsts(jstsGeom);
-                areaFinalShapeMeters = jstsToCoords(jstsGeom);
+                let simpCoords = jstsToCoords(jstsGeom); if (simpCoords && calcularAreaMeters(simpCoords) > 1.0) areaFinalShapeMeters = simpCoords;
             }
         }
 
@@ -1020,7 +1050,7 @@ export async function calcularAreas(tramosACalcular, todosLosTramos, cartografia
                     }
                 }
             } else {
-                gVia = coordsToJsts(areaFinalShapeMeters);
+                gPred = coordsToJsts(areaFinalShapeMeters);
             }
 
             if (gPred && !gPred.isEmpty()) {
@@ -1057,14 +1087,14 @@ export async function calcularAreas(tramosACalcular, todosLosTramos, cartografia
         // Unproject final shape to WGS84 for leaflet
         let areaFinalShapeWGS84 = null;
         let shapeToConvert = areaFinalShapeMeters || zonaCapturaMeters;
-        if (shapeToConvert) {
+        if (shapeToConvert) { areaFinalShapeWGS84 = metersCoordsToWgsFeature(shapeToConvert); } if (!areaFinalShapeWGS84 && shapeToConvert) {
             try {
                 let polys = getCoordsMeters(shapeToConvert);
                 let wgsPolys = polys.map(poly => poly.map(ring => ring.map(pt => {
                     let wgs = projectToLatLng(pt[0], pt[1]);
                     return [wgs[0], wgs[1]];
                 })));
-                areaFinalShapeWGS84 = wgsPolys.length === 1 ? turf.polygon(wgsPolys[0]) : turf.multiPolygon(wgsPolys);
+                areaFinalShapeWGS84 = metersCoordsToWgsFeature(shapeToConvert) || (wgsPolys.length === 1 ? turf.polygon(wgsPolys[0]) : turf.multiPolygon(wgsPolys));
             } catch(e) {
                 console.warn(`[calcAreas] Error converting to WGS84 for tramo ${index}:`, e);
             }
@@ -1088,4 +1118,152 @@ export async function calcularAreas(tramosACalcular, todosLosTramos, cartografia
     console.timeEnd('calcAreas_total');
     if (onProgress) onProgress(totalTramos, totalTramos);
     return resultados;
+}
+
+export function generarPoligonosVoronoiSync(tramosInput, pozosData = [], radioDefault = 20.0) {
+    const features = [];
+    const verts = [];
+    const ad = [];
+    const resultados = [];
+    if (!Array.isArray(tramosInput) || tramosInput.length === 0) {
+        return { features, verts, ad, resultados };
+    }
+
+    const pozosMap = {};
+    const pozosCache = [];
+    (pozosData || []).forEach(pz => {
+        if (!pz) return;
+        let rx = pz.CoordX !== undefined ? pz.CoordX : (pz.X !== undefined ? pz.X : pz.x);
+        let ry = pz.CoordY !== undefined ? pz.CoordY : (pz.Y !== undefined ? pz.Y : pz.y);
+        let x = parseFloat(rx), y = parseFloat(ry);
+        if (!isFinite(x) || !isFinite(y) || (x === 0 && y === 0)) return;
+        let pm = convertPointToMeters(x, y);
+        pozosCache.push(pm);
+        [pz.IdNodo, pz.IDNODO, pz.Nombre, pz.IDfinal, pz.id].forEach(k => {
+            if (k !== undefined && k !== null && String(k).trim() !== "") {
+                pozosMap[String(k).trim().toLowerCase()] = pm;
+            }
+        });
+    });
+
+    const areasAsignadas = [];
+    let validIdx = 0;
+
+    for (let i = 0; i < tramosInput.length; i++) {
+        const tr = tramosInput[i];
+        if (!tr || tr.sep) continue;
+        validIdx++;
+        const deStr = String(tr.de || tr.DE1 || tr.DE || "").trim();
+        const aStr = String(tr.a || tr.A1 || tr.A || "").trim();
+        if (!deStr || !aStr) continue;
+
+        let p0_m = null, p1_m = null;
+        if (Array.isArray(tr.coords) && tr.coords.length >= 2) {
+            let c0 = tr.coords[0];
+            let c1 = tr.coords[tr.coords.length - 1];
+            let lng0 = c0.lat !== undefined ? c0.lng : (Math.abs(c0[0]) <= 90 && Math.abs(c0[1]) <= 180 && Math.abs(c0[1]) > 50 ? c0[1] : c0[0]);
+            let lat0 = c0.lat !== undefined ? c0.lat : (Math.abs(c0[0]) <= 90 && Math.abs(c0[1]) <= 180 && Math.abs(c0[1]) > 50 ? c0[0] : c0[1]);
+            let lng1 = c1.lat !== undefined ? c1.lng : (Math.abs(c1[0]) <= 90 && Math.abs(c1[1]) <= 180 && Math.abs(c1[1]) > 50 ? c1[1] : c1[0]);
+            let lat1 = c1.lat !== undefined ? c1.lat : (Math.abs(c1[0]) <= 90 && Math.abs(c1[1]) <= 180 && Math.abs(c1[1]) > 50 ? c1[0] : c1[1]);
+            p0_m = convertPointToMeters(lng0, lat0);
+            p1_m = convertPointToMeters(lng1, lat1);
+        } else {
+            p0_m = pozosMap[deStr.toLowerCase()] || null;
+            p1_m = pozosMap[aStr.toLowerCase()] || null;
+        }
+
+        if (!p0_m || !p1_m) continue;
+        let p0_c = pozosCache.length > 0 ? resolverPuntoCierre(p0_m, pozosCache) : p0_m;
+        let p1_c = pozosCache.length > 0 ? resolverPuntoCierre(p1_m, pozosCache) : p1_m;
+        let ddx = p1_c[0] - p0_c[0], ddy = p1_c[1] - p0_c[1];
+        let lonCierre = Math.hypot(ddx, ddy);
+        if (lonCierre < 0.5) continue;
+        let dx_c = ddx / lonCierre, dy_c = ddy / lonCierre;
+
+        const savedHa = parseFloat(tr.areaParcial || tr.areaCalc || tr.aR_p || tr.aR_prop || 0) || 0;
+        let rUse = radioDefault || 20.0;
+        if (savedHa > 0) {
+            let estR = ((savedHa * 10000.0) / lonCierre) - 8.57;
+            if (isFinite(estR)) rUse = Math.max(6.0, Math.min(120.0, estR));
+        }
+
+        let zonaPuntaM = formaPuntaCierreMeters(p0_c, p1_c, dx_c, dy_c, lonCierre, rUse);
+        let zonaBbox = computeBboxMeters(zonaPuntaM);
+        let zonaCapturaM = zonaPuntaM;
+        let obstUnido = null;
+
+        if (areasAsignadas.length > 0) {
+            let ov = [];
+            for (let aObj of areasAsignadas) {
+                if (bboxesOverlap(zonaBbox, aObj.bbox)) ov.push(aObj.coords);
+            }
+            if (ov.length > 0) {
+                obstUnido = fastUnionMeters(ov);
+                if (obstUnido) {
+                    let diff = fastDifferenceMeters(zonaCapturaM, obstUnido);
+                    if (diff && calcularAreaMeters(diff) > 1.0) zonaCapturaM = diff;
+                }
+            }
+        }
+
+        let pxVia = -dy_c, pyVia = dx_c;
+        let wVia = Math.min(RADIO_VIA_EJE_M, rUse);
+        let franjaVerts = [
+            [p0_c[0] + pxVia * wVia, p0_c[1] + pyVia * wVia],
+            [p0_c[0] - pxVia * wVia, p0_c[1] - pyVia * wVia],
+            [p1_c[0] - pxVia * wVia, p1_c[1] - pyVia * wVia],
+            [p1_c[0] + pxVia * wVia, p1_c[1] + pyVia * wVia],
+            [p0_c[0] + pxVia * wVia, p0_c[1] + pyVia * wVia]
+        ];
+        let shapeM = fastUnionMeters([[franjaVerts], zonaCapturaM]) || zonaCapturaM;
+        try {
+            let cl = cierreMorfologicoMeters(shapeM);
+            if (cl && calcularAreaMeters(cl) > 1.0) shapeM = cl;
+        } catch (e) {}
+        if (obstUnido) {
+            let df = fastDifferenceMeters(shapeM, obstUnido);
+            if (df && calcularAreaMeters(df) > 1.0) shapeM = df;
+        }
+
+        let calcM2 = calcularAreaMeters(shapeM);
+        let finalHa = savedHa > 0 ? savedHa : (calcM2 / 10000.0);
+        const subId = "S" + (tr.id && typeof tr.id === "number" ? tr.id : validIdx);
+        const tramoKey = deStr + "-" + aStr;
+        const tipoCuenca = String(tr.tipoArea || tr.TIPOCUENCA || "RESIDENCIAL").toUpperCase();
+
+        const propsObj = {
+            id: tr.id && typeof tr.id === "number" ? tr.id : validIdx,
+            de: deStr,
+            a: aStr,
+            tramoId: tramoKey,
+            label: "Tramo " + deStr + " → " + aStr,
+            DE: deStr,
+            IDNODO: deStr,
+            Nombre: deStr,
+            SubName: subId,
+            areaHa: finalHa,
+            areaPredHa: finalHa,
+            areaViaHa: 0,
+            TIPOCUENCA: tipoCuenca,
+            isCompleta: true
+        };
+
+        const featWGS = metersCoordsToWgsFeature(shapeM, propsObj);
+        if (featWGS) {
+            features.push(featWGS);
+            areasAsignadas.push({ coords: shapeM, bbox: computeBboxMeters(shapeM) });
+
+            const polysM = getCoordsMeters(shapeM);
+            const mainRingM = polysM[0] && polysM[0][0] ? polysM[0][0] : null;
+            if (Array.isArray(mainRingM)) {
+                mainRingM.forEach(ptM => {
+                    verts.push({ IDNODO: deStr, DE: tramoKey, SubName: subId, CoordX: ptM[0], CoordY: ptM[1] });
+                });
+            }
+            ad.push({ IDNODO: deStr, Subcatchment: subId, AREACUENCA: finalHa, TIPOCUENCA: tipoCuenca });
+            resultados.push({ de: deStr, a: aStr, areaCalc: finalHa, areaPredCalc: finalHa, areaViaCalc: 0, areaPoli: featWGS });
+        }
+    }
+
+    return { features, verts, ad, resultados };
 }

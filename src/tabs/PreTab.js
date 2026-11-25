@@ -379,12 +379,13 @@ function PreTab(props){
         }
         var oldD = it.d;
         let nd = it.d;
-        let excMaq = P.nombreExcMaquina !== undefined ? P.nombreExcMaquina : "Excavaciones Sin Acarreo Libre";
-        let excMan = P.nombreExcManual !== undefined ? P.nombreExcManual : "Excavaciones Con Acarreo Libre";
-        if(it.c.startsWith("2.01.01.") && excMaq) nd = nd.replace(/Excavaci.*?n(?: a m.*?quina)?/i, excMaq.replace('%', '').trim());
-        else if(it.c.startsWith("2.01.02.") && excMan) nd = nd.replace(/Excavaci.*?n(?: a m.*?quina)?(.*?)(?:con acarreo|acarreo)?/i, excMan.replace('%', '').trim()+"$1");
-        else if(nd.toLowerCase().includes("sin acarreo libre") && excMaq) nd = nd.replace(/sin acarreo libre/ig, excMaq.replace('%', '').trim());
-        else if(nd.toLowerCase().includes("con acarreo libre") && excMan) nd = nd.replace(/con acarreo libre/ig, excMan.replace('%', '').trim());
+        let excMaq = (P.nombreExcMaquina !== undefined ? P.nombreExcMaquina : "Excavaciones Sin Acarreo Libre").replace('%', '').trim();
+        let excMan = (P.nombreExcManual !== undefined ? P.nombreExcManual : "Excavaciones Con Acarreo Libre").replace('%', '').trim();
+        if(it.c.startsWith("2.01.01.") && excMaq && !nd.toLowerCase().includes(excMaq.toLowerCase())) nd = nd.replace(/Excavaci.*?n(?: a m.*?quina)?/i, excMaq);
+        else if(it.c.startsWith("2.01.02.") && excMan && !nd.toLowerCase().includes(excMan.toLowerCase())) nd = nd.replace(/Excavaci.*?n(?: a m.*?quina)?(.*?)(?:con acarreo|acarreo)?/i, excMan+"$1");
+        else if(nd.toLowerCase().includes("sin acarreo libre") && excMaq && !nd.toLowerCase().includes(excMaq.toLowerCase())) nd = nd.replace(/(?:Excavaciones\s+)?sin acarreo libre/ig, excMaq);
+        else if(nd.toLowerCase().includes("con acarreo libre") && excMan && !nd.toLowerCase().includes(excMan.toLowerCase())) nd = nd.replace(/(?:Excavaciones\s+)?con acarreo libre/ig, excMan);
+        nd = nd.replace(/(?:Excavaciones\s+)+/gi, "Excavaciones ");
         it.d = nd;
         if (oldD !== it.d) updated = true;
       });

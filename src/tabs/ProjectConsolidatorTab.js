@@ -181,20 +181,18 @@ export function recalcPbItems(data) {
     }
     
     // Update descriptions for excavation
-    let excMaq = P.nombreExcMaquina !== undefined ? P.nombreExcMaquina : "Excavaciones Sin Acarreo Libre";
-    let excMan = P.nombreExcManual !== undefined ? P.nombreExcManual : "Excavaciones Con Acarreo Libre";
-    if (it.c.startsWith("2.01.01.") && excMaq) {
-      updated.d = updated.d.replace(/Excavaci.*?n(?: a m.*?quina)?/i, excMaq.replace('%', '').trim());
+    let excMaq = (P.nombreExcMaquina !== undefined ? P.nombreExcMaquina : "Excavaciones Sin Acarreo Libre").replace('%', '').trim();
+    let excMan = (P.nombreExcManual !== undefined ? P.nombreExcManual : "Excavaciones Con Acarreo Libre").replace('%', '').trim();
+    if (it.c.startsWith("2.01.01.") && excMaq && !updated.d.toLowerCase().includes(excMaq.toLowerCase())) {
+      updated.d = updated.d.replace(/Excavaci.*?n(?: a m.*?quina)?/i, excMaq);
+    } else if (it.c.startsWith("2.01.02.") && excMan && !updated.d.toLowerCase().includes(excMan.toLowerCase())) {
+      updated.d = updated.d.replace(/Excavaci.*?n(?: a m.*?quina)?(.*?)(?:con acarreo|acarreo)?/i, excMan + "$1");
+    } else if (updated.d.toLowerCase().includes("sin acarreo libre") && excMaq && !updated.d.toLowerCase().includes(excMaq.toLowerCase())) {
+      updated.d = updated.d.replace(/(?:Excavaciones\s+)?sin acarreo libre/ig, excMaq);
+    } else if (updated.d.toLowerCase().includes("con acarreo libre") && excMan && !updated.d.toLowerCase().includes(excMan.toLowerCase())) {
+      updated.d = updated.d.replace(/(?:Excavaciones\s+)?con acarreo libre/ig, excMan);
     }
-    if (it.c.startsWith("2.01.02.") && excMan) {
-      updated.d = updated.d.replace(/Excavaci.*?n(?: a m.*?quina)?(.*?)(?:con acarreo|acarreo)?/i, excMan.replace('%', '').trim() + "$1");
-    }
-    if (updated.d.toLowerCase().includes("sin acarreo libre") && excMaq) {
-      updated.d = updated.d.replace(/sin acarreo libre/ig, excMaq.replace('%', '').trim());
-    }
-    if (updated.d.toLowerCase().includes("con acarreo libre") && excMan) {
-      updated.d = updated.d.replace(/con acarreo libre/ig, excMan.replace('%', '').trim());
-    }
+    updated.d = updated.d.replace(/(?:Excavaciones\s+)+/gi, "Excavaciones ");
 
     return updated;
   });
