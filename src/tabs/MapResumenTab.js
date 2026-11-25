@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { MapContainer, TileLayer, useMap, useMapEvents } from 'react-leaflet';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
+import { MapContainer, TileLayer, Polygon, Tooltip, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { saveFileWithDialog } from '../utils/fileSaver';
@@ -36,6 +36,37 @@ function MapResizer({ isActive }) {
             return () => clearTimeout(t1);
         }
     }, [isActive, map]);
+    return null;
+}
+
+function ResumenMapBridge({ mapRef, setMapReady }) {
+    const map = useMap();
+    useEffect(() => {
+        if (map) {
+            mapRef.current = map;
+            setMapReady(true);
+        }
+    }, [map, mapRef, setMapReady]);
+    return null;
+}
+
+function resumenGeomToLatLngs(geom) {
+    if (!geom || !geom.coordinates) return null;
+    const toLL = (pt) => {
+        if (!Array.isArray(pt) || pt.length < 2) return null;
+        let x = Number(pt[0]), y = Number(pt[1]);
+        if (!isFinite(x) || !isFinite(y)) return null;
+        if (x >= -15 && x <= 20 && y >= -90 && y <= -50) return [x, y];
+        return [y, x];
+    };
+    if (geom.type === "Polygon") {
+        let rings = geom.coordinates.map(r => (r || []).map(toLL).filter(Boolean)).filter(r => r.length >= 3);
+        return rings.length > 0 ? rings : null;
+    }
+    if (geom.type === "MultiPolygon") {
+        let polys = geom.coordinates.map(p => (p || []).map(r => (r || []).map(toLL).filter(Boolean)).filter(r => r.length >= 3)).filter(p => p.length > 0);
+        return polys.length > 0 ? polys : null;
+    }
     return null;
 }
 
@@ -503,41 +534,35 @@ export default function MapResumenTab({
 
         // Mapear Areas Autogeneradas (poligonos de Voronoi lineal)
         const effectiveAreasList = getEffectiveAreasWGS84();
+        let allBounds = L.latLngBounds([]);
+        if (fg.getLayers().length > 0) {
+            try { allBounds.extend(fg.getBounds()); } catch (eb1) {}
+        }
         if (showAreas && effectiveAreasList.length > 0) {
             effectiveAreasList.forEach(feat => {
-                let p = feat.properties || {};
-                let tramoLabel = p.label || ""; // e.g. "Tramo P1-P2"
-                let tramoId = tramoLabel.replace("Tramo ", "");
-                
-                if (feat.geometry && feat.geometry.coordinates) {
-                    let areaHa = p.areaHa !== undefined ? p.areaHa : 0;
-                    let areaLabel = `<b>Área:</b> ${Number(areaHa).toFixed(4)} Ha`;
-
-                    let polyLayer = L.geoJSON(feat, {
-                        style: { color: '#fb923c', weight: 2, fillColor: '#fdba74', fillOpacity: 0.35, pmIgnore: true }
-                    });
-                    
-                    polyLayer.bindTooltip(areaLabel, { permanent: true, direction: 'center', className: 'resumen-area-label' });
-                    polyLayer.addTo(fg);
-                    try { polyLayer.bringToBack(); } catch (eb) {}
-                }
+                try {
+                    let tempLayer = L.geoJSON(feat);
+                    if (tempLayer.getBounds().isValid()) allBounds.extend(tempLayer.getBounds());
+                } catch (eb2) {}
             });
         }
-        fg.addTo(mapRef.current);
-        renderLayerRef.current = fg;
+        if (mapRef.current) {
+            fg.addTo(mapRef.current);
+            renderLayerRef.current = fg;
+        }
         
         // Ajustar zoom a los elementos si hay algo
         let t1 = setTimeout(() => {
             if (isCancelled) return;
-            if (mapRef.current && mapRef.current._mapPane && fg.getLayers().length > 0) {
+            if (mapRef.current && mapRef.current._mapPane && allBounds.isValid()) {
                 if (typeof mapRef.current.invalidateSize === 'function') {
                     mapRef.current.invalidateSize();
                 }
                 if(typeof mapRef.current.fitBounds === 'function') {
-                    mapRef.current.fitBounds(fg.getBounds(), { padding: [40, 40], maxZoom: 19 });
+                    mapRef.current.fitBounds(allBounds, { padding: [40, 40], maxZoom: 19 });
                 }
             }
-        }, 500);
+        }, 350);
 
         return () => {
             isCancelled = true;
@@ -800,18 +825,34 @@ export default function MapResumenTab({
         e.target.value = null; // reset
     };
 
+    const declarativeAreaPolygons = useMemo(() => {
+        const list = getEffectiveAreasWGS84();
+        return (list || []).map((feat, idx) => {
+            if (!feat || !feat.geometry) return null;
+            const positions = resumenGeomToLatLngs(feat.geometry);
+            if (!positions) return null;
+            const p = feat.properties || {};
+            const areaHa = Number(p.areaHa || 0);
+            const label = p.de ? `${p.de}` : (p.label || `Área ${idx + 1}`);
+            return { key: `res_area_${p.tramoId || p.id || idx}_${idx}`, positions, areaHa, label };
+        }).filter(Boolean);
+    }, [selMap, R, T, inpData, autoAreasPoly, renderTick, localEpsg]);
+
     const containerHeight = isExport ? '750px' : 'calc(100vh - 120px)';
     return (
         <div style={{ position: 'relative', width: '100%', height: containerHeight }}>
+            <style>{`
+                .resumen-area-label { background: rgba(15, 23, 42, 0.88) !important; color: #fdba74 !important; border: 1px solid #fb923c !important; border-radius: 6px !important; padding: 2px 6px !important; font-size: 10px !important; font-weight: 700 !important; pointer-events: none !important; }
+            `}</style>
             <MapContainer
-                center={[4.596200, -74.077507]}
+                center={[7.0898, -73.0915]}
                 zoom={14}
                 style={{ height: '100%', width: '100%', background: '#0f172a', minHeight: isExport ? '750px' : undefined }}
                 ref={mapRef}
-                whenReady={() => setMapReady(true)}
                 zoomControl={true}
                 maxZoom={22}
             >
+                <ResumenMapBridge mapRef={mapRef} setMapReady={setMapReady} />
                 <MapResizer isActive={isActive} />
                 <MapStateManager isExport={isExport} />
                 {showBaseMap && (
@@ -821,6 +862,19 @@ export default function MapResumenTab({
                         maxNativeZoom={19}
                     />
                 )}
+                {showAreas && declarativeAreaPolygons.map(ap => (
+                    <Polygon
+                        key={ap.key}
+                        positions={ap.positions}
+                        pathOptions={{ color: '#fb923c', weight: 2.5, fillColor: '#fdba74', fillOpacity: 0.35, interactive: false }}
+                    >
+                        {showLblAreas && (
+                            <Tooltip permanent direction="center" className="resumen-area-label">
+                                <span><b>Área:</b> {ap.areaHa.toFixed(4)} Ha</span>
+                            </Tooltip>
+                        )}
+                    </Polygon>
+                ))}
             </MapContainer>
             
             {/* Control de Capas Flotante */}

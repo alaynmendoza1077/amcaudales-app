@@ -1,4 +1,5 @@
 import * as turf from '@turf/turf';
+import polygonClipping from 'polygon-clipping';
 import * as jstsModule from 'jsts/dist/jsts.min.js';
 const jsts = (jstsModule && jstsModule.io) ? jstsModule : (jstsModule && jstsModule.default && jstsModule.default.io ? jstsModule.default : (typeof window !== 'undefined' && window.jsts ? window.jsts : globalThis.jsts));
 import proj4 from 'proj4';
@@ -241,6 +242,16 @@ function fastUnionMeters(featuresCoordsArray) {
     if (!featuresCoordsArray || featuresCoordsArray.length === 0) return null;
     if (featuresCoordsArray.length === 1) return featuresCoordsArray[0];
     try {
+        let validPolys = featuresCoordsArray.map(c => getCoordsMeters(c)).filter(p => p && p.length > 0);
+        if (validPolys.length === 0) return null;
+        if (validPolys.length === 1) return validPolys[0];
+        if (polygonClipping && typeof polygonClipping.union === 'function') {
+            let res = polygonClipping.union(...validPolys);
+            if (res && res.length > 0) return res;
+        }
+    } catch (ePc) {}
+    try {
+        if (!jsts || !jsts.geom) return featuresCoordsArray[0];
         let geoms = [];
         for (let coords of featuresCoordsArray) {
             let g = coordsToJsts(coords);
@@ -252,15 +263,25 @@ function fastUnionMeters(featuresCoordsArray) {
         let result = geomCollection.union();
         return jstsToCoords(result);
     } catch (e) {
-        return null;
+        return featuresCoordsArray[0];
     }
 }
 
 function fastDifferenceMeters(subjectCoords, clipCoords) {
+    if (!subjectCoords) return null;
+    if (!clipCoords) return subjectCoords;
+    try {
+        let sP = getCoordsMeters(subjectCoords);
+        let cP = getCoordsMeters(clipCoords);
+        if (sP.length > 0 && cP.length > 0 && polygonClipping && typeof polygonClipping.difference === 'function') {
+            let res = polygonClipping.difference(sP, cP);
+            return (res && res.length > 0) ? res : null;
+        }
+    } catch (ePc) {}
     try {
         let subj = coordsToJsts(subjectCoords);
         let clip = coordsToJsts(clipCoords);
-        if (!subj) return null;
+        if (!subj) return subjectCoords;
         if (!clip) return subjectCoords;
         let diff = subj.difference(clip);
         return jstsToCoords(diff);
@@ -270,6 +291,15 @@ function fastDifferenceMeters(subjectCoords, clipCoords) {
 }
 
 function fastIntersectionMeters(subjectCoords, clipCoords) {
+    if (!subjectCoords || !clipCoords) return null;
+    try {
+        let sP = getCoordsMeters(subjectCoords);
+        let cP = getCoordsMeters(clipCoords);
+        if (sP.length > 0 && cP.length > 0 && polygonClipping && typeof polygonClipping.intersection === 'function') {
+            let res = polygonClipping.intersection(sP, cP);
+            return (res && res.length > 0) ? res : null;
+        }
+    } catch (ePc) {}
     try {
         let subj = coordsToJsts(subjectCoords);
         let clip = coordsToJsts(clipCoords);
@@ -553,6 +583,33 @@ export async function calcularAreas(tramosACalcular, todosLosTramos, cartografia
     let tramosPrevCache = []; // Tramos ya procesados como barrera (same as Python tramos_previos_cache)
 
     console.time('calcAreas_total');
+    const pozosLatLngMap = {};
+    (pozosData || []).forEach(pz => {
+        if (!pz) return;
+        let rx = pz.CoordX !== undefined ? pz.CoordX : (pz.X !== undefined ? pz.X : (pz.x !== undefined ? pz.x : pz.lng));
+        let ry = pz.CoordY !== undefined ? pz.CoordY : (pz.Y !== undefined ? pz.Y : (pz.y !== undefined ? pz.y : pz.lat));
+        let x = parseFloat(rx), y = parseFloat(ry);
+        if (!isFinite(x) || !isFinite(y) || (x === 0 && y === 0)) return;
+        let pm = convertPointToMeters(x, y);
+        let wgs = projectToLatLng(pm[0], pm[1]);
+        if (wgs && isFinite(wgs[0]) && isFinite(wgs[1])) {
+            [pz.IdNodo, pz.IDNODO, pz.Nombre, pz.IDfinal, pz.id].forEach(k => {
+                if (k !== undefined && k !== null && String(k).trim() !== "") {
+                    pozosLatLngMap[String(k).trim().toLowerCase()] = [wgs[1], wgs[0]];
+                }
+            });
+        }
+    });
+    const ensureTramoCoords = (tr) => {
+        if (!tr || tr.sep) return tr;
+        if (Array.isArray(tr.coords) && tr.coords.length >= 2) return tr;
+        let pDe = pozosLatLngMap[String(tr.de || tr.DE1 || tr.DE || "").trim().toLowerCase()];
+        let pA = pozosLatLngMap[String(tr.a || tr.A1 || tr.A || "").trim().toLowerCase()];
+        if (pDe && pA) return { ...tr, coords: [pDe, pA] };
+        return tr;
+    };
+    tramosACalcular = (tramosACalcular || []).map(ensureTramoCoords);
+    todosLosTramos = (todosLosTramos || []).map(ensureTramoCoords);
     console.log(`[calcAreas] Iniciando con ${tramosACalcular.length} tramos, ${(cartografia||[]).length} predios`);
 
     // --- PRE-CÓMPUTO OPTIMIZADO ---
@@ -727,20 +784,13 @@ export async function calcularAreas(tramosACalcular, todosLosTramos, cartografia
 
     // 3. Cache pozos for snapping — AUTO-DETECT COORDINATE SYSTEM
     const pozosCache = (pozosData || []).map(pz => {
-        if (!pz || pz.y === undefined || pz.x === undefined) return null;
-        let x = parseFloat(pz.x) || 0;
-        let y = parseFloat(pz.y) || 0;
+        if (!pz) return null;
+        let rx = pz.CoordX !== undefined ? pz.CoordX : (pz.X !== undefined ? pz.X : (pz.x !== undefined ? pz.x : pz.lng));
+        let ry = pz.CoordY !== undefined ? pz.CoordY : (pz.Y !== undefined ? pz.Y : (pz.y !== undefined ? pz.y : pz.lat));
+        let x = parseFloat(rx) || 0;
+        let y = parseFloat(ry) || 0;
         if (x === 0 || y === 0) return null;
-        
-        // Auto-detect: if x > 100000 it's already in EPSG:3116 (metric), 
-        // otherwise it's WGS84 (degrees)
-        if (Math.abs(x) > 100000) {
-            // Already in EPSG:3116 meters — use directly
-            return convertPointToMeters(x, y);
-        } else {
-            // WGS84 degrees — project to meters
-            return projectToMeters(x, y);
-        }
+        return convertPointToMeters(x, y);
     }).filter(p => p !== null);
 
     console.log(`[calcAreas] ${pozosCache.length} pozos cacheados para snapping`);
@@ -1004,28 +1054,29 @@ export async function calcularAreas(tramosACalcular, todosLosTramos, cartografia
             // (Removido cacheAssigned)
             
             function jstsToWgsGeoJSON(geom) {
-                if (!geom || geom.isEmpty()) return null;
-                let writer = new jsts.io.GeoJSONWriter();
-                let geojson = writer.write(geom);
-                function unproj(coords) {
-                    if (!coords) return coords;
-                    if (typeof coords[0] === 'number') {
-                        let w = projectToLatLng(coords[0], coords[1]);
-                        return [w[0], w[1]]; // [lng, lat]
+                if (!geom || !jsts || !jsts.io || (typeof geom.isEmpty === 'function' && geom.isEmpty())) return null;
+                try {
+                    let writer = new jsts.io.GeoJSONWriter();
+                    let geojson = writer.write(geom);
+                    function unproj(coords) {
+                        if (!coords) return coords;
+                        if (typeof coords[0] === 'number') {
+                            let w = projectToLatLng(coords[0], coords[1]);
+                            return [w[0], w[1]]; // [lng, lat]
+                        }
+                        return coords.map(unproj);
                     }
-                    return coords.map(unproj);
-                }
-                
-                if (geojson.type === 'GeometryCollection') {
-                    if (geojson.geometries) {
-                        geojson.geometries.forEach(g => {
-                            if (g.coordinates) g.coordinates = unproj(g.coordinates);
-                        });
+                    if (geojson.type === 'GeometryCollection') {
+                        if (geojson.geometries) {
+                            geojson.geometries.forEach(g => {
+                                if (g.coordinates) g.coordinates = unproj(g.coordinates);
+                            });
+                        }
+                    } else if (geojson.coordinates) {
+                        geojson.coordinates = unproj(geojson.coordinates);
                     }
-                } else if (geojson.coordinates) {
-                    geojson.coordinates = unproj(geojson.coordinates);
-                }
-                return geojson;
+                    return geojson;
+                } catch (ej) { return null; }
             }
 
             let gPred = null;

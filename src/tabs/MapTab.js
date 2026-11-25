@@ -1,7 +1,7 @@
 // Forced refresh 06:17:04
 /* global txtEstaciones, jsonDensidades */
-import React, { useState, useEffect, useRef } from 'react';
-import { MapContainer, TileLayer, Polygon, FeatureGroup, useMap } from 'react-leaflet';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { MapContainer, TileLayer, Polygon, Tooltip, FeatureGroup, useMap } from 'react-leaflet';
 import { cIDF, formatDiam } from '../engine';
 import { IDF } from '../constants';
 import { calcularAreas, generarPoligonosVoronoiSync } from '../calcAreasAferentes';
@@ -420,6 +420,53 @@ const GeomanSetup = ({ sT, setSelTramos, tramosConCoordsRef, setBufferArea }) =>
   return null;
 };
 
+const MapBridge = ({ mapRef, setMapLoaded }) => {
+  const map = useMap();
+  useEffect(() => {
+    if (map) {
+      mapRef.current = map;
+      setMapLoaded(true);
+    }
+  }, [map, mapRef, setMapLoaded]);
+  return null;
+};
+
+function geoJsonGeomToLatLngs(geom) {
+  if (!geom || !geom.coordinates) return null;
+  const toLatLng = (pt) => {
+    if (!Array.isArray(pt) || pt.length < 2) return null;
+    let x = Number(pt[0]), y = Number(pt[1]);
+    if (!isFinite(x) || !isFinite(y)) return null;
+    if (Math.abs(x) > 180 || Math.abs(y) > 180) {
+      let srcEpsg = x > 3000000 ? "EPSG:9377" : (x < -1000000 ? "EPSG:3857" : (window.currentGlobalEpsg || "EPSG:3116"));
+      try {
+        let w = proj4(srcEpsg, "EPSG:4326", [x, y]);
+        return [w[1], w[0]];
+      } catch (e) { return null; }
+    }
+    if (x >= -15 && x <= 20 && y >= -90 && y <= -50) return [x, y];
+    return [y, x];
+  };
+  if (geom.type === "Polygon") {
+    let rings = geom.coordinates.map(r => (r || []).map(toLatLng).filter(Boolean)).filter(r => r.length >= 3);
+    return rings.length > 0 ? rings : null;
+  }
+  if (geom.type === "MultiPolygon") {
+    let polys = geom.coordinates.map(p => (p || []).map(r => (r || []).map(toLatLng).filter(Boolean)).filter(r => r.length >= 3)).filter(p => p.length > 0);
+    return polys.length > 0 ? polys : null;
+  }
+  return null;
+}
+
+function collectBoundsFromLatLngs(positions, bounds) {
+  if (!Array.isArray(positions) || positions.length === 0) return;
+  if (typeof positions[0] === 'number' && positions.length >= 2) {
+    if (isFinite(positions[0]) && isFinite(positions[1])) bounds.extend([positions[0], positions[1]]);
+    return;
+  }
+  positions.forEach(item => collectBoundsFromLatLngs(item, bounds));
+}
+
 function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, selMap, setSelMap, autoAreasPoly, setAutoAreasPoly, isExport }) {
       const [selTramos, setSelTramos] = useState(() => (Array.isArray(selMap) && selMap.length > 0 ? selMap : []));
       useEffect(() => { if (Array.isArray(selMap) && selMap.length > 0 && selTramos.length === 0) setSelTramos(selMap); }, [selMap]);
@@ -463,6 +510,12 @@ function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, se
     }, []);
 
   const [bufferPoly, setBufferPoly] = useState([]); // GeoJSON polygon coordinates
+  const [localAutoAreas, setLocalAutoAreas] = useState(() => (Array.isArray(autoAreasPoly) ? autoAreasPoly : []));
+  useEffect(() => {
+    if (Array.isArray(autoAreasPoly) && autoAreasPoly.length > 0) {
+      setLocalAutoAreas(autoAreasPoly);
+    }
+  }, [autoAreasPoly]);
   // autoAreasPoly y setAutoAreasPoly vienen de props
   const [tcVal, setTcVal] = useState("-");
   const [traceMode, setTraceMode] = useState(false);
@@ -516,21 +569,23 @@ function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, se
     }
   }, [isActive]);
 
+  const prevHadProjectRef = useRef(Boolean(inpData || (T && T.length > 0)));
   useEffect(() => {
-    if (!inpData && T && T.length === 0) {
+    const hasProjectNow = Boolean(inpData || (T && T.length > 0));
+    if (prevHadProjectRef.current && !hasProjectNow) {
       setCartografia([]);
       setSelTramos([]);
       setBufferArea(0);
       setBufferPoly([]);
+      setLocalAutoAreas([]);
       if (setAutoAreasPoly) setAutoAreasPoly([]);
       if (mapRef.current) {
         if (cartoLayerRef.current) mapRef.current.removeLayer(cartoLayerRef.current);
         if (selLinesLayerRef.current) mapRef.current.removeLayer(selLinesLayerRef.current);
-        if (bufferLayerRef.current) mapRef.current.removeLayer(bufferLayerRef.current);
-        if (autoAreasLayerRef.current) mapRef.current.removeLayer(autoAreasLayerRef.current);
       }
     }
-  }, [inpData, T, mapLoaded]);
+    prevHadProjectRef.current = hasProjectNow;
+  }, [inpData, T]);
 
   useEffect(() => {
      if(mapRef.current && cartoLayerRef.current) {
@@ -542,98 +597,89 @@ function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, se
      }
   }, [verCartografia, mapLoaded]);
 
-  useEffect(() => {
-     if(mapRef.current && autoAreasLayerRef.current) {
-         if(verAutoAreas) {
-             if(!mapRef.current.hasLayer(autoAreasLayerRef.current)) autoAreasLayerRef.current.addTo(mapRef.current);
-         } else {
-             if(mapRef.current.hasLayer(autoAreasLayerRef.current)) mapRef.current.removeLayer(autoAreasLayerRef.current);
-         }
-     }
-  }, [verAutoAreas, mapLoaded]);
+  const effectiveAutoAreas = useMemo(() => {
+    const fromProps = Array.isArray(autoAreasPoly) && autoAreasPoly.length > 0 ? autoAreasPoly : (autoAreasPoly && Array.isArray(autoAreasPoly.features) && autoAreasPoly.features.length > 0 ? autoAreasPoly.features : []);
+    if (fromProps.length > 0) return fromProps;
+    if (Array.isArray(localAutoAreas) && localAutoAreas.length > 0) return localAutoAreas;
+    const validT = Array.isArray(T) ? T.filter(t => t && !t.sep && t.de && t.a) : [];
+    const rawTr = (inpData && Array.isArray(inpData.tr)) ? inpData.tr : [];
+    const rawPozos = (inpData && Array.isArray(inpData.pozos)) ? inpData.pozos : [];
+    const selList = Array.isArray(selMap) ? selMap.filter(Boolean) : [];
+    if (validT.length > 0 && (rawPozos.length > 0 || rawTr.length > 0 || selList.length > 0)) {
+      try {
+        const coordTr = validT.map(t => {
+          const k = String(t.de).trim().toLowerCase() + "_" + String(t.a).trim().toLowerCase();
+          const mTr = rawTr.find(rt => String(rt.de || rt.DE1 || rt.DE || "").trim().toLowerCase() + "_" + String(rt.a || rt.A1 || rt.A || "").trim().toLowerCase() === k);
+          const mSel = selList.find(st => String(st.de || "").trim().toLowerCase() + "_" + String(st.a || "").trim().toLowerCase() === k);
+          const coords = (Array.isArray(t.coords) && t.coords.length >= 2) ? t.coords : ((mTr && Array.isArray(mTr.coords) && mTr.coords.length >= 2) ? mTr.coords : (mSel && Array.isArray(mSel.coords) ? mSel.coords : undefined));
+          return coords ? { ...t, coords } : t;
+        });
+        const syn = generarPoligonosVoronoiSync(coordTr, rawPozos, radio || 20.0);
+        if (syn && Array.isArray(syn.features) && syn.features.length > 0) return syn.features;
+      } catch (eMemoSyn) {}
+    }
+    return [];
+  }, [autoAreasPoly, localAutoAreas, T, inpData, selMap, radio]);
 
-  useEffect(() => {
-      if (!mapRef.current) return;
-      if (bufferLayerRef.current) {
-          mapRef.current.removeLayer(bufferLayerRef.current);
-          bufferLayerRef.current = null;
+  const renderedAutoPolygons = useMemo(() => {
+    return (effectiveAutoAreas || []).map((ft, idx) => {
+      if (!ft || (!ft.geometry && !ft.coordinates)) return null;
+      const geom = ft.geometry || ft;
+      const positions = geoJsonGeomToLatLngs(geom);
+      if (!positions) return null;
+      const props = ft.properties || {};
+      const label = props.label || (props.de && props.a ? `Tramo ${props.de} → ${props.a}` : (props.pozoId || `Área ${idx + 1}`));
+      let areaHa = Number(props.areaHa || 0);
+      if (!(areaHa > 0)) {
+        try { areaHa = turf.area(ft) / 10000.0; } catch (e) { areaHa = 0; }
       }
-      if (!bufferPoly || bufferPoly.length === 0) return;
+      return { key: `auto_area_${props.tramoId || props.id || idx}_${idx}`, positions, label, areaHa };
+    }).filter(Boolean);
+  }, [effectiveAutoAreas]);
 
-      let featuresToRender = (Array.isArray(bufferPoly) ? bufferPoly : []).filter(f => f && (f.type === "Feature" || f.geometry)).filter(f => {
-          if (f.properties && f.properties.isCompleta) return verAreaCompleta;
-          if (f.properties && (f.properties.isPredio || f.properties.isVia)) return verAreaSeparada;
-          return true;
-      });
-
-      let fc = { type: "FeatureCollection", features: featuresToRender };
-      bufferLayerRef.current = L.geoJSON(fc, {
-          style: function(feature) {
-              if (feature.properties && feature.properties.isCompleta) {
-                  return { color: "#ff7800", fillColor: "transparent", fillOpacity: 0, weight: 3, dashArray: "5, 5" };
-              }
-              if (feature.properties && feature.properties.isVia) {
-                  return { color: "#6b7280", fillColor: "#9ca3af", fillOpacity: 0.4, weight: 1, dashArray: "4" };
-              }
-              return { color: "#8e44ad", fillColor: "#9b59b6", fillOpacity: 0.4, weight: 2 };
-          }
-      });
-      if (!mapRef.current.hasLayer(bufferLayerRef.current))
-          bufferLayerRef.current.addTo(mapRef.current);
-  }, [bufferPoly, verAreaCompleta, verAreaSeparada, mapLoaded]);
+  const renderedBufferPolygons = useMemo(() => {
+    const hasAutoComplete = verAutoAreas && renderedAutoPolygons.length > 0;
+    return (Array.isArray(bufferPoly) ? bufferPoly : []).map((ft, idx) => {
+      if (!ft) return null;
+      const props = ft.properties || {};
+      if (props.isCompleta) {
+        if (!verAreaCompleta || hasAutoComplete) return null;
+      } else if (props.isPredio || props.isVia) {
+        if (!verAreaSeparada) return null;
+      } else if (props.isBufferPreview && hasAutoComplete) {
+        return null;
+      }
+      const geom = ft.geometry || ft;
+      const positions = geoJsonGeomToLatLngs(geom);
+      if (!positions) return null;
+      let pathOptions = { color: "#8e44ad", fillColor: "#9b59b6", fillOpacity: 0.35, weight: 2, interactive: false };
+      if (props.isCompleta || props.isBufferPreview) {
+        pathOptions = { color: "#ff7800", fillColor: "#fb923c", fillOpacity: props.isBufferPreview ? 0.2 : 0, weight: 2.5, dashArray: "5, 5", interactive: false };
+      } else if (props.isVia) {
+        pathOptions = { color: "#6b7280", fillColor: "#9ca3af", fillOpacity: 0.35, weight: 1.5, dashArray: "4", interactive: false };
+      }
+      return { key: `buf_area_${idx}`, positions, pathOptions };
+    }).filter(Boolean);
+  }, [bufferPoly, verAreaCompleta, verAreaSeparada, verAutoAreas, renderedAutoPolygons.length]);
 
   useEffect(() => {
-      if (!mapRef.current) return;
-      if (autoAreasLayerRef.current) {
-          mapRef.current.removeLayer(autoAreasLayerRef.current);
-          autoAreasLayerRef.current = null;
+    if (renderedAutoPolygons.length === 0) return;
+    try {
+      const b = L.latLngBounds([]);
+      renderedAutoPolygons.forEach(p => collectBoundsFromLatLngs(p.positions, b));
+      if (b.isValid()) {
+        mapBoundsRef.current = b;
+        if ((isActive || isExport) && mapRef.current && mapLoaded) {
+          setTimeout(() => {
+            if (mapRef.current && mapRef.current._mapPane) {
+              mapRef.current.invalidateSize();
+              mapRef.current.fitBounds(b, { padding: [50, 50], maxZoom: 19 });
+            }
+          }, 120);
+        }
       }
-      if (!autoAreasPoly || autoAreasPoly.length === 0) return;
-
-      const normalizedAutoFeats = (Array.isArray(autoAreasPoly) ? autoAreasPoly : []).map(ft => {
-          if (!ft || !ft.geometry || !ft.geometry.coordinates) return null;
-          let cf = JSON.parse(JSON.stringify(ft));
-          const toW = (pt) => { if (!Array.isArray(pt) || pt.length < 2) return pt; let x = Number(pt[0]), y = Number(pt[1]); if (Math.abs(x) <= 180 && Math.abs(y) <= 90) return [x, y]; let ll = projectToLatLng(x, y); return [ll[0], ll[1]]; };
-          if (cf.geometry.type === 'Polygon') cf.geometry.coordinates = cf.geometry.coordinates.map(r => r.map(toW));
-          else if (cf.geometry.type === 'MultiPolygon') cf.geometry.coordinates = cf.geometry.coordinates.map(p => p.map(r => r.map(toW)));
-          return cf;
-      }).filter(Boolean);
-      let fc = { type: "FeatureCollection", features: normalizedAutoFeats };
-      autoAreasLayerRef.current = L.geoJSON(fc, {
-          style: function(feature) {
-              return {
-                  color: '#059669', // Emerald
-                  weight: 2,
-                  fillColor: '#10b981',
-                  fillOpacity: 0.3,
-                  dashArray: '5, 5'
-              };
-          },
-          onEachFeature: function(feature, layer) {
-              if (feature.properties && feature.properties.areaHa !== undefined) {
-                  let label = feature.properties.label || feature.properties.pozoId || '';
-                  layer.bindTooltip(`${label}<br/><b>${Number(feature.properties.areaHa || 0).toFixed(4)} Ha</b>`, {
-                      permanent: true,
-                      direction: 'center',
-                      className: 'auto-area-tooltip'
-                  });
-              }
-          }
-      });
-      if (verAutoAreas) {
-          if (!mapRef.current.hasLayer(autoAreasLayerRef.current)) {
-              autoAreasLayerRef.current.addTo(mapRef.current);
-              try { autoAreasLayerRef.current.bringToBack(); } catch(eb) {}
-          }
-          try {
-              let b = autoAreasLayerRef.current.getBounds();
-              if (b.isValid()) {
-                  mapBoundsRef.current = b;
-                  if (mapLoaded) mapRef.current.fitBounds(b, { padding: [50, 50], maxZoom: 19 });
-              }
-          } catch (e) {}
-      }
-  }, [autoAreasPoly, verAutoAreas, mapLoaded]);
+    } catch (eBounds) {}
+  }, [renderedAutoPolygons, isActive, isExport, mapLoaded]);
 
     // handleAutoAreas was removed (unified with handleCalcularAreas)
 
@@ -801,11 +847,28 @@ function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, se
                 setBufferPoly(features);
                 const completeAutoFeats = features.filter(f => f && f.properties && f.properties.isCompleta);
                 let finalAutoAreas = completeAutoFeats;
-                if (modoSeleccionado && Array.isArray(autoAreasPoly) && autoAreasPoly.length > 0) {
+                const baseExistingAuto = (Array.isArray(autoAreasPoly) && autoAreasPoly.length > 0) ? autoAreasPoly : localAutoAreas;
+                if (modoSeleccionado && Array.isArray(baseExistingAuto) && baseExistingAuto.length > 0) {
                     const updatedKeys = new Set(completeAutoFeats.map(f => String(f.properties.tramoId || "").trim().toLowerCase()));
-                    finalAutoAreas = [...autoAreasPoly.filter(f => !updatedKeys.has(String(f?.properties?.tramoId || ((f?.properties?.de || "") + "-" + (f?.properties?.a || ""))).trim().toLowerCase())), ...completeAutoFeats];
+                    finalAutoAreas = [...baseExistingAuto.filter(f => !updatedKeys.has(String(f?.properties?.tramoId || ((f?.properties?.de || "") + "-" + (f?.properties?.a || ""))).trim().toLowerCase())), ...completeAutoFeats];
                 }
+                setVerAutoAreas(true);
+                setLocalAutoAreas(finalAutoAreas);
                 if (setAutoAreasPoly) setAutoAreasPoly(finalAutoAreas);
+                try {
+                    const calcBounds = L.latLngBounds([]);
+                    finalAutoAreas.forEach(fa => {
+                        const pos = geoJsonGeomToLatLngs(fa && (fa.geometry || fa));
+                        if (pos) collectBoundsFromLatLngs(pos, calcBounds);
+                    });
+                    if (calcBounds.isValid()) {
+                        mapBoundsRef.current = calcBounds;
+                        if (mapRef.current && mapRef.current._mapPane) {
+                            mapRef.current.invalidateSize();
+                            mapRef.current.fitBounds(calcBounds, { padding: [50, 50], maxZoom: 19 });
+                        }
+                    }
+                } catch (eCalcFit) {}
                 const useSeparateViasAuto = Boolean(incluirVias && cartografia && cartografia.length > 0);
                 if (sT && tramosActualizados.length > 0) {
                     const cleanForState = tramosActualizados.map((trItem, tIdx) => {
@@ -1110,12 +1173,12 @@ function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, se
           let bounds = layerTramos.getBounds();
           if(bounds.isValid()) {
               mapBoundsRef.current = bounds;
-              map.fitBounds(bounds, { padding: [50, 50], maxZoom: 19 });
+              if (isActive || isExport) map.fitBounds(bounds, { padding: [50, 50], maxZoom: 19 });
           } else if (layerPozos.getBounds) {
               let pBounds = layerPozos.getBounds();
               if(pBounds.isValid()) {
                   mapBoundsRef.current = pBounds;
-                  map.fitBounds(pBounds, { padding: [50, 50], maxZoom: 19 });
+                  if (isActive || isExport) map.fitBounds(pBounds, { padding: [50, 50], maxZoom: 19 });
               }
           }
         } catch(e) {}
@@ -1996,11 +2059,25 @@ const handleExportPolygonVertices = () => {
         `}</style>
       <div style={{ flex: 1, position: 'relative', zIndex: 0 }}>
         <MapContainer 
-            center={[4.6097, -74.0817]} zoom={13} maxZoom={24} 
+            center={[7.0898, -73.0915]} zoom={14} maxZoom={24} 
             style={{ width: '100%', height: '100%', backgroundColor: '#f9fafb' }} ref={mapRef}
-            whenReady={() => setMapLoaded(true)}
         >
+          <MapBridge mapRef={mapRef} setMapLoaded={setMapLoaded} />
           <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" maxZoom={24} maxNativeZoom={19} />
+          {verAutoAreas && renderedAutoPolygons.map(ap => (
+            <Polygon
+              key={ap.key}
+              positions={ap.positions}
+              pathOptions={{ color: '#059669', weight: 2.5, fillColor: '#10b981', fillOpacity: 0.35, dashArray: '5, 5', interactive: false }}
+            >
+              <Tooltip permanent direction="center" className="auto-area-tooltip">
+                <span>{ap.label}<br /><b>{ap.areaHa.toFixed(4)} Ha</b></span>
+              </Tooltip>
+            </Polygon>
+          ))}
+          {renderedBufferPolygons.map(bp => (
+            <Polygon key={bp.key} positions={bp.positions} pathOptions={bp.pathOptions} />
+          ))}
           { !isExport && <GeomanSetup sT={sT} setSelTramos={setSelTramos} tramosConCoordsRef={tramosConCoordsRef} setBufferArea={setBufferArea} /> }
         </MapContainer>
       </div>
@@ -2184,7 +2261,7 @@ const handleExportPolygonVertices = () => {
           </div>
           <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
                 <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: '6px', fontSize: '11px', color: '#e2e8f0', fontWeight: '600', marginTop: '5px' }}>
-                     <input type="checkbox" checked={verAutoAreas} onChange={e => setVerAutoAreas(e.target.checked)} /> Mostrar Áreas Autogeneradas ({Array.isArray(autoAreasPoly) ? autoAreasPoly.length : 0})
+                     <input type="checkbox" checked={verAutoAreas} onChange={e => setVerAutoAreas(e.target.checked)} /> Mostrar Áreas Autogeneradas ({renderedAutoPolygons.length})
                 </label>
           </div>
           </div>
