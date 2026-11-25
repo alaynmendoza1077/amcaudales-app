@@ -266,6 +266,7 @@ export function AuthProvider({ children }) {
           if (newSession?.user) {
             await applyUserSession(newSession, `event_${event}`);
           } else if (event === 'SIGNED_OUT') {
+            sessionApplied = false;
             setUser(null);
             setSession(null);
             setCloudProjects([]);
@@ -422,21 +423,28 @@ export function AuthProvider({ children }) {
     return guestUser;
   };
 
-  const loginAsAdmin = (adminKey = '') => {
+  const loginAsAdmin = async (adminKey = '', customEmail = '') => {
     const key = (adminKey || '').trim().toUpperCase();
-    if (key !== 'ADMIN2026' && key !== 'AMC2026' && key !== 'AMCAUDALES2026' && key !== 'EMPAS2026') {
-      throw new Error('Clave Maestra de Administrador incorrecta. Ingrese una clave autorizada.');
+    const validAdminKeys = ['ADMIN2026', 'AMC2026', 'AMCAUDALES2026', 'ALAYN2026', 'EMPAS2026'];
+    if (!validAdminKeys.includes(key)) {
+      throw new Error('Clave Maestra de Administrador incorrecta. Ingrese una clave autorizada (ej. AMC2026 o ADMIN2026).');
     }
 
+    const cleanEmail = (customEmail || '').trim().toLowerCase() || 'alaynmendoza@gmail.com';
+    const isAlayn = cleanEmail.includes('alayn') || cleanEmail.includes('mendoza');
+    const adminUUID = stringToUUID(cleanEmail);
+
     const adminUser = {
-      id: 'usr_super_admin',
-      email: 'admin@amcaudales.com',
+      id: adminUUID,
+      email: cleanEmail.includes('@') ? cleanEmail : `${cleanEmail}@amcaudales.com`,
       isAdmin: true,
       isGuest: false,
       user_metadata: {
-        full_name: 'Super Administrador AMC',
-        company: 'AMCaudales Master Control',
-        plan: 'pro'
+        full_name: isAlayn ? 'Ing. Alayn Mendoza' : 'Super Administrador AMC',
+        name: isAlayn ? 'Ing. Alayn Mendoza' : 'Super Administrador AMC',
+        company: 'Ingeniería Hidráulica AMC',
+        plan: 'pro',
+        isAdmin: true
       }
     };
 
@@ -445,7 +453,8 @@ export function AuthProvider({ children }) {
     setUser(adminUser);
     setUserPlan('pro');
     localStorage.setItem('amcaudales_user_plan', 'pro');
-    fetchUserProjects(adminUser.id, null);
+    await syncAccountToCloud(adminUser, key).catch(console.warn);
+    await fetchUserProjects(adminUser.id, null).catch(console.warn);
     return adminUser;
   };
 
@@ -785,7 +794,7 @@ export function AuthProvider({ children }) {
         if (uploadedAny) {
           const { data: refreshedData } = await supabase
             .from('projects')
-            .select('id, title, updated_at, created_at, user_id')
+            .select('id, title, updated_at, user_id')
             .order('updated_at', { ascending: false });
 
           if (Array.isArray(refreshedData) && refreshedData.length > 0) {
@@ -800,62 +809,111 @@ export function AuthProvider({ children }) {
   };
 
   /**
-   * Registro universal con Correo y Contraseña
+   * Registro universal con Correo y Contraseña (Resiliente ante límites de correo SMTP y confirmación pendiente)
    */
   const register = async (email, password, fullName, company) => {
     const rawEmail = (email || '').trim().toLowerCase();
     if (!rawEmail || !rawEmail.includes('@')) {
       throw new Error('Por favor ingrese un correo electrónico válido.');
     }
-    if (!password || password.length < 6) {
+    const cleanPass = String(password || '').trim();
+    if (!cleanPass || cleanPass.length < 6) {
       throw new Error('La contraseña debe tener al menos 6 caracteres.');
     }
 
     const cleanName = (fullName || rawEmail.split('@')[0]).trim();
+    const cleanCompany = (company || 'Ingeniería Civil').trim();
+    const cleanSlug = rawEmail.replace(/[^a-z0-9]/g, '_');
+    const accountRecordId = stringToUUID(`sys_account_${cleanSlug}`);
     let registeredUser = null;
     let activeSession = null;
 
     if (isCloudConfigured && supabase) {
+      // 1. Verificar si ya existe registro en el directorio cloud de cuentas
+      try {
+        const { data: existingAcc } = await supabase
+          .from('projects')
+          .select('id, user_id, project_data')
+          .eq('id', accountRecordId)
+          .maybeSingle();
+
+        if (existingAcc && existingAcc.project_data) {
+          const inputHash = await hashPassword(cleanPass);
+          const storedHash = existingAcc.project_data.passwordHash;
+          const storedPlain = existingAcc.project_data.passwordPlain;
+          if ((storedHash && storedHash === inputHash) || (storedPlain && storedPlain === cleanPass)) {
+            return await login(rawEmail, cleanPass);
+          }
+          throw new Error('Este correo ya tiene una cuenta registrada. Haz clic en la pestaña "🔑 Iniciar Sesión" para ingresar.');
+        }
+      } catch (checkErr) {
+        if (checkErr.message && checkErr.message.includes('ya tiene una cuenta')) {
+          throw checkErr;
+        }
+      }
+
+      // 2. Intentar creación en Supabase Auth con contingencia ante límites de envío de correo
       try {
         const { data, error } = await supabase.auth.signUp({
           email: rawEmail,
-          password,
+          password: cleanPass,
           options: {
             data: {
               full_name: cleanName,
               name: cleanName,
-              company: company || 'Ingeniería Civil',
+              company: cleanCompany,
               plan: 'pro'
             }
           }
         });
 
         if (error) {
-          if (error.message.includes('User already registered') || error.message.includes('already registered')) {
-            throw new Error('Este correo ya está registrado. Por favor inicia sesión o ingresa con Google.');
+          const msgLow = (error.message || '').toLowerCase();
+          if (msgLow.includes('already registered') || msgLow.includes('already exists')) {
+            // Si ya existe en Supabase Auth, intentar iniciar sesión directamente con esa contraseña
+            const { data: signInTry } = await supabase.auth.signInWithPassword({ email: rawEmail, password: cleanPass });
+            if (signInTry?.user) {
+              registeredUser = buildAuthUser(signInTry.user);
+              activeSession = signInTry.session || null;
+            } else {
+              throw new Error('Este correo ya está registrado. Por favor ve a "🔑 Iniciar Sesión" o ingresa con Google.');
+            }
+          } else {
+            // Si Supabase rechaza por límite de correos por hora (email rate limit exceeded / confirmation email error),
+            // activamos registro directo en la tabla segura de cuentas en Supabase para no bloquear nunca al usuario
+            console.warn('[Registro Resiliente] Usando registro directo en nube por aviso SMTP:', error.message);
           }
-          throw new Error(error.message);
-        }
-
-        if (data?.user) {
+        } else if (data?.user) {
           registeredUser = buildAuthUser(data.user);
           activeSession = data.session || null;
+          // Si no vino sesión (ej. auto-confirm recién activado), intentar signInWithPassword silencioso
+          if (!activeSession) {
+            try {
+              const { data: autoLogin } = await supabase.auth.signInWithPassword({ email: rawEmail, password: cleanPass });
+              if (autoLogin?.session) activeSession = autoLogin.session;
+            } catch (e) {}
+          }
         }
       } catch (err) {
-        throw err;
+        if (err.message && (err.message.includes('ya está registrado') || err.message.includes('ya tiene una cuenta'))) {
+          throw err;
+        }
+        console.warn('[Registro Resiliente] Contingencia activada:', err.message);
       }
     }
 
     if (!registeredUser) {
-      const cleanSlug = rawEmail.replace(/[^a-z0-9]/g, '_');
+      const detUUID = stringToUUID(rawEmail);
+      const isAlayn = rawEmail.includes('alaynmendoza');
       registeredUser = {
-        id: `usr_${cleanSlug}`,
+        id: detUUID,
         email: rawEmail,
         isGuest: false,
-        isAdmin: true,
+        isAdmin: isAlayn,
         user_metadata: {
           full_name: cleanName,
-          company: company || 'Ingeniería Civil',
+          name: cleanName,
+          company: cleanCompany,
           plan: 'pro'
         }
       };
@@ -867,13 +925,13 @@ export function AuthProvider({ children }) {
     localStorage.setItem('amcaudales_user_plan', 'pro');
     localStorage.setItem('amcaudales_auth_user', JSON.stringify(registeredUser));
     localStorage.removeItem('amcaudales_user_session');
-    await syncAccountToCloud(registeredUser, password);
+    await syncAccountToCloud(registeredUser, cleanPass);
     await fetchUserProjects(registeredUser.id, activeSession);
     return { user: registeredUser, session: activeSession };
   };
 
   /**
-   * Inicio de sesión universal con Correo y Contraseña
+   * Inicio de sesión universal con Correo/Usuario y Contraseña
    */
   const login = async (email, password) => {
     let rawEmail = (email || '').trim();
@@ -885,24 +943,26 @@ export function AuthProvider({ children }) {
       throw new Error('Por favor ingrese su contraseña.');
     }
 
-    const isMasterKey = ['ADMIN2026', 'AMC2026', 'AMCAUDALES2026', 'EMPAS2026'].includes(cleanPassword.toUpperCase());
+    const isMasterKey = ['ADMIN2026', 'AMC2026', 'AMCAUDALES2026', 'ALAYN2026', 'EMPAS2026'].includes(cleanPassword.toUpperCase());
 
-    // 1. Acceso con Clave Maestra de Administrador, EMPAS o Alayn Mendoza
+    // 1. Acceso directo con Clave Maestra de Administrador
     if (isMasterKey) {
-      const cleanSlug = rawEmail.toLowerCase().replace(/[^a-z0-9]/g, '_');
-      const isEmpas = rawEmail.toLowerCase().includes('empas') || cleanPassword.toUpperCase() === 'EMPAS2026';
-      const isAlayn = rawEmail.toLowerCase().includes('alayn') || rawEmail.toLowerCase().includes('mendoza');
+      const normInput = rawEmail.toLowerCase();
+      const targetAdminEmail = (normInput === 'admin' || normInput === 'superadmin' || normInput.includes('alayn') || normInput.includes('mendoza'))
+        ? (normInput.includes('@') ? normInput : 'alaynmendoza@gmail.com')
+        : (normInput.includes('@') ? normInput : `${normInput}@amcaudales.com`);
+      const isAlayn = targetAdminEmail.includes('alayn') || targetAdminEmail.includes('mendoza');
       const adminUser = {
-        id: `usr_${cleanSlug}`,
-        email: rawEmail.includes('@') ? rawEmail.toLowerCase() : `${rawEmail.toLowerCase()}@amcaudales.com`,
+        id: stringToUUID(targetAdminEmail),
+        email: targetAdminEmail,
         isAdmin: true,
         isGuest: false,
         user_metadata: {
-          full_name: isAlayn
-            ? 'Ing. Alayn Mendoza'
-            : (rawEmail.includes('@') ? rawEmail.split('@')[0].toUpperCase() : rawEmail.toUpperCase()),
+          full_name: isAlayn ? 'Ing. Alayn Mendoza' : (rawEmail.includes('@') ? rawEmail.split('@')[0].toUpperCase() : rawEmail.toUpperCase()),
+          name: isAlayn ? 'Ing. Alayn Mendoza' : (rawEmail.includes('@') ? rawEmail.split('@')[0].toUpperCase() : rawEmail.toUpperCase()),
           company: 'Ingeniería Hidráulica AMC',
-          plan: 'pro'
+          plan: 'pro',
+          isAdmin: true
         }
       };
       localStorage.removeItem('amcaudales_user_session');
@@ -910,8 +970,8 @@ export function AuthProvider({ children }) {
       setUser(adminUser);
       setUserPlan('pro');
       localStorage.setItem('amcaudales_user_plan', 'pro');
-      await syncAccountToCloud(adminUser, cleanPassword);
-      await fetchUserProjects(adminUser.id, null);
+      await syncAccountToCloud(adminUser, cleanPassword).catch(console.warn);
+      await fetchUserProjects(adminUser.id, null).catch(console.warn);
       return { user: adminUser };
     }
 
@@ -954,13 +1014,79 @@ export function AuthProvider({ children }) {
       return { user: fullUser, session: authSession };
     }
 
-    // 3. Mensajes claros y descriptivos si falla
+    // 3. Contingencia Nube: Verificar cuenta registrada en tabla projects (AUTH_ACCOUNT:)
+    // Esto resuelve cuentas con "Email not confirmed" en Supabase o creadas durante límite de correos SMTP
+    if (isCloudConfigured && supabase) {
+      try {
+        const cleanSlug = supabaseEmail.replace(/[^a-z0-9]/g, '_');
+        const accountRecordId = stringToUUID(`sys_account_${cleanSlug}`);
+        let accountRow = null;
+
+        const { data: rowById } = await supabase
+          .from('projects')
+          .select('*')
+          .eq('id', accountRecordId)
+          .maybeSingle();
+
+        if (rowById) {
+          accountRow = rowById;
+        } else {
+          const { data: rowsByTitle } = await supabase
+            .from('projects')
+            .select('*')
+            .eq('title', `AUTH_ACCOUNT: ${supabaseEmail}`)
+            .limit(1);
+          if (Array.isArray(rowsByTitle) && rowsByTitle.length > 0) {
+            accountRow = rowsByTitle[0];
+          }
+        }
+
+        if (accountRow && accountRow.project_data) {
+          const accData = accountRow.project_data;
+          const inputHash = await hashPassword(cleanPassword);
+          const validPass =
+            (accData.passwordHash && accData.passwordHash === inputHash) ||
+            (accData.passwordPlain && accData.passwordPlain === cleanPassword);
+
+          if (validPass) {
+            const isAlayn = supabaseEmail.includes('alaynmendoza');
+            const cloudUser = {
+              id: isValidUUID(accountRow.user_id) ? accountRow.user_id : stringToUUID(supabaseEmail),
+              email: supabaseEmail,
+              isGuest: false,
+              isAdmin: Boolean(accData.isAdmin || isAlayn),
+              user_metadata: {
+                full_name: accData.fullName || supabaseEmail.split('@')[0],
+                name: accData.fullName || supabaseEmail.split('@')[0],
+                company: accData.company || 'Consultoría Hidráulica',
+                plan: accData.plan || 'pro'
+              }
+            };
+            setUser(cloudUser);
+            setUserPlan('pro');
+            localStorage.setItem('amcaudales_user_plan', 'pro');
+            localStorage.setItem('amcaudales_auth_user', JSON.stringify(cloudUser));
+            localStorage.removeItem('amcaudales_user_session');
+            await fetchUserProjects(cloudUser.id, null);
+            return { user: cloudUser, session: null };
+          } else {
+            throw new Error('Contraseña incorrecta para este correo electrónico. Verifique e intente de nuevo.');
+          }
+        }
+      } catch (cloudAuthErr) {
+        if (cloudAuthErr.message && cloudAuthErr.message.includes('Contraseña incorrecta')) {
+          throw cloudAuthErr;
+        }
+      }
+    }
+
+    // 4. Mensajes claros y descriptivos si no existe o falló
     if (sbErrorMsg) {
       if (sbErrorMsg.includes('Invalid login credentials')) {
-        throw new Error('Credenciales incorrectas. Si creaste tu cuenta con Google, haz clic en el botón "Continuar con Google".');
+        throw new Error('Correo o contraseña incorrectos. Si aún no tienes cuenta ve a "📝 Crear Cuenta", o si usas Gmail haz clic en "Continuar con Google".');
       }
       if (sbErrorMsg.includes('Email not confirmed')) {
-        throw new Error('Tu correo aún no ha sido confirmado. Revisa tu bandeja de entrada o inicia sesión con Google.');
+        throw new Error('Tu correo está pendiente de confirmación en Supabase. Haz clic en "Continuar con Google" o vuelve a registrarte para activar el acceso directo.');
       }
       throw new Error(sbErrorMsg);
     }

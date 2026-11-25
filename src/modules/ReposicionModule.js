@@ -1044,7 +1044,7 @@ const handleBack = () => {
              <div className="print-page-break"><DatTab T={T} sT={setT} onFL={onFL} selMap={selMap} filterSel={filterSel} setFilterSel={setFilterSel} P={P} setP={setP} setIsThinking={setIsThinking}/></div>
              <div className="print-page-break"><CalcTab R={R} P={P} setP={setP} T={T} sT={setT} sub={sub} setSub={setSub} alivData={alivData} setAlivData={setAlivData} sumData={sumData} setSumData={setSumData} setSumLat={setSumLat} setSumTrans={setSumTrans} estSepData={estSepData} setEstSepData={setEstSepData} sumLat={sumLat} sumTrans={sumTrans} perfilIdx={perfilIdx} setPerfilIdx={setPerfilIdx} perfilZoom={perfilZoom} setPerfilZoom={setPerfilZoom} selMap={selMap} filterSel={filterSel} isExport={isExportingScreenshots}/></div>
              <div className="print-page-break"><IDFTab P={P} sP={setP}/></div>
-             <div className="print-page-break"><SwmmTab P={P} T={T} R={R} pbItems={pbItems}/></div>
+             <div className="print-page-break"><SwmmTab P={P} T={T} R={R} pbItems={pbItems} inpData={inpData} autoAreasPoly={autoAreasPoly} outfalls={outfalls}/></div>
              <div className="print-page-break"><PozTab R={R} T={T}/></div>
              <div className="print-page-break"><TubTab R={R} sumLat={sumLat} sumTrans={sumTrans} P={P}/></div>
              <div className="print-page-break"><AcoTab P={P} sP={setP} R={R}/></div>

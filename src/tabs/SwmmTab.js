@@ -7,6 +7,7 @@ import proj4 from 'proj4';
 import * as XLSX from 'xlsx';
 
 proj4.defs("EPSG:3116", "+proj=tmerc +lat_0=4.59620041666667 +lon_0=-74.0775079166667 +k=1 +x_0=1000000 +y_0=1000000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs");
+proj4.defs("EPSG:9377", "+proj=tmerc +lat_0=4 +lon_0=-73 +k=0.9992 +x_0=5000000 +y_0=2000000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs");
 
 
 function SwmmTab(props) {
@@ -57,7 +58,7 @@ function SwmmTab(props) {
       L.push("[EVAPORATION]");L.push("CONSTANT          0.0");L.push("");
       L.push("[RAINGAGES]");
       L.push(pad("G1",18)+pad("INTENSITY",14)+pad("0:05",14)+pad("1.0",14)+"TIMESERIES    TS1");L.push("");
-      var isAutoAreasApplied = inpData && inpData.isAutoAreasApplied;
+      var isAutoAreasApplied = Boolean((inpData && inpData.isAutoAreasApplied) || (Array.isArray(props.autoAreasPoly) && props.autoAreasPoly.length > 0));
       var useRawAreas = raw && raw.SUBCATCHMENTS && raw.SUBCATCHMENTS.length > 0 && !isAutoAreasApplied;
 
       if (useRawAreas) {
@@ -76,6 +77,22 @@ function SwmmTab(props) {
           var outNode=formatId(nodeMap[r.deNum||r.de]||r.deNum||r.de);
           var areaP = (r.aR_p||0) + (r.aC_p||0) + (r.aI_p||0) + (r.aIn_p||0) + (r.aV_p||0) + (r.aRe_p||0);
           var area = areaP || 0;
+          if (area <= 0 && Array.isArray(props.T)) {
+            var tRef = props.T.find(function(tx){ return tx && String(tx.de||"").trim().toLowerCase() === String(r.de||"").trim().toLowerCase() && String(tx.a||"").trim().toLowerCase() === String(r.a||"").trim().toLowerCase(); });
+            if (tRef) area = parseFloat(tRef.areaParcial || tRef.areaCalc || 0) || 0;
+          }
+          if (area <= 0 && Array.isArray(props.autoAreasPoly)) {
+            var tIdArea = String(r.de||"").trim() + "-" + String(r.a||"").trim();
+            var pMatch = props.autoAreasPoly.find(function(pf){ return pf && pf.properties && (String(pf.properties.tramoId||"").trim().toLowerCase() === tIdArea.toLowerCase() || String(pf.properties.de||"").trim().toLowerCase() === String(r.de||"").trim().toLowerCase()); });
+            if (pMatch) {
+              area = parseFloat(pMatch.properties.areaHa || 0) || 0;
+              if (area <= 0 && pMatch.geometry) { try { area = turf.area(pMatch) / 10000.0; } catch(ea){} }
+            }
+          }
+          if (area <= 0 && inpData && Array.isArray(inpData.ad)) {
+            var adM = inpData.ad.find(function(ax){ return String(ax.IDNODO||"").trim().toLowerCase() === String(r.de||"").trim().toLowerCase() || String(ax.Subcatchment||"") === subName; });
+            if (adM && adM.AREACUENCA) area = parseFloat(adM.AREACUENCA) || 0;
+          }
           if (P.tipoAlc === "SC") {
              var pct = P.porcPatios !== undefined ? parseFloat(P.porcPatios) : 5;
              area = area * (pct / 100.0);
@@ -223,6 +240,7 @@ function SwmmTab(props) {
             y = proj[1];
           } catch(e){}
         }
+        if (x > 3000000) { try { var p93 = proj4("EPSG:9377", "EPSG:3116", [x, y]); x = p93[0]; y = p93[1]; } catch(e93){} }
         return { x: x, y: y, text: pad(x.toFixed(3), 14) + y.toFixed(3) };
       };
 
@@ -330,9 +348,13 @@ function SwmmTab(props) {
                                 var x = pt.X !== undefined ? pt.X : pt.CoordX;
                                 var y = pt.Y !== undefined ? pt.Y : pt.CoordY;
                                 if (x === undefined || y === undefined || isNaN(x) || isNaN(y)) return;
+                                var mPt = formatCoordMeters(x, y);
+                                if (!mPt) return;
+                                x = mPt.x; y = mPt.y;
                                 
                                 if (!firstPt) {
                                     firstPt = { x: x, y: y };
+                                    hasPoly = true;
                                     L.push(pad(subName, 18) + pad(Number(x).toFixed(6), 14) + Number(y).toFixed(6));
                                 } else {
                                     if (countClosed > 0) return; // Evitar anillos secundarios que cortan el polígono en SWMM
@@ -389,7 +411,8 @@ function SwmmTab(props) {
                         mainRing.forEach(pt => {
                             if (lastPt && Math.abs(lastPt[0] - pt[0]) < 0.000001 && Math.abs(lastPt[1] - pt[1]) < 0.000001) return;
                             // Convertir de WGS84 (Lat/Lon) a MAGNA-SIRGAS EPSG:3116
-                            var projCoords = proj4("EPSG:4326", "EPSG:3116", [pt[0], pt[1]]);
+                                    var projCoordsObj = formatCoordMeters(pt[0], pt[1]);
+                                    var projCoords = projCoordsObj ? [projCoordsObj.x, projCoordsObj.y] : [pt[0], pt[1]];
                             L.push(pad(subName, 18) + pad(Number(projCoords[0]).toFixed(6), 14) + Number(projCoords[1]).toFixed(6));
                             lastPt = pt;
                         });
@@ -433,6 +456,11 @@ function SwmmTab(props) {
   var nOut=selectedOutfalls.length;
   return <div>
     <div className="c"><div className="ct">EPA SWMM 5.x (.inp)</div>
+      <div style={{marginBottom:10,padding:"8px 12px",borderRadius:8,background:"rgba(15,23,42,0.85)",border:"1px solid rgba(59,130,246,0.35)",display:"flex",gap:16,flexWrap:"wrap",fontSize:12,color:"#e2e8f0"}}>
+        <span><b>Subcuencas [SUBCATCHMENTS]:</b> <span style={{color:"#34d399",fontWeight:"bold"}}>{dR.length}</span></span>
+        <span><b>Polígonos [Polygons] listos:</b> <span style={{color:((Array.isArray(props.autoAreasPoly)&&props.autoAreasPoly.length>0)||vertsData.length>0)?"#38bdf8":"#f59e0b",fontWeight:"bold"}}>{Array.isArray(props.autoAreasPoly)&&props.autoAreasPoly.length>0 ? props.autoAreasPoly.length : (vertsData.length>0 ? "Sí (INP/Visor)" : "0 (Generar en Visor Espacial)")}</span></span>
+        <span><b>Área Total Aferente:</b> <span style={{color:"#fcd34d",fontWeight:"bold"}}>{dR.reduce(function(acc,rx){var ap=(rx.aR_p||0)+(rx.aC_p||0)+(rx.aI_p||0)+(rx.aIn_p||0)+(rx.aV_p||0)+(rx.aRe_p||0);return acc+ap;},0).toFixed(4)} Ha</span></span>
+      </div>
       <div className="g3" style={{marginBottom:8}}>
         <div className="f"><label>Intensidad (mm/h) para Cte.</label><input className="ec" type="number" value={opt.rainInt} onChange={function(e){uO("rainInt",+e.target.value);}}/></div>
         <div className="f"><label>Duracion (min)</label><input className="ec" type="number" value={opt.duracion} onChange={function(e){uO("duracion",+e.target.value);}}/></div>

@@ -7,11 +7,12 @@ import UpgradeProModal from './UpgradeProModal';
 export default function NavbarUserHeader({ onSaveCloud, onLoadCloud }) {
   const { user, session, loginWithGoogle, logout, isCloudConfigured, userPlan, cloudProjects } = useAuth();
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authModalTab, setAuthModalTab] = useState('login');
   const [showProjectsModal, setShowProjectsModal] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   const isGuest = Boolean(!user || user.isGuest || user.id === 'usr_guest' || user.email === 'invitado@amcaudales.com');
-  const hasCloudSession = Boolean(session?.user?.id);
+  const hasCloudSession = Boolean(session?.user?.id || (!isGuest && isCloudConfigured));
   const safeProjects = Array.isArray(cloudProjects) ? cloudProjects.filter(Boolean) : [];
   const cloudCount = safeProjects.filter(p => p && p.isCloud).length;
 
@@ -155,11 +156,19 @@ export default function NavbarUserHeader({ onSaveCloud, onLoadCloud }) {
 
               {/* Botón Iniciar Sesión / Registrarse */}
               <button
-                onClick={() => setShowAuthModal(true)}
+                onClick={() => { setAuthModalTab('login'); setShowAuthModal(true); }}
                 style={loginBtnStyle}
-                title="Inicia sesión o crea tu cuenta con Google para guardar en la Nube y abrir desde cualquier PC"
+                title="Inicia sesión o crea tu cuenta para guardar en la Nube y abrir desde cualquier PC"
               >
-                🔑 Iniciar Sesión / Registrarse
+                🔑 Iniciar Sesión / Registro
+              </button>
+
+              <button
+                onClick={() => { setAuthModalTab('admin'); setShowAuthModal(true); }}
+                style={{ ...loginBtnStyle, background: 'rgba(245, 158, 11, 0.18)', border: '1px solid rgba(245, 158, 11, 0.5)', color: '#fcd34d' }}
+                title="Ingresar con Clave Maestra de Super Administrador"
+              >
+                👑 Admin
               </button>
 
               {/* Botón de acceso a Pro */}
@@ -178,6 +187,7 @@ export default function NavbarUserHeader({ onSaveCloud, onLoadCloud }) {
       {/* Modales Globales */}
       <AuthModal
         isOpen={showAuthModal}
+        initialTab={authModalTab}
         onClose={() => setShowAuthModal(false)}
       />
 

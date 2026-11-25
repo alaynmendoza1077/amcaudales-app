@@ -1,6 +1,6 @@
 import * as turf from '@turf/turf';
-import 'jsts/dist/jsts.min.js';
-const jsts = window.jsts;
+import * as jstsModule from 'jsts/dist/jsts.min.js';
+const jsts = (jstsModule && jstsModule.io) ? jstsModule : (jstsModule && jstsModule.default && jstsModule.default.io ? jstsModule.default : (typeof window !== 'undefined' && window.jsts ? window.jsts : globalThis.jsts));
 import proj4 from 'proj4';
 
 // EPSG:3116 (Magna Sirgas Colombia Bogota)
@@ -16,6 +16,9 @@ const fromEPSG3116 = proj4("EPSG:3116", "EPSG:4326");
 if (!proj4.defs["EPSG:9377"]) {
     proj4.defs("EPSG:9377", "+proj=tmerc +lat_0=4 +lon_0=-73 +k=0.9992 +x_0=5000000 +y_0=2000000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs");
 }
+if (!proj4.defs["EPSG:3857"]) {
+    proj4.defs("EPSG:3857", "+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +wktext +no_defs");
+}
 
 export function convertPointToMeters(x, y) {
     if (x === null || x === undefined || y === null || y === undefined) return [0, 0];
@@ -23,24 +26,38 @@ export function convertPointToMeters(x, y) {
     let numY = parseFloat(y);
     if (isNaN(numX) || isNaN(numY)) return [0, 0];
 
-    // Caso A: Coordenadas en EPSG:9377 (Origen Nacional, X > 3M)
-    if (numX > 3000000 || numY > 3000000 || window.currentGlobalEpsg === "EPSG:9377") {
+    // Caso 1: Grados decimales WGS84 (SIEMPRE evaluar primero para no confundir con EPSG:9377/3857)
+    if (Math.abs(numX) <= 180 && Math.abs(numY) <= 180) {
+        if (numX > -15 && numX < 20 && numY < -50 && numY >= -90) {
+            let tmp = numX; numX = numY; numY = tmp;
+        }
+        try {
+            return toEPSG3116.forward([numX, numY]);
+        } catch(e) {
+            return [numX, numY];
+        }
+    }
+
+    // Caso 2: Coordenadas métricas en EPSG:9377 (Origen Nacional, X > 2M)
+    if (numX > 3000000 || numY > 3000000 || (numX > 2000000 && window.currentGlobalEpsg === "EPSG:9377")) {
         try {
             return proj4("EPSG:9377", "EPSG:3116").forward([numX, numY]);
         } catch(e) {
             return [numX, numY];
         }
     }
-    // Caso B: Ya en coordenadas metricas EPSG:3116 (X ~ 1,000,000)
-    if (Math.abs(numX) > 100000) {
-        return [numX, numY];
+
+    // Caso 3: Coordenadas Web Mercator EPSG:3857 (X negativo en millones para América)
+    if (numX < -1000000 || (Math.abs(numX) > 100000 && window.currentGlobalEpsg === "EPSG:3857")) {
+        try {
+            return proj4("EPSG:3857", "EPSG:3116").forward([numX, numY]);
+        } catch(e) {
+            return [numX, numY];
+        }
     }
-    // Caso C: Grados decimales WGS84 (Lng ~ -74, Lat ~ 4-11)
-    try {
-        return toEPSG3116.forward([numX, numY]);
-    } catch(e) {
-        return [numX, numY];
-    }
+
+    // Caso 4: Ya en coordenadas métricas EPSG:3116 (X ~ 1,000,000)
+    return [numX, numY];
 }
 
 const projectToMeters = (lng, lat) => convertPointToMeters(lng, lat);
@@ -123,8 +140,8 @@ function bboxesOverlap(b1, b2) {
 
 // ==================== FAST JSTS WRAPPERS (METERS COORDS) ====================
 
-const geojsonReader = new jsts.io.GeoJSONReader();
-const geojsonWriter = new jsts.io.GeoJSONWriter();
+const geojsonReader = jsts && jsts.io ? new jsts.io.GeoJSONReader() : null;
+const geojsonWriter = jsts && jsts.io ? new jsts.io.GeoJSONWriter() : null;
 
 function getCoordsMeters(polyCoords) {
     if (!polyCoords || polyCoords.length === 0) return [];
@@ -515,7 +532,7 @@ export async function calcularAreas(tramosACalcular, todosLosTramos, cartografia
     for (let tramo of tramosACalcular) {
         if (!tramo || !tramo.coords || tramo.coords.length < 2) continue;
         let c0 = Array.isArray(tramo.coords[0]) ? tramo.coords[0] : [tramo.coords[0].lat, tramo.coords[0].lng];
-        let c1 = Array.isArray(tramo.coords[1]) ? tramo.coords[1] : [tramo.coords[1].lat, tramo.coords[1].lng];
+        let c1 = Array.isArray(tramo.coords[tramo.coords.length - 1]) ? tramo.coords[tramo.coords.length - 1] : [tramo.coords[tramo.coords.length - 1].lat, tramo.coords[tramo.coords.length - 1].lng];
         let lng0 = c0.lat !== undefined ? c0.lng : c0[1];
         let lat0 = c0.lat !== undefined ? c0.lat : c0[0];
         let lng1 = c1.lat !== undefined ? c1.lng : c1[1];
@@ -646,7 +663,7 @@ export async function calcularAreas(tramosACalcular, todosLosTramos, cartografia
     const tramosCache = (todosLosTramos || []).map(r => {
         if (!r || r.sep || !r.coords || r.coords.length < 2) return null;
         let c0 = Array.isArray(r.coords[0]) ? r.coords[0] : [r.coords[0].lat, r.coords[0].lng];
-        let c1 = Array.isArray(r.coords[1]) ? r.coords[1] : [r.coords[1].lat, r.coords[1].lng];
+        let c1 = Array.isArray(r.coords[r.coords.length - 1]) ? r.coords[r.coords.length - 1] : [r.coords[r.coords.length - 1].lat, r.coords[r.coords.length - 1].lng];
         let r0_wgs = c0.lat !== undefined ? [c0.lng, c0.lat] : [c0[1], c0[0]];
         let r1_wgs = c1.lat !== undefined ? [c1.lng, c1.lat] : [c1[1], c1[0]];
         // Quick WGS84 filter: skip tramos far from working zone
@@ -689,7 +706,7 @@ export async function calcularAreas(tramosACalcular, todosLosTramos, cartografia
         // otherwise it's WGS84 (degrees)
         if (Math.abs(x) > 100000) {
             // Already in EPSG:3116 meters — use directly
-            return [x, y];
+            return convertPointToMeters(x, y);
         } else {
             // WGS84 degrees — project to meters
             return projectToMeters(x, y);
@@ -719,7 +736,7 @@ export async function calcularAreas(tramosACalcular, todosLosTramos, cartografia
                             (tramo.area !== undefined && tramo.area !== null && tramo.area !== "" ? tramo.area : null);
 
         const hasBaseCarto = Boolean(cartografia && cartografia.length > 0 && prediosCache.length > 0);
-        if (!hasBaseCarto && areaImportada !== null && parseFloat(areaImportada) > 0) {
+        if (false && !hasBaseCarto && areaImportada !== null && parseFloat(areaImportada) > 0) {
             console.log(`[calcAreas] Tramo ${tramo.de}: Omitiendo cálculo espacial. Usando área importada: ${areaImportada} Ha`);
             resultados.push({
                 ...tramo,
@@ -738,7 +755,7 @@ export async function calcularAreas(tramosACalcular, todosLosTramos, cartografia
         console.time(`tramo_${index}`);
 
         let c0 = Array.isArray(tramo.coords[0]) ? tramo.coords[0] : [tramo.coords[0].lat, tramo.coords[0].lng];
-        let c1 = Array.isArray(tramo.coords[1]) ? tramo.coords[1] : [tramo.coords[1].lat, tramo.coords[1].lng];
+        let c1 = Array.isArray(tramo.coords[tramo.coords.length - 1]) ? tramo.coords[tramo.coords.length - 1] : [tramo.coords[tramo.coords.length - 1].lat, tramo.coords[tramo.coords.length - 1].lng];
         
         // Handle Leaflet vs standard order. If c0[0] is roughly lat (e.g., 7.x), Leaflet usually gives [lat, lng]
         let p0 = c0.lat !== undefined ? [c0.lng, c0.lat] : [c0[1], c0[0]];
@@ -924,7 +941,7 @@ export async function calcularAreas(tramosACalcular, todosLosTramos, cartografia
             poligonosParaUnirMeters.push(zonaCapturaMeters);
         }
 
-        let areaFinalShapeMeters = fastUnionMeters(poligonosParaUnirMeters);
+        let areaFinalShapeMeters = fastUnionMeters(poligonosParaUnirMeters) || zonaCapturaMeters;
 
         // 5b. Apply morphological closing (buffer +3m, -3m, remove holes)
         if (areaFinalShapeMeters) {

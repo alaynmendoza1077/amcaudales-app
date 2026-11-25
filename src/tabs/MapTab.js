@@ -559,7 +559,7 @@ function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, se
       }
       if (!bufferPoly || bufferPoly.length === 0) return;
 
-      let featuresToRender = bufferPoly.filter(f => {
+      let featuresToRender = (Array.isArray(bufferPoly) ? bufferPoly : []).filter(f => f && (f.type === "Feature" || f.geometry)).filter(f => {
           if (f.properties && f.properties.isCompleta) return verAreaCompleta;
           if (f.properties && (f.properties.isPredio || f.properties.isVia)) return verAreaSeparada;
           return true;
@@ -623,12 +623,12 @@ function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, se
               }
           } catch (e) {}
       }
-  }, [autoAreasPoly, mapLoaded]);
+  }, [autoAreasPoly, verAutoAreas, mapLoaded]);
 
     // handleAutoAreas was removed (unified with handleCalcularAreas)
 
     const handleCalcularAreas = (modoSeleccionado) => {
-        const coordinatedTramos = tramosConCoordsRef.current.length > 0 ? tramosConCoordsRef.current : T;
+        const coordinatedTramos = (tramosConCoordsRef.current && tramosConCoordsRef.current.length > 0 ? tramosConCoordsRef.current : (T || [])).map(tr => { if (!tr || (tr.coords && tr.coords.length >= 2)) return tr; let rawPz = (inpData && inpData.pozos && inpData.pozos.length > 0) ? inpData.pozos : (pozosDrawnRef.current || []); let p1 = rawPz.find(p => String(p.IdNodo || p.IDNODO || p.id || p.Nombre || "").trim().toLowerCase() === String(tr.de || "").trim().toLowerCase()); let p2 = rawPz.find(p => String(p.IdNodo || p.IDNODO || p.id || p.Nombre || "").trim().toLowerCase() === String(tr.a || "").trim().toLowerCase()); if (p1 && p2) { let x1 = parseNum(p1.CoordX !== undefined ? p1.CoordX : p1.x), y1 = parseNum(p1.CoordY !== undefined ? p1.CoordY : p1.y); let x2 = parseNum(p2.CoordX !== undefined ? p2.CoordX : p2.x), y2 = parseNum(p2.CoordY !== undefined ? p2.CoordY : p2.y); if (x1 && y1 && x2 && y2) { let ll1 = projectToLatLng(x1, y1), ll2 = projectToLatLng(x2, y2); return { ...tr, coords: [[ll1[1], ll1[0]], [ll2[1], ll2[0]]] }; } } return tr; });
         let tramosObjetivo = [];
         
         if (modoSeleccionado) {
@@ -750,7 +750,7 @@ function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, se
                         features.push({
                             type: "Feature",
                             geometry: geomPoli,
-                            properties: { id: res.id, de: res.de, a: res.a, tramoId: res.de + "-" + res.a, DE: res.de, IDNODO: res.de, isCompleta: true }
+                            properties: { id: res.id, de: res.de, a: res.a, tramoId: res.de + "-" + res.a, label: "Tramo " + res.de + "-" + res.a, DE: res.de, IDNODO: res.de, Nombre: res.de, areaHa: res.areaCalc || 0, areaPredHa: res.areaPredCalc || 0, areaViaHa: res.areaViaCalc || 0, TIPOCUENCA: res.tipoArea || "RESIDENCIAL", isCompleta: true }
                         });
                     }
                     totalArea += res.areaCalc;
@@ -777,7 +777,67 @@ function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, se
                 
                 setSelTramos(newSelTramos);
                 setBufferArea(totalArea);
-                setBufferPoly(features);  
+                setBufferPoly(features);
+                const completeAutoFeats = features.filter(f => f && f.properties && f.properties.isCompleta);
+                let finalAutoAreas = completeAutoFeats;
+                if (modoSeleccionado && Array.isArray(autoAreasPoly) && autoAreasPoly.length > 0) {
+                    const updatedKeys = new Set(completeAutoFeats.map(f => String(f.properties.tramoId || "").trim().toLowerCase()));
+                    finalAutoAreas = [...autoAreasPoly.filter(f => !updatedKeys.has(String(f?.properties?.tramoId || ((f?.properties?.de || "") + "-" + (f?.properties?.a || ""))).trim().toLowerCase())), ...completeAutoFeats];
+                }
+                if (setAutoAreasPoly) setAutoAreasPoly(finalAutoAreas);
+                const useSeparateViasAuto = Boolean(incluirVias && cartografia && cartografia.length > 0);
+                if (sT && tramosActualizados.length > 0) {
+                    const cleanForState = tramosActualizados.map((trItem, tIdx) => {
+                        if (!trItem || trItem.sep) return trItem;
+                        const { areaPoli, areaPredPoli, areaViaPoli, coords, ...lightT } = trItem;
+                        const keyTA = String(trItem.de || "").trim().toLowerCase() + "_" + String(trItem.a || "").trim().toLowerCase();
+                        const calcMatch = tMap[keyTA];
+                        if (!calcMatch) return { ...lightT, id: lightT.id || (tIdx + 1) };
+                        const tpA = (calcMatch.tipoArea || lightT.tipoArea || "RESIDENCIAL").toUpperCase();
+                        const mainVal = useSeparateViasAuto ? (parseFloat(calcMatch.areaPredCalc) || 0) : (parseFloat(calcMatch.areaCalc) || 0);
+                        const viaVal = useSeparateViasAuto ? (parseFloat(calcMatch.areaViaCalc) || 0) : null;
+                        return {
+                            ...lightT,
+                            id: lightT.id || (tIdx + 1),
+                            areaParcial: mainVal,
+                            areaCalc: parseFloat(calcMatch.areaCalc) || 0,
+                            areaPredCalc: parseFloat(calcMatch.areaPredCalc) || 0,
+                            areaViaCalc: parseFloat(calcMatch.areaViaCalc) || 0,
+                            tipoArea: tpA,
+                            aR_prop: tpA === "RESIDENCIAL" ? mainVal : null,
+                            aC_prop: tpA === "COMERCIAL" ? mainVal : null,
+                            aI_prop: tpA === "INDUSTRIAL" ? mainVal : null,
+                            aIn_prop: tpA === "INSTITUCIONAL" ? mainVal : null,
+                            aV_prop: viaVal !== null ? viaVal : (tpA === "VIA" ? mainVal : null),
+                            aRe_prop: tpA === "RECREACIONAL" ? mainVal : null
+                        };
+                    });
+                    sT(cleanForState);
+                    if (setInpData) {
+                        const autoVerts = [];
+                        const autoAd = [];
+                        cleanForState.forEach((ctItem, cIdx) => {
+                            if (!ctItem || ctItem.sep) return;
+                            const subId = "S" + (ctItem.id || (cIdx + 1));
+                            const tIdStr = String(ctItem.de || "").trim() + "-" + String(ctItem.a || "").trim();
+                            const polyFeat = finalAutoAreas.find(fa => fa && fa.properties && (String(fa.properties.tramoId || "").trim().toLowerCase() === tIdStr.toLowerCase() || String(fa.properties.de || "").trim().toLowerCase() === String(ctItem.de || "").trim().toLowerCase()));
+                            if (polyFeat && polyFeat.geometry && polyFeat.geometry.coordinates) {
+                                const gm = polyFeat.geometry;
+                                const ringPts = gm.type === "MultiPolygon" ? (gm.coordinates[0] && gm.coordinates[0][0]) : gm.coordinates[0];
+                                if (Array.isArray(ringPts)) {
+                                    ringPts.forEach(pt => {
+                                        const ptM = projectToMeters(pt[0], pt[1]);
+                                        autoVerts.push({ IDNODO: ctItem.de, DE: tIdStr, SubName: subId, CoordX: ptM[0], CoordY: ptM[1] });
+                                    });
+                                }
+                                autoAd.push({ IDNODO: ctItem.de, Subcatchment: subId, AREACUENCA: polyFeat.properties.areaHa || ctItem.areaCalc || 0, TIPOCUENCA: ctItem.tipoArea || "RESIDENCIAL" });
+                            }
+                        });
+                        if (autoVerts.length > 0) {
+                            setInpData(prevInp => ({ ...(prevInp || {}), verts: autoVerts, ad: autoAd.length > 0 ? autoAd : (prevInp?.ad || []), isAutoAreasApplied: true }));
+                        }
+                    }
+                }
                 
                 setIsCalculating(false);
                 alert(`Cálculo completado.\nSe procesaron ${resultados.length} tramos.\nÁrea total calculada: ${totalArea.toFixed(4)} Ha.`);
@@ -816,9 +876,9 @@ function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, se
       let pozosToDraw = [];
       let tramosToDraw = [];
       
-      if (inpData && (inpData.pozos || inpData.verts)) {
+      if (inpData && ((inpData.pozos && inpData.pozos.length > 0) || (inpData.verts && inpData.verts.length > 0))) {
         console.log("MapTab drawing with inpData:", inpData);
-        var sourcePozos = inpData.pozos || inpData.verts;
+        var sourcePozos = (inpData.pozos && inpData.pozos.length > 0) ? inpData.pozos : inpData.verts;
         pozosToDraw = sourcePozos.map(p => {
            let props = p.properties || p;
            // Prioritize cota_tapa / rasante for cota_terreno (surface elevation)
@@ -1183,7 +1243,7 @@ function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, se
       console.error(err);
       window.alert("Crash en el Visor: " + err.message + "\nLinea: " + err.stack);
     }
-  }, [mapLoaded, inpData]); 
+  }, [mapLoaded, inpData, epsgCode, T?.length]); 
 
   const traceUpstream = (startPipe, allPipes, pozoMap) => {
     let idx_tocan = {};
@@ -1425,7 +1485,7 @@ function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, se
     tramos.forEach(tr => {
       if(!tr || !tr.coords) return;
       let pStart = {lng: tr.coords[0][1], lat: tr.coords[0][0]};
-      let pEnd = {lng: tr.coords[1][1], lat: tr.coords[1][0]};
+      let pEnd = {lng: tr.coords[tr.coords.length - 1][1], lat: tr.coords[tr.coords.length - 1][0]};
 
       let c0 = projectToMeters(pStart.lng, pStart.lat);
       let c1 = projectToMeters(pEnd.lng, pEnd.lat);
@@ -1475,7 +1535,7 @@ function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, se
     let finalGeoJSON = polys[0];
     for (let i = 1; i < polys.length; i++) {
       try {
-        let unionRes = turf.union(turf.featureCollection([finalGeoJSON, polys[i]]));
+        let unionRes = null; try { unionRes = turf.union(turf.featureCollection([finalGeoJSON, polys[i]])); } catch(eu) { try { unionRes = turf.union(finalGeoJSON, polys[i]); } catch(eu2){} }
         if (unionRes) finalGeoJSON = unionRes;
       } catch(e){}
     }
@@ -1486,7 +1546,7 @@ function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, se
     } else if (finalGeoJSON.geometry.type === 'MultiPolygon') {
         finalGeoJSON.geometry.coordinates.forEach(poly => poly.forEach(ring => rings.push(ring)));
     }
-    setBufferPoly(rings);
+    setBufferPoly([{ type: "Feature", properties: { isBufferPreview: true }, geometry: finalGeoJSON.geometry }]);
     let areaHa = turf.area(finalGeoJSON) / 10000;
     setBufferArea(areaHa);
   };
@@ -1682,8 +1742,10 @@ function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, se
             areaFeature = { geometry: calcT.areaPoli };
         } else if (calcT.areaPoli && calcT.areaPoli.geometry && calcT.areaPoli.geometry.coordinates) {
             areaFeature = calcT.areaPoli;
-        } else if (typeof autoAreasPoly !== 'undefined' && autoAreasPoly && autoAreasPoly.features && autoAreasPoly.features.length > 0) {
-            let found = autoAreasPoly.features.find(f => f.properties && String(f.properties.de) === String(t.de) && String(f.properties.a) === String(t.a));
+        } else if (typeof autoAreasPoly !== 'undefined' && autoAreasPoly) {
+            let polyArr = Array.isArray(autoAreasPoly) ? autoAreasPoly : (autoAreasPoly.features || []);
+            var found = polyArr.find(f => f && f.properties && (String(f.properties.de || "").trim() === String(t.de || "").trim() && (!f.properties.a || String(f.properties.a || "").trim() === String(t.a || "").trim())));
+
             if (found && found.geometry && found.geometry.coordinates) {
                 areaFeature = found;
             }
@@ -1708,7 +1770,7 @@ function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, se
         let tipoArea = calcT.tipoArea || t.tipoArea || "RESIDENCIAL";
         
         if (calcT.areaCalc !== undefined && calcT.areaCalc !== null) {
-            if (!incluirVias) {
+            if (!incluirVias || cartografia.length === 0) {
                 areaParcialVal = parseFloat(calcT.areaCalc) || 0;
             } else {
                 areaParcialVal = parseFloat(calcT.areaPredCalc) || 0;
@@ -1761,6 +1823,27 @@ function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, se
 
 
     if (setInpData) {
+        let rawSortedExp = topoSort(processed);
+        let cleanSortedExp = Array.isArray(rawSortedExp) ? rawSortedExp.filter(t => t && !t.sep && t.de && String(t.de).trim() !== "" && String(t.de).trim() !== "0") : processed;
+        cleanSortedExp.forEach((t, idx) => { t.id = idx + 1; });
+        const idByDeA = {};
+        cleanSortedExp.forEach(t => { idByDeA[String(t.de).trim() + "-" + String(t.a).trim()] = t.id; });
+        newVerts.forEach(v => { if (v.DE && idByDeA[v.DE]) v.SubName = "S" + idByDeA[v.DE]; });
+        if (setAutoAreasPoly) {
+            let exportedAutoAreas = [];
+            cleanSortedExp.forEach(t => {
+                const key = String(t.de).trim().toLowerCase() + "_" + String(t.a).trim().toLowerCase();
+                const tcMatch = (tramosConCoordsRef.current || []).find(tc => tc && String(tc.de).trim().toLowerCase() + "_" + String(tc.a).trim().toLowerCase() === key);
+                const rawGeom = tcMatch && tcMatch.areaPoli ? (tcMatch.areaPoli.type === "Feature" ? tcMatch.areaPoli.geometry : tcMatch.areaPoli) : null;
+                if (rawGeom && rawGeom.coordinates) {
+                    exportedAutoAreas.push({ type: "Feature", geometry: rawGeom, properties: { id: t.id, de: t.de, a: t.a, tramoId: t.de + "-" + t.a, label: "Tramo " + t.de + "-" + t.a, DE: t.de, IDNODO: t.de, Nombre: t.de, areaHa: tcMatch.areaCalc || t.areaParcial || 0, TIPOCUENCA: t.tipoArea || "RESIDENCIAL", isCompleta: true } });
+                } else if (Array.isArray(autoAreasPoly)) {
+                    const exF = autoAreasPoly.find(f => f && f.properties && String(f.properties.de || "").trim().toLowerCase() === String(t.de || "").trim().toLowerCase());
+                    if (exF) exportedAutoAreas.push(exF);
+                }
+            });
+            if (exportedAutoAreas.length > 0) setAutoAreasPoly(exportedAutoAreas);
+        }
         let finalPozos = Object.values(newPozosMap);
         let updatedInpData = { ...inpData, pozos: finalPozos, verts: newVerts, tr: newTr, isAutoAreasApplied: true };
         setInpData(updatedInpData);
@@ -1994,7 +2077,7 @@ const handleExportPolygonVertices = () => {
 
         <div style={{ display: 'flex', gap: '8px', marginTop: '16px', flexDirection: 'column' }}>
           {isCalculating && calcProgress.total > 0 && (
-            <div style={{ backgroundColor: '#ffffff', border: '1px solid #dbeafe', borderRadius: '12px', padding: '12px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+            <div style={{ backgroundColor: 'rgba(15, 23, 42, 0.92)', border: '1px solid rgba(59, 130, 246, 0.45)', borderRadius: '12px', padding: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.35)' }}>
               <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#38bdf8', marginBottom: '6px' }}>{cartografia.length > 0 ? `Calculando áreas por Catastro Urbano (${cartografia.length} predios)...` : 'Calculando áreas aferentes (Reto Voronoi)...'}</div>
               <div style={{ width: '100%', height: '8px', backgroundColor: '#e5e7eb', borderRadius: '4px', overflow: 'hidden' }}>
                 <div style={{ width: `${Math.round((calcProgress.current / calcProgress.total) * 100)}%`, height: '100%', backgroundColor: '#8e44ad', borderRadius: '4px', transition: 'width 0.3s ease' }}></div>
@@ -2013,7 +2096,7 @@ const handleExportPolygonVertices = () => {
                {isCalculating ? `Procesando ${calcProgress.current}/${calcProgress.total}...` : (cartografia.length > 0 ? "📐 Áreas Catastro Urbano (Selec.)" : "🧮 Calcular Áreas (Tramos Selec.)")}
             </button>
             <button 
-               onClick={() => handleCalcularAreas(selTramos.length > 0)}
+               onClick={() => handleCalcularAreas(false)}
                disabled={isCalculating}
                style={{ flex: 1, backgroundColor: isCalculating ? '#9ca3af' : '#8b5cf6', color: '#ffffff', fontWeight: 'bold', padding: '12px 8px', borderRadius: '12px', border: 'none', cursor: isCalculating ? 'not-allowed' : 'pointer', fontSize: '13px' }}
              >

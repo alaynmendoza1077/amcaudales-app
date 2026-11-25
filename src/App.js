@@ -219,6 +219,7 @@ function AppContent() {
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [blockedFeatureName, setBlockedFeatureName] = useState('');
   const [showLoginPortal, setShowLoginPortal] = useState(false);
+  const [authInitialTab, setAuthInitialTab] = useState('login');
 
   const prevUserRef = React.useRef(user);
   React.useEffect(() => {
@@ -392,12 +393,16 @@ function AppContent() {
             loginAsGuest();
             setActiveModule('express');
           }}
-          onOpenLogin={() => setShowLoginPortal(true)}
+          onOpenLogin={(targetTab = 'login') => {
+            setAuthInitialTab(typeof targetTab === 'string' ? targetTab : 'login');
+            setShowLoginPortal(true);
+          }}
           onOpenProModal={() => setShowUpgradeModal(true)}
         />
 
         <AuthModal
           isOpen={showLoginPortal}
+          initialTab={authInitialTab}
           onClose={() => setShowLoginPortal(false)}
         />
 

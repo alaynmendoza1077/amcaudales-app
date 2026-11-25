@@ -14,6 +14,15 @@ export default function AuthModal({ isOpen, onClose, initialTab = 'login', onAut
   } = useAuth();
 
   const [tab, setTab] = useState(initialTab); // 'login' | 'register' | 'recover' | 'admin'
+  const [adminEmail, setAdminEmail] = useState('alaynmendoza@gmail.com');
+
+  React.useEffect(() => {
+    if (isOpen && initialTab) {
+      setTab(initialTab);
+      setErrorMsg('');
+      setSuccessMsg('');
+    }
+  }, [isOpen, initialTab]);
 
   // Estados de formulario
   const [email, setEmail] = useState('');
@@ -52,7 +61,7 @@ export default function AuthModal({ isOpen, onClose, initialTab = 'login', onAut
         if (!adminPass) {
           throw new Error('Por favor ingrese la Clave Maestra de Administrador.');
         }
-        loginAsAdmin(adminPass);
+        await loginAsAdmin(adminPass, adminEmail);
         setSuccessMsg('¡Modo Super Admin Activado! Acceso Pro completo desbloqueado.');
         setTimeout(() => {
           onClose();
@@ -269,28 +278,40 @@ export default function AuthModal({ isOpen, onClose, initialTab = 'login', onAut
 
           {/* Campo exclusivo de Super Admin */}
           {tab === 'admin' ? (
-            <div>
-              <label style={labelStyle}>Clave Maestra de Administrador *</label>
-              <div style={{ position: 'relative' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div>
+                <label style={labelStyle}>Correo del Administrador</label>
                 <input
-                  type={showPassword ? 'text' : 'password'}
-                  required
-                  placeholder="Introduce la Clave Maestra"
-                  value={adminPass}
-                  onChange={(e) => setAdminPass(e.target.value)}
+                  type="text"
+                  placeholder="alaynmendoza@gmail.com"
+                  value={adminEmail}
+                  onChange={(e) => setAdminEmail(e.target.value)}
                   style={inputStyle}
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  style={eyeBtnStyle}
-                >
-                  {showPassword ? '🙈' : '👁️'}
-                </button>
               </div>
-              <p style={{ margin: '6px 0 0 0', fontSize: '0.75rem', color: '#94a3b8' }}>
-                Acceso reservado para administradores y soporte técnico de AMCaudales.
-              </p>
+              <div>
+                <label style={labelStyle}>Clave Maestra de Administrador *</label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    required
+                    placeholder="Introduce la Clave Maestra (ej. AMC2026)"
+                    value={adminPass}
+                    onChange={(e) => setAdminPass(e.target.value)}
+                    style={inputStyle}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    style={eyeBtnStyle}
+                  >
+                    {showPassword ? '🙈' : '👁️'}
+                  </button>
+                </div>
+                <p style={{ margin: '6px 0 0 0', fontSize: '0.75rem', color: '#94a3b8' }}>
+                  Acceso maestro directo para administración y control total de proyectos en la nube.
+                </p>
+              </div>
             </div>
           ) : (
             /* Campos estándar de Email y Password */
@@ -303,7 +324,7 @@ export default function AuthModal({ isOpen, onClose, initialTab = 'login', onAut
                   autoCorrect="off"
                   inputMode="email"
                   required
-                  placeholder={tab === 'register' ? 'nombre@ejemplo.com' : 'nombre@ejemplo.com o EMPAS'}
+                  placeholder={tab === 'register' ? 'nombre@ejemplo.com' : 'nombre@ejemplo.com o admin'}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   style={inputStyle}

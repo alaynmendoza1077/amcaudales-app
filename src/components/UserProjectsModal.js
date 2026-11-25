@@ -46,7 +46,7 @@ export default function UserProjectsModal({ isOpen, onClose, onLoadProject, onSa
   if (!isOpen) return null;
 
   const isGuest = Boolean(!user || user.isGuest || user.id === 'usr_guest' || user.email === 'invitado@amcaudales.com');
-  const hasCloudSession = Boolean(session?.user?.id);
+  const hasCloudSession = Boolean(session?.user?.id || (!isGuest && isCloudConfigured));
   const safeProjects = Array.isArray(cloudProjects) ? cloudProjects.filter(Boolean) : [];
   const cloudCount = safeProjects.filter(p => p && p.isCloud).length;
   const localCount = safeProjects.filter(p => p && !p.isCloud).length;

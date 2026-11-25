@@ -16,10 +16,11 @@ export default function LandingPage({ onStartTrial, onOpenExpress, onOpenLogin, 
             <span style={{ display: 'block', fontSize: '0.7rem', color: '#60a5fa' }}>Ingeniería Hidráulica & Presupuestos</span>
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
           <button onClick={onOpenExpress} style={navExpressBtnStyle}>🧮 Calc Express</button>
-          <button onClick={onOpenLogin} style={navLoginBtnStyle}>🔑 Iniciar Sesión</button>
-          <button onClick={onStartTrial} style={navRegisterBtnStyle}>⚡ Empezar Gratis</button>
+          <button onClick={() => onOpenLogin('login')} style={navLoginBtnStyle}>🔑 Iniciar Sesión</button>
+          <button onClick={() => onOpenLogin('register')} style={navRegisterBtnStyle}>📝 Registrarse</button>
+          <button onClick={() => onOpenLogin('admin')} style={{ ...navLoginBtnStyle, borderColor: '#f59e0b', color: '#fcd34d' }}>👑 Admin</button>
         </div>
       </header>
       
@@ -49,9 +50,14 @@ export default function LandingPage({ onStartTrial, onOpenExpress, onOpenLogin, 
           </button>
 
           {!user && (
-            <button onClick={onOpenLogin} style={outlineCtaStyle}>
-              👤 Iniciar Sesión / Registro
-            </button>
+            <>
+              <button onClick={() => onOpenLogin('register')} style={outlineCtaStyle}>
+                📝 Crear Cuenta Profesional
+              </button>
+              <button onClick={() => onOpenLogin('admin')} style={{ ...outlineCtaStyle, borderColor: 'rgba(245, 158, 11, 0.5)', color: '#fcd34d' }}>
+                👑 Acceso Administrador
+              </button>
+            </>
           )}
         </div>
 

@@ -256,12 +256,32 @@ export default function ImportGeoJsonTab({ setIsThinking, setAutoAreasPoly, DP, 
                     });
 
                     if (f.geometry) {
+                        let wgsGeom = JSON.parse(JSON.stringify(f.geometry));
+                        const toWgsPt = (pt) => {
+                            if (!Array.isArray(pt) || pt.length < 2) return pt;
+                            let x = Number(pt[0]), y = Number(pt[1]);
+                            if (Math.abs(x) <= 180 && Math.abs(y) <= 90) return [x, y];
+                            try {
+                                const proj4Mod = require('proj4');
+                                const proj = proj4Mod.default || proj4Mod;
+                                if (!proj.defs["EPSG:3116"]) proj.defs("EPSG:3116", "+proj=tmerc +lat_0=4.59620041666667 +lon_0=-74.0775079166667 +k=1 +x_0=1000000 +y_0=1000000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs");
+                                if (!proj.defs["EPSG:9377"]) proj.defs("EPSG:9377", "+proj=tmerc +lat_0=4 +lon_0=-73 +k=0.9992 +x_0=5000000 +y_0=2000000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs");
+                                const src = x > 3000000 ? "EPSG:9377" : "EPSG:3116";
+                                const out = proj(src, "EPSG:4326", [x, y]);
+                                return [out[0], out[1]];
+                            } catch (e) { return [x, y]; }
+                        };
+                        if (wgsGeom.type === "Polygon" && Array.isArray(wgsGeom.coordinates)) wgsGeom.coordinates = wgsGeom.coordinates.map(r => r.map(toWgsPt));
+                        else if (wgsGeom.type === "MultiPolygon" && Array.isArray(wgsGeom.coordinates)) wgsGeom.coordinates = wgsGeom.coordinates.map(p => p.map(r => r.map(toWgsPt)));
                         let feat = {
                             type: "Feature",
                             properties: {
                                 label: "Tramo " + de,
                                 de: de,
                                 a: "",
+                                IDNODO: de,
+                                Nombre: de,
+                                isCompleta: true,
                                 areaHa: parseFloat(props.AREACUENCA || props.areaHa || props.Area || 0),
                                 TIPOCUENCA: tipocuenca,
                                 CESC: props.CESC !== undefined ? parseFloat(props.CESC) : defaultCesc,
@@ -271,7 +291,7 @@ export default function ImportGeoJsonTab({ setIsThinking, setAutoAreasPoly, DP, 
                                 GRUPO_SUELO: grupoSuelo,
                                 fid: Math.random().toString(36).substr(2, 9)
                             },
-                            geometry: f.geometry
+                            geometry: wgsGeom
                         };
                         newAutoAreas.push(feat);
                     }

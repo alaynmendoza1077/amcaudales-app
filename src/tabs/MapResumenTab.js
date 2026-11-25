@@ -190,6 +190,57 @@ export default function MapResumenTab({
         return { displayMap, rawTramos, rawPozos, detectedEpsg };
     };
 
+    const getEffectiveAreasWGS84 = () => {
+        let baseList = Array.isArray(autoAreasPoly) ? autoAreasPoly : (autoAreasPoly && Array.isArray(autoAreasPoly.features) ? autoAreasPoly.features : []);
+        if ((!baseList || baseList.length === 0) && inpData && Array.isArray(inpData.verts) && inpData.verts.length > 0) {
+            let grouped = {};
+            inpData.verts.forEach(v => {
+                let key = String(v.DE || v.SubName || v.IDNODO || v.Nombre || "").trim();
+                if (!key) return;
+                if (!grouped[key]) grouped[key] = [];
+                let vx = cleanNumber(v.CoordX !== undefined ? v.CoordX : v.X);
+                let vy = cleanNumber(v.CoordY !== undefined ? v.CoordY : v.Y);
+                if (vx !== null && vy !== null) grouped[key].push([vx, vy]);
+            });
+            let built = [];
+            Object.keys(grouped).forEach((k, idx) => {
+                let ring = grouped[k];
+                if (ring.length >= 3) {
+                    if (ring[0][0] !== ring[ring.length - 1][0] || ring[0][1] !== ring[ring.length - 1][1]) ring = [...ring, [...ring[0]]];
+                    let adMatch = inpData.ad ? inpData.ad.find(a => String(a.IDNODO || a.Subcatchment || a.Nombre || "").trim() === k || String(k).startsWith(String(a.IDNODO || "").trim() + "-")) : null;
+                    built.push({
+                        type: "Feature",
+                        properties: { id: idx + 1, label: "Tramo " + k, de: k.split("-")[0] || k, tramoId: k, areaHa: adMatch && adMatch.AREACUENCA ? parseFloat(adMatch.AREACUENCA) : 0, TIPOCUENCA: adMatch?.TIPOCUENCA || "RESIDENCIAL", isCompleta: true },
+                        geometry: { type: "Polygon", coordinates: [ring] }
+                    });
+                }
+            });
+            baseList = built;
+        }
+        return (baseList || []).map(feat => {
+            if (!feat || !feat.geometry || !feat.geometry.coordinates) return null;
+            let cloned = JSON.parse(JSON.stringify(feat));
+            const convPt = (pt) => {
+                if (!Array.isArray(pt) || pt.length < 2) return pt;
+                let x = Number(pt[0]), y = Number(pt[1]);
+                if (isNaN(x) || isNaN(y)) return pt;
+                if (Math.abs(x) <= 180 && Math.abs(y) <= 90) return [x, y];
+                let srcEpsg = x > 3000000 ? "EPSG:9377" : (x < -1000000 ? "EPSG:3857" : (localEpsg || "EPSG:3116"));
+                try { let wgs = proj4(srcEpsg, "EPSG:4326", [x, y]); return [wgs[0], wgs[1]]; } catch (e) { return [x, y]; }
+            };
+            if (cloned.geometry.type === "Polygon") {
+                cloned.geometry.coordinates = cloned.geometry.coordinates.map(ring => ring.map(convPt));
+            } else if (cloned.geometry.type === "MultiPolygon") {
+                cloned.geometry.coordinates = cloned.geometry.coordinates.map(poly => poly.map(ring => ring.map(convPt)));
+            }
+            if (!cloned.properties) cloned.properties = {};
+            if (!cloned.properties.areaHa || Number(cloned.properties.areaHa) <= 0) {
+                try { cloned.properties.areaHa = turf.area(cloned) / 10000.0; } catch (e) { cloned.properties.areaHa = 0; }
+            }
+            return cloned;
+        }).filter(Boolean);
+    };
+
     const exportToGeoJSON = () => {
         const { displayMap, rawTramos, rawPozos } = getDisplayData();
         if (!displayMap || displayMap.length === 0) return;
@@ -297,9 +348,10 @@ export default function MapResumenTab({
         }
 
         // Areas (Poligonos)
-        if (showAreas && autoAreasPoly && autoAreasPoly.length > 0) {
+        const effectiveAreasList = getEffectiveAreasWGS84();
+        if (showAreas && effectiveAreasList.length > 0) {
             let areasFeatures = [];
-            autoAreasPoly.forEach(feat => {
+            effectiveAreasList.forEach(feat => {
                 let p = feat.properties || {};
                 let tramoLabel = p.label || "";
                 let tramoId = tramoLabel.replace("Tramo ", "");
@@ -424,15 +476,16 @@ export default function MapResumenTab({
         });
 
         // Mapear Areas Autogeneradas (poligonos de Voronoi lineal)
-        if (showAreas && autoAreasPoly && autoAreasPoly.length > 0) {
-            autoAreasPoly.forEach(feat => {
+        const effectiveAreasList = getEffectiveAreasWGS84();
+        if (showAreas && effectiveAreasList.length > 0) {
+            effectiveAreasList.forEach(feat => {
                 let p = feat.properties || {};
                 let tramoLabel = p.label || ""; // e.g. "Tramo P1-P2"
                 let tramoId = tramoLabel.replace("Tramo ", "");
                 
                 if (feat.geometry && feat.geometry.coordinates) {
                     let areaHa = p.areaHa !== undefined ? p.areaHa : 0;
-                    let areaLabel = `<b>Area:</b> ${Number(areaHa).toFixed(2)} Ha`;
+                    let areaLabel = `<b>Área:</b> ${Number(areaHa).toFixed(3)} Ha`;
 
                     let polyLayer = L.geoJSON(feat, {
                         style: { color: '#fb923c', weight: 2, fillColor: '#fdba74', fillOpacity: 0.4, pmIgnore: true }
@@ -590,9 +643,10 @@ export default function MapResumenTab({
             }
             
             // 3.5 Áreas Voronoi
-            if (showAreas && autoAreasPoly && autoAreasPoly.length > 0) {
+            const effectiveAreasList = getEffectiveAreasWGS84();
+        if (showAreas && effectiveAreasList.length > 0) {
                 d.setActiveLayer('AREAS');
-                autoAreasPoly.forEach(feat => {
+                effectiveAreasList.forEach(feat => {
                     let p = feat.properties || {};
                     let tramoLabel = p.label || "";
                     let tramoId = tramoLabel.replace("Tramo ", "");
