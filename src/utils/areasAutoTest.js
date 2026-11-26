@@ -1,4 +1,5 @@
 import { calcularAreas, generarPoligonosVoronoiSync, convertPointToMeters } from '../calcAreasAferentes';
+import { decomposeIntoContinuousProfiles, buildProfileRenderModel } from './profileGraph';
 import runCalc, { formatDiam } from '../engine';
 import { DP } from '../constants';
 
@@ -216,6 +217,28 @@ export async function runAreasAutomatedTests() {
       '5. Exportación SWMM ([SUBCATCHMENTS] + [Polygons])',
       swmmOk,
       `Vértices SWMM=${vertsSwmm.length} pts (S1, S2) | EPSG:3116 X=${(sampleM.CoordX || 0).toFixed(1)}, Y=${(sampleM.CoordY || 0).toFixed(1)}`
+    );
+
+    // ── PRUEBA 6: Perfiles Desconectados (4 Pozos Reales con Desnivel Lado a Lado y Truncado) ──
+    const disconnectedPipes = [
+      { id: 1, de: 'PZ-N1', a: 'PZ-N2', L: 42.0, S: 2.0, D: 0.25, nom: '250 mm', crDE: 968.0, crA: 967.16, cfDE: 966.2, cfA: 965.36 },
+      { id: 2, de: 'PZ-S1', a: 'PZ-S2', L: 50.0, S: 1.8, D: 0.25, nom: '250 mm', crDE: 959.5, crA: 958.60, cfDE: 957.8, cfA: 956.90 }
+    ];
+    const subProfs = decomposeIntoContinuousProfiles(disconnectedPipes, {});
+    const compModel = buildProfileRenderModel(subProfs, {});
+    const profilesOk = Boolean(
+      subProfs.length === 2 &&
+      compModel.profileNodes.length === 4 &&
+      compModel.pipesToDraw.length === 2 &&
+      compModel.breaks.length === 1 &&
+      compModel.profileNodes[2].drop === 0 &&
+      Math.abs(compModel.breaks[0].deltaCr - (959.5 - 967.16)) < 0.02
+    );
+
+    addCheck(
+      '6. Perfiles Desconectados (4 Pozos Reales + Truncado)',
+      profilesOk,
+      `Sub-perfiles=${subProfs.length}, Pozos=${compModel.profileNodes.length}/4, Cortes=${compModel.breaks.length}, ΔRas=${compModel.breaks[0]?.deltaCr}m`
     );
   } catch (err) {
     addCheck('Excepción en Pruebas Automáticas', false, err && err.message ? err.message : String(err));

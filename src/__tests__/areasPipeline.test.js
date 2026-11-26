@@ -11,6 +11,6 @@ describe('Pipeline Integral de Áreas Aferentes (Visor -> Datos -> Cálculos -> 
       expect(chk.passed).toBe(true);
     });
     expect(report.allPassed).toBe(true);
-    expect(report.passedCount).toBe(5);
+    expect(report.passedCount).toBe(6);
   });
 });

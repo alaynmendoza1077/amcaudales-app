@@ -1,5 +1,6 @@
 import ExcelJS from 'exceljs';
 import { saveFileWithDialog } from './utils/fileSaver';
+import { decomposeIntoContinuousProfiles } from './utils/profileGraph';
 
 // Helpers para estilos consistentes
 const titleFont = { name: 'Arial', family: 2, size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
@@ -166,42 +167,39 @@ export async function exportCalculos(P, R, sub, alivData = []) {
   const zD = R.map(r => r.sep ? [] : [r.de, r.a, r.D, r.anchoZanja||0, r.tipoVia, r.pavAncho, (r.prDE+r.prA)/2, r.vExcTierra, r.vExcGranular, r.vExcRoca, r.vEntibado, r.vAcarreoLibre]);
   addBasicSheet(wb, "5. Zanja y Exc", "ZANJAS Y EXCAVACIONES", zH, zD, P);
 
-  // HOJA 6: PERFIL (DATOS PARA GRAFICAR)
-  const perfilH = ["Distancia Acumulada", "Cota Rasante (Terreno)", "Cota Fondo"];
-  let pts = []; let xAcc = 0;
-  var adjMap={}; dR.forEach(r => adjMap[r.de]=r);
-  var allA={}; dR.forEach(r => allA[r.a]=1);
-  var cabeceras=[]; dR.forEach(r => {if(!allA[r.de])cabeceras.push(r.de);});
-  if(cabeceras.length===0) cabeceras.push(dR[0].de);
-  var colectores=[];
-  cabeceras.forEach(cab => {
-    var chain2=[]; var cur2=adjMap[cab]; var vis2={};
-    while(cur2&&!vis2[cur2.id]){vis2[cur2.id]=1;chain2.push(cur2);cur2=adjMap[cur2.a];}
-    if(chain2.length>=1) colectores.push({cab:cab,chain:chain2,len:chain2.reduce((s,r)=>s+(r.L||0),0)});
-  });
-  colectores.sort((a,b)=>b.len-a.len);
-  var chain = colectores.length>0 ? colectores[0].chain : dR;
-
-  chain.forEach((r, i) => {
-    pts.push([xAcc, r.crDE, r.cfDE]);
-    xAcc += (r.L || 10);
-    if(i === chain.length-1) pts.push([xAcc, r.crA, r.cfA]);
+  // HOJA 6: PERFIL (DATOS PARA GRAFICAR TRUNCADOS POR SUB-PERFIL CONECTADO)
+  const perfilH = ["Perfil / Colector", "Pozo / Nodo", "Abscisa Local (m)", "Cota Rasante (Terreno)", "Cota Fondo (Batea)"];
+  let pts = [];
+  const allSubProfiles = decomposeIntoContinuousProfiles(dR, {});
+  allSubProfiles.forEach((sp, spIdx) => {
+    let xAcc = 0;
+    sp.chain.forEach((r, i) => {
+      pts.push([sp.title, r.effectiveDe || r.de, +xAcc.toFixed(2), r.effectiveCrDE ?? r.crDE, r.effectiveCfDE ?? r.cfDE]);
+      xAcc += (parseFloat(r.L) || 10);
+      if (i === sp.chain.length - 1) {
+        pts.push([sp.title, r.effectiveA || r.a, +xAcc.toFixed(2), r.effectiveCrA ?? r.crA, r.effectiveCfA ?? r.cfA]);
+      }
+    });
+    if (spIdx < allSubProfiles.length - 1) {
+      // Fila vacía deliberada: en Excel corta automáticamente la línea del gráfico entre tramos no unidos
+      pts.push(["--- CORTE (TRAMO INDEPENDIENTE) ---", "", null, null, null]);
+    }
   });
   const wsPerfil = wb.addWorksheet("6. Datos Perfil", { views: [{ showGridLines: false }] });
-  createCorporateHeader(wsPerfil, "DATOS PARA PERFIL (COLECTOR PRINCIPAL)", P);
+  createCorporateHeader(wsPerfil, "DATOS PARA PERFILES LONGITUDINALES (CON CORTE EN TRAMOS INDEPENDIENTES)", P);
   let phRow = wsPerfil.addRow(perfilH);
   phRow.eachCell(c => { c.font = headerFont; c.fill = bgDarkBlue; c.alignment = {horizontal:'center'}; c.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} }; });
   pts.forEach(p => {
     let pr = wsPerfil.addRow(p);
     pr.eachCell(c => { c.font = dataFont; c.border = { top: {style:'thin', color:{argb:'FFEEEEEE'}}, bottom: {style:'thin', color:{argb:'FFEEEEEE'}} }; });
   });
-  wsPerfil.columns.forEach(col => { col.width = 25; });
+  wsPerfil.columns.forEach(col => { col.width = 24; });
   
   // Agregar instrucciones para el usuario
-  wsPerfil.mergeCells('E6:I10');
-  let hintCell = wsPerfil.getCell('E6');
-  hintCell.value = "NOTA: ExcelJS no soporta la creación de gráficos automáticos.\nPara ver tu perfil:\n1. Selecciona los datos de la izquierda (A6:C...)\n2. Ve a Insertar > Gráfico de Líneas.\n¡Y listo!";
-  hintCell.font = { name: 'Arial', size: 11, italic: true, color: { argb: 'FF000000' } };
+  wsPerfil.mergeCells('G6:K11');
+  let hintCell = wsPerfil.getCell('G6');
+  hintCell.value = "NOTA: Los tramos no conectados están separados por una fila de CORTE con celdas vacías.\nAl insertar un Gráfico de Líneas sobre las columnas C:E, Excel dibujará automáticamente cada tramo por separado mostrando todos los pozos reales y su desnivel sin unirlos falsamente.";
+  hintCell.font = { name: 'Arial', size: 10, italic: true, color: { argb: 'FF000000' } };
   hintCell.fill = bgLightYellow;
   hintCell.alignment = { vertical: 'middle', wrapText: true };
 

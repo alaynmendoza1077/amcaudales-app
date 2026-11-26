@@ -5,6 +5,7 @@ import {IDF, PIPES, PIPES_DB, MATERIALS} from '../constants';
 import {formatDiam} from '../engine';
 import {calcCantSumidero, agruparTuberias, calcPozosCompleto} from '../calcHelpers';
 import { exportCalculos } from '../exportCalculos';
+import { decomposeIntoContinuousProfiles, buildProfileRenderModel } from '../utils/profileGraph';
 
 import EstructurasSeparacionTab from './EstructurasSeparacionTab';
 import CalculoSumiderosTab from './CalculoSumiderosTab';
@@ -19,6 +20,7 @@ export default function CalcTab(props){
   var estSepData=props.estSepData||{};var setEstSepData=props.setEstSepData||(function(){});
   var perfilIdx=props.perfilIdx,setPerfilIdx=props.setPerfilIdx;
   var perfilZoom=props.perfilZoom,setPerfilZoom=props.setPerfilZoom;
+  var [splitProfilesMode, setSplitProfilesMode] = useState(false);
 
   var selMap=props.selMap;
   var filterSel=props.filterSel;
@@ -355,297 +357,454 @@ export default function CalcTab(props){
       var pzMap = {};
       (pozData.pz || []).forEach(function(p){ if(p && p.nodo) pzMap[p.nodo] = p; });
 
-      // Helper universal para encadenar y orientar tramos de forma continua e hidráulicamente consistente
-      var buildContinuousChain = function(pipesList) {
-        if (!Array.isArray(pipesList) || pipesList.length === 0) return [];
-        if (pipesList.length === 1) {
-          var p0 = Object.assign({}, pipesList[0]);
-          if (String(p0.de).trim() === String(p0.a).trim()) {
-            p0.effectiveDe = String(p0.de).trim() + " (Entrada)";
-            p0.effectiveA = String(p0.a).trim();
-          } else {
-            p0.effectiveDe = String(p0.de).trim();
-            p0.effectiveA = String(p0.a).trim();
-          }
-          p0.effectiveCrDE = p0.crDE;
-          p0.effectiveCrA = p0.crA;
-          p0.effectiveCfDE = p0.cfDE;
-          p0.effectiveCfA = p0.cfA;
-          return [p0];
-        }
+      // 1. Descomponer TODO el proyecto en colectores/perfiles estrictamente conectados (sin unir tramos desconectados)
+      var projectSubProfiles = decomposeIntoContinuousProfiles(dR, pzMap);
 
-        // Construir adyacencia de nodos y conteo de grados
-        var nodeDegree = {};
-        var pipeEdges = pipesList.map(function(p, pIdx) {
-          var u = String(p.de || "").trim();
-          var v = String(p.a || "").trim();
-          nodeDegree[u] = (nodeDegree[u] || 0) + 1;
-          nodeDegree[v] = (nodeDegree[v] || 0) + 1;
-          return {
-            idx: pIdx,
-            raw: p,
-            u: u,
-            v: v
-          };
-        });
-
-        // Encontrar nodos extremos (grado 1 en la selección)
-        var endpoints = Object.keys(nodeDegree).filter(function(k) { return nodeDegree[k] === 1; });
-        var startNode = null;
-
-        if (endpoints.length > 0) {
-          // Seleccionar como inicio el extremo más elevado en cota (aguas arriba)
-          var bestZ = -999999;
-          endpoints.forEach(function(ep) {
-            var pz = pzMap[ep];
-            var zVal = pz ? parseFloat(pz.cr || pz.cf || 0) : 0;
-            if (!pz) {
-              var touching = pipesList.find(function(p) { return String(p.de).trim() === ep || String(p.a).trim() === ep; });
-              if (touching) {
-                zVal = String(touching.de).trim() === ep ? parseFloat(touching.crDE || touching.cfDE || 0) : parseFloat(touching.crA || touching.cfA || 0);
-              }
-            }
-            if (zVal > bestZ) {
-              bestZ = zVal;
-              startNode = ep;
-            }
-          });
-        }
-
-        if (!startNode) {
-          // Si no hay grado 1 (ciclo o ruta cerrada), iniciar en el primer tramo
-          startNode = String(pipesList[0].de || "").trim();
-        }
-
-        // Recorrer el grafo desde startNode asegurando continuidad estricta
-        var orderedChain = [];
-        var visited = {};
-        var currentNode = startNode;
-
-        for (var step = 0; step < pipesList.length; step++) {
-          var nextEdge = pipeEdges.find(function(e) {
-            return !visited[e.idx] && (e.u === currentNode || e.v === currentNode);
-          });
-
-          if (!nextEdge) {
-            // Si hay tramos desconectados, tomar el siguiente disponible no visitado
-            nextEdge = pipeEdges.find(function(e) { return !visited[e.idx]; });
-            if (!nextEdge) break;
-            currentNode = nextEdge.u;
-          }
-
-          visited[nextEdge.idx] = true;
-          var rawP = Object.assign({}, nextEdge.raw);
-          var isForward = (nextEdge.u === currentNode);
-          var nextNode = isForward ? nextEdge.v : nextEdge.u;
-
-          if (isForward) {
-            rawP.effectiveDe = nextEdge.u;
-            rawP.effectiveA = nextNode;
-            rawP.effectiveCrDE = rawP.crDE;
-            rawP.effectiveCrA = rawP.crA;
-            rawP.effectiveCfDE = rawP.cfDE;
-            rawP.effectiveCfA = rawP.cfA;
-          } else {
-            // Invertir tramo para que la continuidad hidráulica fluya sin saltos
-            rawP.effectiveDe = nextEdge.v;
-            rawP.effectiveA = nextNode;
-            rawP.effectiveCrDE = rawP.crA;
-            rawP.effectiveCrA = rawP.crDE;
-            rawP.effectiveCfDE = rawP.cfA;
-            rawP.effectiveCfA = rawP.cfDE;
-            rawP.isFlipped = true;
-          }
-
-          orderedChain.push(rawP);
-          currentNode = nextNode;
-        }
-
-        return orderedChain;
-      };
-
-      // Identificar colectores desde cabeceras
-      var adjMap={}; dR.forEach(function(r){ adjMap[r.de]=r; });
-      var allA={}; dR.forEach(function(r){ allA[r.a]=1; });
-      var cabeceras=[]; dR.forEach(function(r){ if(!allA[r.de]) cabeceras.push(r.de); });
-      if(cabeceras.length===0) cabeceras.push(dR[0].de);
-      var colectores=[];
-      cabeceras.forEach(function(cab){
-        var chain2=[]; var cur2=adjMap[cab]; var vis2={};
-        while(cur2 && !vis2[cur2.id]){
-          vis2[cur2.id]=1; chain2.push(cur2); cur2=adjMap[cur2.a];
-        }
-        if(chain2.length>=1){
-          var continuousChain = buildContinuousChain(chain2);
-          colectores.push({cab:cab, chain:continuousChain, len:continuousChain.reduce(function(s,r){return s+(r.L||0);},0)});
-        }
-      });
-      colectores.sort(function(a,b){ return b.len - a.len; });
-
-      // Ruta personalizada si hay selección en el visor
+      // 2. Si hay selección activa en el visor, descomponer también la selección en sus tramos conectados reales
+      var selectedSubProfiles = [];
       if (props.selMap && props.selMap.length > 0) {
         var selItems = props.selMap.filter(function(x){ return x; });
-        if (selItems.length > 0) {
-          var matchedPipes = [];
-          selItems.forEach(function(x){
-            var xId = x.id != null ? String(x.id).trim() : "";
-            var xDe = String(x.de || x.DE1 || x.DE || "").trim().toLowerCase();
-            var xA = String(x.a || x.A1 || x.A || "").trim().toLowerCase();
-            var match = dR.find(function(r){
-              if (xId !== "" && String(r.id).trim() === xId) return true;
-              var rDe = String(r.de || "").trim().toLowerCase();
-              var rA = String(r.a || "").trim().toLowerCase();
-              return (rDe === xDe && rA === xA) || (rDe === xA && rA === xDe);
-            });
-            if(match && !matchedPipes.some(function(mp){ return mp.id === match.id; })) {
-              matchedPipes.push(match);
-            }
+        var matchedPipes = [];
+        selItems.forEach(function(x){
+          var xId = x.id != null ? String(x.id).trim() : "";
+          var xDe = String(x.de || x.DE1 || x.DE || "").trim().toLowerCase();
+          var xA = String(x.a || x.A1 || x.A || "").trim().toLowerCase();
+          var match = dR.find(function(r){
+            if (xId !== "" && String(r.id).trim() === xId) return true;
+            var rDe = String(r.de || "").trim().toLowerCase();
+            var rA = String(r.a || "").trim().toLowerCase();
+            return (rDe === xDe && rA === xA) || (rDe === xA && rA === xDe);
           });
-
-          if (matchedPipes.length > 0) {
-            var customChain = buildContinuousChain(matchedPipes);
-
-            colectores.unshift({
-              cab: "RUTA PERSONALIZADA (Selección Visor)",
-              chain: customChain,
-              len: customChain.reduce(function(s,r){ return s+(r.L||0); },0)
-            });
+          if (match && !matchedPipes.some(function(mp){ return mp.id === match.id; })) {
+            matchedPipes.push(match);
           }
+        });
+        if (matchedPipes.length > 0) {
+          selectedSubProfiles = decomposeIntoContinuousProfiles(matchedPipes, pzMap);
         }
       }
 
+      // 3. Construir opciones del selector de Colector / Perfil
+      var colectores = [];
+      if (selectedSubProfiles.length > 1) {
+        var selTotalLen = selectedSubProfiles.reduce(function(s, sp){ return s + sp.len; }, 0);
+        var selTotalPipes = selectedSubProfiles.reduce(function(s, sp){ return s + sp.chain.length; }, 0);
+        colectores.push({
+          cab: "VISTA COMPARATIVA SELECCIÓN (" + selectedSubProfiles.length + " tramos/perfiles desconectados)",
+          subProfiles: selectedSubProfiles,
+          pipesCount: selTotalPipes,
+          len: selTotalLen,
+          isComparative: true
+        });
+      } else if (selectedSubProfiles.length === 1) {
+        colectores.push({
+          cab: "SELECCIÓN VISOR: " + selectedSubProfiles[0].cab + " → " + selectedSubProfiles[0].fin,
+          subProfiles: selectedSubProfiles,
+          pipesCount: selectedSubProfiles[0].chain.length,
+          len: selectedSubProfiles[0].len,
+          isComparative: false
+        });
+      }
+
+      if (projectSubProfiles.length > 1 && selectedSubProfiles.length !== projectSubProfiles.length) {
+        var projTotalLen = projectSubProfiles.reduce(function(s, sp){ return s + sp.len; }, 0);
+        colectores.push({
+          cab: "PROYECTO COMPLETO CON CORTES (" + projectSubProfiles.length + " perfiles | Desnivel General)",
+          subProfiles: projectSubProfiles,
+          pipesCount: dR.length,
+          len: projTotalLen,
+          isComparative: true
+        });
+      } else if (projectSubProfiles.length > 1 && selectedSubProfiles.length === 0) {
+        var projTotalLen2 = projectSubProfiles.reduce(function(s, sp){ return s + sp.len; }, 0);
+        colectores.push({
+          cab: "PROYECTO COMPLETO CON CORTES (" + projectSubProfiles.length + " perfiles | Desnivel Lado a Lado)",
+          subProfiles: projectSubProfiles,
+          pipesCount: dR.length,
+          len: projTotalLen2,
+          isComparative: true
+        });
+      }
+
+      projectSubProfiles.forEach(function(sp){
+        colectores.push({
+          cab: sp.title,
+          subProfiles: [sp],
+          pipesCount: sp.chain.length,
+          len: sp.len,
+          isComparative: false
+        });
+      });
+
       var selIdx = props.perfilIdx || 0;
       if (selIdx >= colectores.length) selIdx = 0;
-      var chain = colectores.length > 0 ? colectores[selIdx].chain : buildContinuousChain(dR.slice(0, Math.min(dR.length, 30)));
+      var currentChoice = colectores[selIdx] || {
+        cab: "Perfil Principal",
+        subProfiles: projectSubProfiles.slice(0, 1),
+        pipesCount: dR.length,
+        len: 0
+      };
 
-      var xAcc = 0;
-      var profileNodes = [];
-      chain.forEach(function(r, i){
-        var nodeName = r.effectiveDe || r.de;
-        // Evitar que dos nodos consecutivos tengan el mismo nombre si provienen de datos duplicados
-        if (i > 0 && nodeName === profileNodes[i-1].name) {
-          nodeName = (r.effectiveA || r.a) + " (N" + (i + 1) + ")";
-        }
-
-        var pzObj = pzMap[nodeName] || pzMap[r.effectiveDe] || pzMap[r.de];
-        var cr = pzObj ? parseFloat(pzObj.cr) : parseFloat(r.effectiveCrDE != null ? r.effectiveCrDE : r.crDE);
-        var cf = pzObj ? parseFloat(pzObj.cf) : parseFloat(r.effectiveCfDE != null ? r.effectiveCfDE : r.cfDE);
-        if(isNaN(cr)) cr = parseFloat(r.effectiveCrDE != null ? r.effectiveCrDE : r.crDE) || 0;
-        if(isNaN(cf)) cf = parseFloat(r.effectiveCfDE != null ? r.effectiveCfDE : r.cfDE) || 0;
-        var prof = +(cr - cf).toFixed(2);
-        var cfDE_out = parseFloat(r.effectiveCfDE != null ? r.effectiveCfDE : r.cfDE);
-        var cfA_in = i > 0 ? parseFloat(chain[i-1].effectiveCfA != null ? chain[i-1].effectiveCfA : chain[i-1].cfA) : null;
-        var drop = (cfA_in != null && !isNaN(cfA_in) && !isNaN(cfDE_out)) ? +(cfA_in - cfDE_out).toFixed(2) : 0;
-
-        profileNodes.push({
-          idx: i,
-          x: xAcc,
-          name: nodeName,
-          cr: cr,
-          cf: cf,
-          prof: prof,
-          pz: pzObj,
-          cfDE_out: cfDE_out,
-          cfA_in: cfA_in,
-          drop: Math.max(0, drop),
-          pipeOut: r,
-          pipeIn: i > 0 ? chain[i-1] : null
-        });
-
-        xAcc += parseFloat(r.L) || 10;
-
-        if (i === chain.length - 1) {
-          var endNodeName = r.effectiveA || r.a;
-          if (endNodeName === nodeName) {
-            endNodeName = String(r.effectiveA || r.a) + " (Final)";
-          }
-
-          var endPzObj = pzMap[endNodeName] || pzMap[r.effectiveA] || pzMap[r.a];
-          var endCr = endPzObj ? parseFloat(endPzObj.cr) : parseFloat(r.effectiveCrA != null ? r.effectiveCrA : r.crA);
-          var endCf = endPzObj ? parseFloat(endPzObj.cf) : parseFloat(r.effectiveCfA != null ? r.effectiveCfA : r.cfA);
-          if(isNaN(endCr)) endCr = parseFloat(r.effectiveCrA != null ? r.effectiveCrA : r.crA) || 0;
-          if(isNaN(endCf)) endCf = parseFloat(r.effectiveCfA != null ? r.effectiveCfA : r.cfA) || 0;
-          var endProf = +(endCr - endCf).toFixed(2);
-
-          profileNodes.push({
-            idx: i + 1,
-            x: xAcc,
-            name: endNodeName,
-            cr: endCr,
-            cf: endCf,
-            prof: endProf,
-            pz: endPzObj,
-            cfDE_out: null,
-            cfA_in: parseFloat(r.effectiveCfA != null ? r.effectiveCfA : r.cfA),
-            drop: 0,
-            pipeOut: null,
-            pipeIn: r
-          });
-        }
-      });
-
-      var xMax = xAcc || 100;
-      var allElevs = [];
-      profileNodes.forEach(function(n){
-        if(!isNaN(n.cr)) allElevs.push(n.cr);
-        if(!isNaN(n.cf)) allElevs.push(n.cf);
-        if(n.cfDE_out != null && !isNaN(n.cfDE_out)) allElevs.push(n.cfDE_out);
-        if(n.cfA_in != null && !isNaN(n.cfA_in)) allElevs.push(n.cfA_in);
-      });
-      chain.forEach(function(r){
-        var diamM = (parseFloat(r.D) || 0.2);
-        if(diamM > 10) diamM = diamM / 1000;
-        var cDE = parseFloat(r.cfDE);
-        var cA = parseFloat(r.cfA);
-        if(!isNaN(cDE)) { allElevs.push(cDE); allElevs.push(cDE + diamM); }
-        if(!isNaN(cA)) { allElevs.push(cA); allElevs.push(cA + diamM); }
-      });
-      var validElevs = allElevs.filter(function(v){ return typeof v === 'number' && !isNaN(v); });
-      var yMin = (validElevs.length > 0 ? Math.min.apply(null, validElevs) : 0) - 1.2;
-      var yMax = (validElevs.length > 0 ? Math.max.apply(null, validElevs) : 10) + 1.2;
-      var yR = yMax - yMin || 1;
-
+      var baseTruncatableProfiles = selectedSubProfiles.length > 1 ? selectedSubProfiles : projectSubProfiles;
       var zoomLvl = props.perfilZoom || 1;
-      var baseW = Math.max(920, Math.round(profileNodes.length * 105));
-      var W = Math.round(baseW * zoomLvl);
-      var H = Math.round(420 * zoomLvl);
-      var mL = 70; var mR = 40; var mT = 40; var mB = 110;
-      var pw = W - mL - mR; var ph = H - mT - mB;
-
-      var sx = function(v){
-        var val = parseFloat(v); if(isNaN(val)) val = 0;
-        return mL + (xMax > 0 ? (val / xMax) * pw : 0);
-      };
-      var sy = function(v){
-        var val = parseFloat(v); if(isNaN(val)) val = yMin;
-        return mT + (yR > 0 ? ((yMax - val) / yR) * ph : 0);
-      };
-
-      var terr = "M" + profileNodes.map(function(n){ return sx(n.x) + "," + sy(n.cr); }).join(" L");
-
-      var gridY = [];
-      var step = yR > 20 ? 5 : yR > 10 ? 2 : yR > 5 ? 1 : 0.5;
-      for (var gy = Math.ceil(yMin / step) * step; gy <= yMax; gy += step) gridY.push(gy);
-
-      var gridX = [];
-      var stepX = xMax > 500 ? 100 : xMax > 200 ? 50 : xMax > 100 ? 25 : 10;
-      for (var gx = 0; gx <= xMax; gx += stepX) gridX.push(gx);
-
-      // Parámetros RAS 2017 de profundidad
       var profMinRAS = parseFloat(P.profMin) || 1.20;
       var profMaxRAS = parseFloat(P.profMax) || 5.00;
 
-      return <div className="c">
-        {/* Selector de colector y controles de Zoom */}
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,flexWrap:"wrap",gap:8}}>
-          <div className="ct" style={{margin:0,fontSize:14,color:"#38BDF8"}}>
-            PERFIL LONGITUDINAL AUDITADO ({chain.length} tramos | {profileNodes.length} pozos | Long: {xMax.toFixed(1)} m)
+      // Función universal para renderizar un lienzo de perfil (con 1 o varios sub-perfiles con corte de discontinuidad)
+      var renderProfileBlock = function(subProfilesList, blockTitle, blockKey) {
+        var model = buildProfileRenderModel(subProfilesList, pzMap);
+        var profileNodes = model.profileNodes;
+        var pipesToDraw = model.pipesToDraw;
+        var segments = model.segments;
+        var breaks = model.breaks;
+        var xMax = model.xMaxPlot || 100;
+
+        if (profileNodes.length === 0) return null;
+
+        var allElevs = [];
+        profileNodes.forEach(function(n){
+          if(!isNaN(n.cr)) allElevs.push(n.cr);
+          if(!isNaN(n.cf)) allElevs.push(n.cf);
+          if(n.cfDE_out != null && !isNaN(n.cfDE_out)) allElevs.push(n.cfDE_out);
+          if(n.cfA_in != null && !isNaN(n.cfA_in)) allElevs.push(n.cfA_in);
+        });
+        pipesToDraw.forEach(function(ptd){
+          var r = ptd.pipe;
+          var diamM = (parseFloat(r.D) || 0.2);
+          if(diamM > 10) diamM = diamM / 1000;
+          var cDE = parseFloat(r.effectiveCfDE != null ? r.effectiveCfDE : r.cfDE);
+          var cA = parseFloat(r.effectiveCfA != null ? r.effectiveCfA : r.cfA);
+          if(!isNaN(cDE)) { allElevs.push(cDE); allElevs.push(cDE + diamM); }
+          if(!isNaN(cA)) { allElevs.push(cA); allElevs.push(cA + diamM); }
+        });
+
+        var validElevs = allElevs.filter(function(v){ return typeof v === 'number' && !isNaN(v); });
+        var yMin = (validElevs.length > 0 ? Math.min.apply(null, validElevs) : 0) - 1.3;
+        var yMax = (validElevs.length > 0 ? Math.max.apply(null, validElevs) : 10) + 1.5;
+        var yR = yMax - yMin || 1;
+
+        var baseW = Math.max(920, Math.round(profileNodes.length * 120 + breaks.length * 90));
+        var W = Math.round(baseW * zoomLvl);
+        var H = Math.round(440 * zoomLvl);
+        var mL = 72; var mR = 44; var mT = segments.length > 1 ? 56 : 42; var mB = 115;
+        var pw = W - mL - mR; var ph = H - mT - mB;
+
+        var sx = function(v){
+          var val = parseFloat(v); if(isNaN(val)) val = 0;
+          return mL + (xMax > 0 ? (val / xMax) * pw : 0);
+        };
+        var sy = function(v){
+          var val = parseFloat(v); if(isNaN(val)) val = yMin;
+          return mT + (yR > 0 ? ((yMax - val) / yR) * ph : 0);
+        };
+
+        var gridY = [];
+        var step = yR > 20 ? 5 : yR > 10 ? 2 : yR > 5 ? 1 : 0.5;
+        for (var gy = Math.ceil(yMin / step) * step; gy <= yMax; gy += step) gridY.push(gy);
+
+        // Construir marcas de abscisa local por cada sub-perfil (no mezclar abscisas falsas a través de un corte)
+        var localTicks = [];
+        segments.forEach(function(seg){
+          var sLen = seg.len || 10;
+          var stepX = sLen > 500 ? 100 : sLen > 200 ? 50 : sLen > 100 ? 25 : 10;
+          for (var lx = 0; lx <= sLen; lx += stepX) {
+            localTicks.push({ xPlot: seg.xStartPlot + lx, label: lx + " m" });
+          }
+          if (sLen % stepX > 2) {
+            localTicks.push({ xPlot: seg.xEndPlot, label: sLen.toFixed(1) + " m" });
+          }
+        });
+
+        var breakAfterNodeMap = {};
+        breaks.forEach(function(b){ breakAfterNodeMap[b.afterGlobalNodeIdx] = b; });
+
+        return <div key={blockKey} style={{marginBottom: 22}} className={props.isExport ? "print-page-break" : ""}>
+          {blockTitle ? (
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:"rgba(30,41,59,0.75)",padding:"8px 12px",borderRadius:"8px 8px 0 0",border:"1px solid rgba(59,130,246,0.3)",borderBottom:"none"}}>
+              <span style={{fontSize:13,fontWeight:800,color:"#38BDF8"}}>{blockTitle}</span>
+              <span style={{fontSize:11,color:"#94A3B8"}}>
+                {pipesToDraw.length} {pipesToDraw.length === 1 ? "tramo" : "tramos"} • {profileNodes.length} pozos • Longitud neta: {model.totalRealLen.toFixed(2)} m
+                {breaks.length > 0 ? " • " + breaks.length + (breaks.length === 1 ? " corte sin conexión" : " cortes sin conexión") : ""}
+              </span>
+            </div>
+          ) : null}
+
+          {/* Canvas SVG del Perfil Longitudinal */}
+          <div style={{overflowX:"auto",background:"#080E1A",borderRadius:blockTitle?"0 0 8px 8px":8,border:"1px solid rgba(59,130,246,0.25)",padding:4}}>
+            <svg viewBox={"0 0 "+W+" "+H} style={{width:"100%",minWidth:W,height:H,display:"block"}}>
+              {/* Cuadrícula Y (Cotas Reales s.n.m. compartidas lado a lado) */}
+              {gridY.map(function(gy2){
+                var yPos = sy(gy2);
+                return <g key={"gy"+gy2}>
+                  <line x1={mL} y1={yPos} x2={W-mR} y2={yPos} stroke="rgba(30, 41, 59, 0.7)" strokeWidth="0.7"/>
+                  <text x={mL-8} y={yPos+4} fill="#64748B" fontSize="10.5" textAnchor="end">{gy2.toFixed(2)}</text>
+                </g>;
+              })}
+
+              {/* Cuadrícula X (Abscisas locales de cada tramo/colector) */}
+              {localTicks.map(function(tk, tki){
+                var xPos = sx(tk.xPlot);
+                return <g key={"gx"+tki}>
+                  <line x1={xPos} y1={mT} x2={xPos} y2={H-mB} stroke="rgba(30, 41, 59, 0.55)" strokeWidth="0.5"/>
+                  <text x={xPos} y={H-mB+14} fill="#64748B" fontSize="9.5" textAnchor="middle">{tk.label}</text>
+                </g>;
+              })}
+
+              {/* Terreno independiente por cada segmento continuo (NUNCA une tramos desconectados) */}
+              {segments.map(function(seg, sIdx){
+                if (!seg.nodes || seg.nodes.length < 2) return null;
+                var segPath = "M" + seg.nodes.map(function(n){ return sx(n.x) + "," + sy(n.cr); }).join(" L");
+                var xS = sx(seg.xStartPlot);
+                var xE = sx(seg.xEndPlot);
+                var xMidSeg = (xS + xE) / 2;
+                return <g key={"seg_terr_"+sIdx}>
+                  <path d={segPath + " L" + xE + "," + (H-mB) + " L" + xS + "," + (H-mB) + " Z"} fill="rgba(34, 197, 94, 0.05)" stroke="none"/>
+                  <path d={segPath} fill="none" stroke="#22C55E" strokeWidth="2.5"/>
+                  {segments.length > 1 ? (
+                    <g>
+                      <rect x={Math.max(mL, xMidSeg - 95)} y={26} width="190" height="18" rx="4" fill="rgba(15, 23, 42, 0.92)" stroke="rgba(56, 189, 248, 0.45)" strokeWidth="1"/>
+                      <text x={Math.max(mL + 95, xMidSeg)} y={38} fill="#38BDF8" fontSize="9.5" fontWeight="bold" textAnchor="middle">
+                        {seg.title}
+                      </text>
+                    </g>
+                  ) : null}
+                </g>;
+              })}
+
+              {/* Zonas de CORTE / SIN CONEXIÓN evidenciando el desnivel real lado a lado */}
+              {breaks.map(function(brk, bi){
+                var bx1 = sx(brk.xLeft);
+                var bx2 = sx(brk.xRight);
+                var bMid = (bx1 + bx2) / 2;
+                var bw = Math.max(12, bx2 - bx1);
+                var yTop = mT;
+                var yBot = H - mB;
+                var yCenter = (yTop + yBot) / 2;
+                var dCrStr = (brk.deltaCr >= 0 ? "+" : "") + brk.deltaCr.toFixed(2) + "m";
+                var dCfStr = (brk.deltaCf >= 0 ? "+" : "") + brk.deltaCf.toFixed(2) + "m";
+                return <g key={"brk_"+bi}>
+                  <rect x={bx1 + 3} y={yTop} width={Math.max(4, bw - 6)} height={yBot - yTop} fill="rgba(245, 158, 11, 0.06)" />
+                  <line x1={bx1 + 4} y1={yTop} x2={bx1 + 4} y2={yBot} stroke="#F59E0B" strokeWidth="1.5" strokeDasharray="6,4" />
+                  <line x1={bx2 - 4} y1={yTop} x2={bx2 - 4} y2={yBot} stroke="#F59E0B" strokeWidth="1.5" strokeDasharray="6,4" />
+                  {/* Líneas guía horizontales suaves comparando las cotas de ambos pozos lado a lado */}
+                  {brk.leftNode && brk.rightNode ? (
+                    <g>
+                      <line x1={bx1} y1={sy(brk.leftNode.cf)} x2={bx2} y2={sy(brk.leftNode.cf)} stroke="rgba(56, 189, 248, 0.35)" strokeWidth="1" strokeDasharray="2,3" />
+                      <line x1={bx1} y1={sy(brk.rightNode.cf)} x2={bx2} y2={sy(brk.rightNode.cf)} stroke="rgba(56, 189, 248, 0.35)" strokeWidth="1" strokeDasharray="2,3" />
+                    </g>
+                  ) : null}
+                  <rect x={bMid - 56} y={yCenter - 26} width="112" height="50" rx="6" fill="rgba(15, 23, 42, 0.95)" stroke="#F59E0B" strokeWidth="1.2" />
+                  <text x={bMid} y={yCenter - 11} fill="#FBBF24" fontSize="9" fontWeight="bold" textAnchor="middle">✂ SIN CONEXIÓN</text>
+                  <text x={bMid} y={yCenter + 3} fill="#86EFAC" fontSize="8.8" fontWeight="bold" textAnchor="middle">{"ΔRas: " + dCrStr}</text>
+                  <text x={bMid} y={yCenter + 16} fill="#38BDF8" fontSize="8.8" fontWeight="bold" textAnchor="middle">{"ΔFon: " + dCfStr}</text>
+                </g>;
+              })}
+
+              {/* Tuberías únicamente dentro de su tramo real */}
+              {pipesToDraw.map(function(ptd, ci){
+                var r = ptd.pipe;
+                var n1 = ptd.n1;
+                var n2 = ptd.n2;
+                if(!n1 || !n2) return null;
+                var x1 = sx(n1.x); var x2 = sx(n2.x);
+                var curCfDE = r.effectiveCfDE != null ? r.effectiveCfDE : r.cfDE;
+                var curCfA = r.effectiveCfA != null ? r.effectiveCfA : r.cfA;
+                var y1b = sy(curCfDE); var y2b = sy(curCfA);
+                var diamM = (parseFloat(r.D) || 0.2);
+                if(diamM > 10) diamM = diamM / 1000;
+                var y1c = sy(parseFloat(curCfDE) + diamM);
+                var y2c = sy(parseFloat(curCfA) + diamM);
+                var tirM = Math.min(diamM, (parseFloat(r.Y) || 0) / 1000);
+                var y1w = sy(parseFloat(curCfDE) + tirM);
+                var y2w = sy(parseFloat(curCfA) + tirM);
+
+                var midX = (x1 + x2) / 2;
+                var midYb = (y1b + y2b) / 2;
+
+                return <g key={"tub"+ci}>
+                  <polygon points={x1+","+y1b+" "+x2+","+y2b+" "+x2+","+y2c+" "+x1+","+y1c} fill="rgba(0,166,214,0.08)" stroke="#0284C7" strokeWidth="1" strokeDasharray="3,3" />
+                  {tirM > 0.005 ? <polygon points={x1+","+y1b+" "+x2+","+y2b+" "+x2+","+y2w+" "+x1+","+y1w} fill="rgba(56, 189, 248, 0.3)" /> : null}
+                  <line x1={x1} y1={y1b} x2={x2} y2={y2b} stroke="#00D2FF" strokeWidth="2.5" />
+                  <text x={midX} y={midYb - 10} fill="#F59E0B" fontSize="10.5" fontWeight="bold" textAnchor="middle">
+                    {"#" + (r.id||"-") + " " + (r.nom||"") + " S=" + r.S + "%"}
+                  </text>
+                  <text x={midX} y={midYb + 14} fill="#94A3B8" fontSize="9.5" textAnchor="middle">
+                    {"L=" + (parseFloat(r.L)||0).toFixed(1) + "m | V=" + (r.V||0) + "m/s"}
+                  </text>
+                </g>;
+              })}
+
+              {/* Pozos de Inspección Reales (los 4+ pozos dibujados individualmente) */}
+              {profileNodes.map(function(n, ni){
+                var pw_px = Math.max(14, Math.min(26, 1.2 / xMax * pw));
+                var xPos = sx(n.x);
+                var mhTop = sy(n.cr);
+                var mhBot = sy(n.cf);
+                var mhH = Math.max(4, mhBot - mhTop);
+
+                var hasDrop = n.drop > 0.05;
+                var dropIsCritical = n.drop > 0.75;
+                var isCritDepth = n.prof < profMinRAS || n.prof > profMaxRAS;
+
+                return <g key={"pz"+ni}>
+                  <rect x={xPos - pw_px/2} y={mhTop} width={pw_px} height={mhH} fill="rgba(212,168,67,0.22)" stroke={isCritDepth ? "#EF4444" : "#D4A843"} strokeWidth="1.5" rx="2" />
+                  <line x1={xPos - pw_px/2 - 2} y1={mhTop} x2={xPos + pw_px/2 + 2} y2={mhTop} stroke="#22C55E" strokeWidth="3" />
+                  <line x1={xPos - pw_px/2 - 2} y1={mhBot} x2={xPos + pw_px/2 + 2} y2={mhBot} stroke="#00D2FF" strokeWidth="3" />
+                  <circle cx={xPos} cy={mhTop} r="3.5" fill="#22C55E" stroke="#000" strokeWidth="0.5" />
+                  <circle cx={xPos} cy={mhBot} r="3.5" fill="#00D2FF" stroke="#000" strokeWidth="0.5" />
+
+                  {hasDrop && n.cfA_in != null ? (
+                    <g>
+                      <line x1={xPos - pw_px/2} y1={sy(n.cfA_in)} x2={xPos} y2={sy(n.cfA_in)} stroke={dropIsCritical ? "#EF4444" : "#F59E0B"} strokeWidth="2" />
+                      <line x1={xPos} y1={sy(n.cfA_in)} x2={xPos} y2={mhBot} stroke={dropIsCritical ? "#EF4444" : "#F59E0B"} strokeWidth="1.5" strokeDasharray="2,2" />
+                      <rect x={xPos + pw_px/2 + 2} y={(sy(n.cfA_in) + mhBot)/2 - 8} width="58" height="15" rx="3" fill="rgba(15, 23, 42, 0.85)" stroke={dropIsCritical ? "#EF4444" : "#F59E0B"} strokeWidth="0.8"/>
+                      <text x={xPos + pw_px/2 + 31} y={(sy(n.cfA_in) + mhBot)/2 + 3} fill={dropIsCritical ? "#EF4444" : "#F59E0B"} fontSize="9" fontWeight="bold" textAnchor="middle">
+                        {"ΔH=" + n.drop.toFixed(2) + "m"}
+                      </text>
+                    </g>
+                  ) : null}
+
+                  <text x={xPos} y={mhTop - 8} fill="#86EFAC" fontSize="10.5" fontWeight="bold" textAnchor="middle">
+                    {"CR: " + n.cr.toFixed(2)}
+                  </text>
+                  <text x={xPos} y={mhBot + 14} fill="#38BDF8" fontSize="10.5" fontWeight="bold" textAnchor="middle">
+                    {"CF: " + n.cf.toFixed(2)}
+                  </text>
+                  <text x={xPos} y={mhBot + 26} fill={isCritDepth ? "#F87171" : "#FDE047"} fontSize="9.5" fontWeight={isCritDepth ? "bold" : "normal"} textAnchor="middle">
+                    {"H=" + n.prof.toFixed(2) + "m"}
+                  </text>
+                  <text x={xPos} y={H - mB + 24} fill="#F8FAFC" fontSize="10.5" fontWeight="bold" textAnchor="end" transform={"rotate(-42, "+xPos+", "+(H - mB + 24)+")"}>
+                    {n.name}
+                  </text>
+                </g>;
+              })}
+
+              {/* Leyenda Superior */}
+              <g transform={"translate("+mL+", 16)"}>
+                <circle cx="0" cy="0" r="4" fill="#22C55E"/>
+                <text x="8" y="4" fill="#86EFAC" fontSize="11" fontWeight="bold">Rasante Terreno (CR)</text>
+
+                <circle cx="160" cy="0" r="4" fill="#00D2FF"/>
+                <text x="168" y="4" fill="#38BDF8" fontSize="11" fontWeight="bold">Batea Tubería (CF)</text>
+
+                <rect x="310" y="-5" width="10" height="10" fill="rgba(212,168,67,0.4)" stroke="#D4A843" strokeWidth="1.2"/>
+                <text x="325" y="4" fill="#FDE047" fontSize="11" fontWeight="bold">Pozos ({profileNodes.length})</text>
+
+                <line x1="435" y1="0" x2="455" y2="0" stroke="#F59E0B" strokeWidth="2" strokeDasharray="3,2"/>
+                <text x="462" y="4" fill="#F59E0B" fontSize="11" fontWeight="bold">{breaks.length > 0 ? "Corte / Caída ΔH" : "Caída Interna (ΔH)"}</text>
+              </g>
+
+              <text x={W/2} y={H-6} fill="#64748B" fontSize="11" textAnchor="middle">
+                {segments.length > 1 ? "Abscisa Local por Sub-Perfil (m) — Escala Vertical Compartida para Comparar Desnivel Real" : "Distancia Acumulada / Abscisa (m)"}
+              </text>
+              <text x={16} y={H/2} fill="#64748B" fontSize="11" textAnchor="middle" transform={"rotate(-90, 16, "+(H/2)+")"}>Cota Real s.n.m. (m)</text>
+            </svg>
           </div>
-          <div style={{display:"flex",alignItems:"center",gap:6}}>
-            <span style={{fontSize:11,color:"#94A3B8"}}>Colector:</span>
-            <select className="es" value={selIdx} onChange={function(e){if(props.setPerfilIdx)props.setPerfilIdx(+e.target.value);}} style={{fontSize:11,minWidth:210}}>
-              {colectores.map(function(col,ci){return <option key={ci} value={ci}>{"["+ci+"] "+col.cab+" ("+col.chain.length+" tramos, "+col.len.toFixed(0)+" m)"}</option>;})}
-            </select>
+
+          {/* GUITARRA TÉCNICA DEL PERFIL (Pozo a Pozo con separador explícito en cortes desconectados) */}
+          <div style={{marginTop:12,background:"rgba(15,23,42,0.75)",borderRadius:8,padding:12,border:"1px solid rgba(59,130,246,0.25)"}}>
+            <div style={{fontSize:13,fontWeight:700,color:"#38BDF8",marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
+              <span>GUITARRA TÉCNICA DEL PERFIL LONGITUDINAL ({profileNodes.length} Pozos Reales)</span>
+              {breaks.length > 0 ? <span style={{fontSize:11,color:"#FBBF24"}}>{segments.length} tramos/colectores independientes separados por corte</span> : null}
+            </div>
+            <div style={{overflowX:"auto"}}>
+              <table style={{width:"100%",fontSize:11,borderCollapse:"collapse"}}>
+                <thead>
+                  <tr style={{background:"rgba(30,41,59,0.8)",color:"#94A3B8"}}>
+                    <th style={{padding:"6px 8px",textAlign:"left",borderBottom:"1px solid rgba(59,130,246,0.3)"}}>Sub-Perfil</th>
+                    <th style={{padding:"6px 8px",textAlign:"left",borderBottom:"1px solid rgba(59,130,246,0.3)"}}>Pozo / Nodo</th>
+                    <th style={{padding:"6px 8px",textAlign:"right",borderBottom:"1px solid rgba(59,130,246,0.3)"}}>Abscisa Local (m)</th>
+                    <th style={{padding:"6px 8px",textAlign:"right",color:"#86EFAC",borderBottom:"1px solid rgba(59,130,246,0.3)"}}>Cota Rasante (m)</th>
+                    <th style={{padding:"6px 8px",textAlign:"right",color:"#38BDF8",borderBottom:"1px solid rgba(59,130,246,0.3)"}}>Cota Fondo (m)</th>
+                    <th style={{padding:"6px 8px",textAlign:"right",color:"#FDE047",borderBottom:"1px solid rgba(59,130,246,0.3)"}}>Profundidad H (m)</th>
+                    <th style={{padding:"6px 8px",textAlign:"right",borderBottom:"1px solid rgba(59,130,246,0.3)"}}>Batea Entrada (m)</th>
+                    <th style={{padding:"6px 8px",textAlign:"right",borderBottom:"1px solid rgba(59,130,246,0.3)"}}>Batea Salida (m)</th>
+                    <th style={{padding:"6px 8px",textAlign:"center",borderBottom:"1px solid rgba(59,130,246,0.3)"}}>Caída ΔH (m)</th>
+                    <th style={{padding:"6px 8px",textAlign:"center",borderBottom:"1px solid rgba(59,130,246,0.3)"}}>Estado RAS 2017</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {profileNodes.map(function(n, ni){
+                    var okDepth = n.prof >= profMinRAS && n.prof <= profMaxRAS;
+                    var dropCrit = n.drop > 0.75;
+                    var brkAfter = breakAfterNodeMap[n.globalIdx];
+                    return <React.Fragment key={"gt_frag_"+ni}>
+                      <tr style={{borderBottom:"1px solid rgba(255,255,255,0.05)",background:ni%2===0?"rgba(255,255,255,0.02)":"transparent"}}>
+                        <td style={{padding:"5px 8px",color:"#38BDF8",fontSize:10.5,fontWeight:600}}>{"P" + (n.segIdx + 1)}</td>
+                        <td style={{padding:"5px 8px",fontWeight:"bold",color:"#F8FAFC"}}>{n.name}</td>
+                        <td style={{padding:"5px 8px",textAlign:"right",color:"#94A3B8"}}>{n.abscisaLocal.toFixed(2)}</td>
+                        <td style={{padding:"5px 8px",textAlign:"right",color:"#86EFAC",fontWeight:600}}>{n.cr.toFixed(2)}</td>
+                        <td style={{padding:"5px 8px",textAlign:"right",color:"#38BDF8",fontWeight:600}}>{n.cf.toFixed(2)}</td>
+                        <td style={{padding:"5px 8px",textAlign:"right",color:okDepth?"#FDE047":"#EF4444",fontWeight:700}}>{n.prof.toFixed(2)}</td>
+                        <td style={{padding:"5px 8px",textAlign:"right",color:"#CBD5E1"}}>{n.cfA_in != null ? n.cfA_in.toFixed(2) : "-"}</td>
+                        <td style={{padding:"5px 8px",textAlign:"right",color:"#CBD5E1"}}>{n.cfDE_out != null ? n.cfDE_out.toFixed(2) : "-"}</td>
+                        <td style={{padding:"5px 8px",textAlign:"center"}}>
+                          {n.drop > 0.05 ? <span style={{color:dropCrit?"#EF4444":"#F59E0B",fontWeight:"bold"}}>{n.drop.toFixed(2)+" m"}</span> : <span style={{color:"#64748B"}}>0.00</span>}
+                        </td>
+                        <td style={{padding:"5px 8px",textAlign:"center"}}>
+                          {n.prof < profMinRAS ? <span style={{background:"rgba(239,68,68,0.2)",color:"#EF4444",padding:"2px 6px",borderRadius:4,fontSize:10}}>H &lt; {profMinRAS}m</span> :
+                           n.prof > profMaxRAS ? <span style={{background:"rgba(245,158,11,0.2)",color:"#F59E0B",padding:"2px 6px",borderRadius:4,fontSize:10}}>H &gt; {profMaxRAS}m</span> :
+                           dropCrit ? <span style={{background:"rgba(239,68,68,0.2)",color:"#EF4444",padding:"2px 6px",borderRadius:4,fontSize:10}}>Requiere Bajante RAS</span> :
+                           <span style={{background:"rgba(34,197,94,0.15)",color:"#22C55E",padding:"2px 6px",borderRadius:4,fontSize:10}}>CUMPLE RAS</span>}
+                        </td>
+                      </tr>
+                      {brkAfter && brkAfter.rightNode ? (
+                        <tr style={{background:"rgba(245, 158, 11, 0.12)",borderTop:"1px dashed #F59E0B",borderBottom:"1px dashed #F59E0B"}}>
+                          <td colSpan={10} style={{padding:"6px 10px",textAlign:"center",color:"#FCD34D",fontWeight:700,fontSize:10.5}}>
+                            {"✂ CORTE DE PERFIL (TRAMOS NO UNIDOS): Fin en pozo " + brkAfter.leftNode.name + " → Reinicia en pozo independiente " + brkAfter.rightNode.name + " | Desnivel entre sectores: ΔRasante = " + (brkAfter.deltaCr >= 0 ? "+" : "") + brkAfter.deltaCr.toFixed(2) + " m, ΔFondo = " + (brkAfter.deltaCf >= 0 ? "+" : "") + brkAfter.deltaCf.toFixed(2) + " m"}
+                          </td>
+                        </tr>
+                      ) : null}
+                    </React.Fragment>;
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>;
+      };
+
+      var fullAuditModel = buildProfileRenderModel(
+        (splitProfilesMode || props.isExport) ? baseTruncatableProfiles : currentChoice.subProfiles,
+        pzMap
+      );
+      var auditNodes = fullAuditModel.profileNodes;
+
+      return <div className="c">
+        {/* Selector de colector, modo Truncar Proyecto en Perfiles y controles de Zoom */}
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:8}}>
+          <div className="ct" style={{margin:0,fontSize:14,color:"#38BDF8"}}>
+            PERFIL LONGITUDINAL AUDITADO ({auditNodes.length} pozos reales | {fullAuditModel.pipesToDraw.length} tramos | Long neta: {fullAuditModel.totalRealLen.toFixed(1)} m)
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+            {baseTruncatableProfiles.length > 1 ? (
+              <button
+                type="button"
+                className="btn"
+                onClick={function(){ setSplitProfilesMode(!splitProfilesMode); }}
+                style={{
+                  fontSize:11,
+                  padding:"5px 10px",
+                  fontWeight:700,
+                  background: splitProfilesMode ? "linear-gradient(135deg,#10B981,#059669)" : "rgba(245,158,11,0.18)",
+                  color: splitProfilesMode ? "#ffffff" : "#FCD34D",
+                  border: splitProfilesMode ? "1px solid #34D399" : "1px solid rgba(245,158,11,0.55)"
+                }}
+                title="Alterna entre ver los tramos desconectados lado a lado con su desnivel o truncar el proyecto en tarjetas de perfil independientes"
+              >
+                {splitProfilesMode
+                  ? "📐 Ver Lado a Lado con Desnivel (" + auditNodes.length + " pozos)"
+                  : "✂️ Truncar Proyecto en Perfiles (" + baseTruncatableProfiles.length + ")"}
+              </button>
+            ) : null}
+            {!splitProfilesMode ? (
+              <>
+                <span style={{fontSize:11,color:"#94A3B8"}}>Vista / Colector:</span>
+                <select className="es" value={selIdx} onChange={function(e){if(props.setPerfilIdx)props.setPerfilIdx(+e.target.value);}} style={{fontSize:11,minWidth:240}}>
+                  {colectores.map(function(col,ci){return <option key={ci} value={ci}>{"["+ci+"] "+col.cab+" ("+col.pipesCount+" tramos, "+col.len.toFixed(1)+" m)"}</option>;})}
+                </select>
+              </>
+            ) : null}
             <button className="btn" onClick={function(){if(props.setPerfilZoom)props.setPerfilZoom(Math.max(0.6,(zoomLvl||1)-0.2));}} style={{fontSize:11,padding:"3px 8px",background:"#1E293B"}}>-</button>
             <span style={{fontSize:11,color:"#F8FAFC",minWidth:35,textAlign:"center",fontWeight:"bold"}}>{Math.round((zoomLvl||1)*100)+"%"}</span>
             <button className="btn" onClick={function(){if(props.setPerfilZoom)props.setPerfilZoom(Math.min(3,(zoomLvl||1)+0.2));}} style={{fontSize:11,padding:"3px 8px",background:"#1E293B"}}>+</button>
@@ -653,222 +812,48 @@ export default function CalcTab(props){
           </div>
         </div>
 
-        {/* Canvas SVG del Perfil Longitudinal */}
-        <div style={{overflowX:"auto",background:"#080E1A",borderRadius:8,border:"1px solid rgba(59,130,246,0.2)",padding:4}}>
-          <svg viewBox={"0 0 "+W+" "+H} style={{width:"100%",minWidth:W,height:H,display:"block"}}>
-            {/* Cuadrícula Y (Cotas) */}
-            {gridY.map(function(gy2){
-              var yPos = sy(gy2);
-              return <g key={"gy"+gy2}>
-                <line x1={mL} y1={yPos} x2={W-mR} y2={yPos} stroke="rgba(30, 41, 59, 0.7)" strokeWidth="0.7"/>
-                <text x={mL-8} y={yPos+4} fill="#64748B" fontSize="10.5" textAnchor="end">{gy2.toFixed(2)}</text>
-              </g>;
-            })}
-
-            {/* Cuadrícula X (Abscisas) */}
-            {gridX.map(function(gx2){
-              var xPos = sx(gx2);
-              return <g key={"gx"+gx2}>
-                <line x1={xPos} y1={mT} x2={xPos} y2={H-mB} stroke="rgba(30, 41, 59, 0.7)" strokeWidth="0.5"/>
-                <text x={xPos} y={H-mB+14} fill="#64748B" fontSize="10" textAnchor="middle">{gx2+" m"}</text>
-              </g>;
-            })}
-
-            {/* Relleno geológico del terreno */}
-            <path d={terr+" L"+(W-mR)+","+(H-mB)+" L"+mL+","+(H-mB)+" Z"} fill="rgba(34, 197, 94, 0.05)" stroke="none"/>
-            {/* Línea de Cota Rasante Terreno */}
-            <path d={terr} fill="none" stroke="#22C55E" strokeWidth="2.5"/>
-
-            {/* Tuberías entre pozos */}
-            {chain.map(function(r, ci){
-              var n1 = profileNodes[ci];
-              var n2 = profileNodes[ci+1];
-              if(!n1 || !n2) return null;
-              var x1 = sx(n1.x); var x2 = sx(n2.x);
-              var curCfDE = r.effectiveCfDE != null ? r.effectiveCfDE : r.cfDE;
-              var curCfA = r.effectiveCfA != null ? r.effectiveCfA : r.cfA;
-              var y1b = sy(curCfDE); var y2b = sy(curCfA);
-              var diamM = (parseFloat(r.D) || 0.2);
-              if(diamM > 10) diamM = diamM / 1000;
-              var y1c = sy(parseFloat(curCfDE) + diamM);
-              var y2c = sy(parseFloat(curCfA) + diamM);
-              var tirM = Math.min(diamM, (parseFloat(r.Y) || 0) / 1000);
-              var y1w = sy(parseFloat(curCfDE) + tirM);
-              var y2w = sy(parseFloat(curCfA) + tirM);
-
-              var midX = (x1 + x2) / 2;
-              var midYb = (y1b + y2b) / 2;
-
-              return <g key={"tub"+ci}>
-                {/* Cuerpo del ducto (tubería) */}
-                <polygon points={x1+","+y1b+" "+x2+","+y2b+" "+x2+","+y2c+" "+x1+","+y1c} fill="rgba(0,166,214,0.08)" stroke="#0284C7" strokeWidth="1" strokeDasharray="3,3" />
-                {/* Lámina de agua si hay flujo */}
-                {tirM > 0.005 ? <polygon points={x1+","+y1b+" "+x2+","+y2b+" "+x2+","+y2w+" "+x1+","+y1w} fill="rgba(56, 189, 248, 0.3)" /> : null}
-                {/* Batea tubería (Invert) */}
-                <line x1={x1} y1={y1b} x2={x2} y2={y2b} stroke="#00D2FF" strokeWidth="2.5" />
-                {/* Etiquetas sobre la tubería */}
-                <text x={midX} y={midYb - 10} fill="#F59E0B" fontSize="10.5" fontWeight="bold" textAnchor="middle">
-                  {"#" + (r.id||"-") + " " + (r.nom||"") + " S=" + r.S + "%"}
-                </text>
-                <text x={midX} y={midYb + 14} fill="#94A3B8" fontSize="9.5" textAnchor="middle">
-                  {"L=" + (parseFloat(r.L)||0).toFixed(1) + "m | V=" + (r.V||0) + "m/s"}
-                </text>
-              </g>;
-            })}
-
-            {/* Pozos de Inspección con Cotas Reales y Caídas */}
-            {profileNodes.map(function(n, ni){
-              var pw_px = Math.max(14, Math.min(26, 1.2 / xMax * pw));
-              var xPos = sx(n.x);
-              var mhTop = sy(n.cr);
-              var mhBot = sy(n.cf);
-              var mhH = Math.max(4, mhBot - mhTop);
-
-              var hasDrop = n.drop > 0.05;
-              var dropIsCritical = n.drop > 0.75;
-              var isCritDepth = n.prof < profMinRAS || n.prof > profMaxRAS;
-
-              return <g key={"pz"+ni}>
-                {/* Cámara vertical del Pozo */}
-                <rect x={xPos - pw_px/2} y={mhTop} width={pw_px} height={mhH} fill="rgba(212,168,67,0.22)" stroke={isCritDepth ? "#EF4444" : "#D4A843"} strokeWidth="1.5" rx="2" />
-                {/* Brocal de Rasante */}
-                <line x1={xPos - pw_px/2 - 2} y1={mhTop} x2={xPos + pw_px/2 + 2} y2={mhTop} stroke="#22C55E" strokeWidth="3" />
-                {/* Base / Solera de Fondo */}
-                <line x1={xPos - pw_px/2 - 2} y1={mhBot} x2={xPos + pw_px/2 + 2} y2={mhBot} stroke="#00D2FF" strokeWidth="3" />
-                {/* Nodos de vértice */}
-                <circle cx={xPos} cy={mhTop} r="3.5" fill="#22C55E" stroke="#000" strokeWidth="0.5" />
-                <circle cx={xPos} cy={mhBot} r="3.5" fill="#00D2FF" stroke="#000" strokeWidth="0.5" />
-
-                {/* Caída Interna (Desnivel) */}
-                {hasDrop && n.cfA_in != null ? (
-                  <g>
-                    <line x1={xPos - pw_px/2} y1={sy(n.cfA_in)} x2={xPos} y2={sy(n.cfA_in)} stroke={dropIsCritical ? "#EF4444" : "#F59E0B"} strokeWidth="2" />
-                    <line x1={xPos} y1={sy(n.cfA_in)} x2={xPos} y2={mhBot} stroke={dropIsCritical ? "#EF4444" : "#F59E0B"} strokeWidth="1.5" strokeDasharray="2,2" />
-                    <rect x={xPos + pw_px/2 + 2} y={(sy(n.cfA_in) + mhBot)/2 - 8} width="58" height="15" rx="3" fill="rgba(15, 23, 42, 0.85)" stroke={dropIsCritical ? "#EF4444" : "#F59E0B"} strokeWidth="0.8"/>
-                    <text x={xPos + pw_px/2 + 31} y={(sy(n.cfA_in) + mhBot)/2 + 3} fill={dropIsCritical ? "#EF4444" : "#F59E0B"} fontSize="9" fontWeight="bold" textAnchor="middle">
-                      {"ΔH=" + n.drop.toFixed(2) + "m"}
-                    </text>
-                  </g>
-                ) : null}
-
-                {/* Cota Rasante Real (CR) - DIBUJADA EN CADA POZO */}
-                <text x={xPos} y={mhTop - 8} fill="#86EFAC" fontSize="10.5" fontWeight="bold" textAnchor="middle">
-                  {"CR: " + n.cr.toFixed(2)}
-                </text>
-
-                {/* Cota Fondo Real (CF) - DIBUJADA EN CADA POZO */}
-                <text x={xPos} y={mhBot + 14} fill="#38BDF8" fontSize="10.5" fontWeight="bold" textAnchor="middle">
-                  {"CF: " + n.cf.toFixed(2)}
-                </text>
-
-                {/* Profundidad H (m) - DIBUJADA EN CADA POZO */}
-                <text x={xPos} y={mhBot + 26} fill={isCritDepth ? "#F87171" : "#FDE047"} fontSize="9.5" fontWeight={isCritDepth ? "bold" : "normal"} textAnchor="middle">
-                  {"H=" + n.prof.toFixed(2) + "m"}
-                </text>
-
-                {/* Identificador del Pozo (Rotado) */}
-                <text x={xPos} y={H - mB + 22} fill="#F8FAFC" fontSize="11" fontWeight="bold" textAnchor="end" transform={"rotate(-45, "+xPos+", "+(H - mB + 22)+")"}>
-                  {n.name}
-                </text>
-              </g>;
-            })}
-
-            {/* Leyenda Superior del Perfil */}
-            <g transform={"translate("+mL+", 16)"}>
-              <circle cx="0" cy="0" r="4" fill="#22C55E"/>
-              <text x="8" y="4" fill="#86EFAC" fontSize="11" fontWeight="bold">Rasante Terreno (CR)</text>
-
-              <circle cx="160" cy="0" r="4" fill="#00D2FF"/>
-              <text x="168" y="4" fill="#38BDF8" fontSize="11" fontWeight="bold">Batea Tubería (CF)</text>
-
-              <rect x="310" y="-5" width="10" height="10" fill="rgba(212,168,67,0.4)" stroke="#D4A843" strokeWidth="1.2"/>
-              <text x="325" y="4" fill="#FDE047" fontSize="11" fontWeight="bold">Pozos de Inspección</text>
-
-              <line x1="475" y1="0" x2="495" y2="0" stroke="#F59E0B" strokeWidth="2" strokeDasharray="3,2"/>
-              <text x="502" y="4" fill="#F59E0B" fontSize="11" fontWeight="bold">Caída Interna (ΔH)</text>
-            </g>
-
-            {/* Títulos de Ejes */}
-            <text x={W/2} y={H-6} fill="#64748B" fontSize="11" textAnchor="middle">Distancia Acumulada / Abscisa (m)</text>
-            <text x={16} y={H/2} fill="#64748B" fontSize="11" textAnchor="middle" transform={"rotate(-90, 16, "+(H/2)+")"}>Cota Real s.n.m. (m)</text>
-          </svg>
-        </div>
-
-        {/* GUITARRA TÉCNICA DEL PERFIL (Desglose Analítico Pozo a Pozo) */}
-        <div style={{marginTop:16,background:"rgba(15,23,42,0.75)",borderRadius:8,padding:12,border:"1px solid rgba(59,130,246,0.25)"}}>
-          <div style={{fontSize:13,fontWeight:700,color:"#38BDF8",marginBottom:8,display:"flex",alignItems:"center",gap:8}}>
-            <span>GUITARRA TÉCNICA DEL PERFIL LONGITUDINAL (Cotas y Profundidades Reales)</span>
-          </div>
-          <div style={{overflowX:"auto"}}>
-            <table style={{width:"100%",fontSize:11,borderCollapse:"collapse"}}>
-              <thead>
-                <tr style={{background:"rgba(30,41,59,0.8)",color:"#94A3B8"}}>
-                  <th style={{padding:"6px 8px",textAlign:"left",borderBottom:"1px solid rgba(59,130,246,0.3)"}}>Pozo / Nodo</th>
-                  <th style={{padding:"6px 8px",textAlign:"right",borderBottom:"1px solid rgba(59,130,246,0.3)"}}>Abscisa (m)</th>
-                  <th style={{padding:"6px 8px",textAlign:"right",color:"#86EFAC",borderBottom:"1px solid rgba(59,130,246,0.3)"}}>Cota Rasante (m)</th>
-                  <th style={{padding:"6px 8px",textAlign:"right",color:"#38BDF8",borderBottom:"1px solid rgba(59,130,246,0.3)"}}>Cota Fondo (m)</th>
-                  <th style={{padding:"6px 8px",textAlign:"right",color:"#FDE047",borderBottom:"1px solid rgba(59,130,246,0.3)"}}>Profundidad H (m)</th>
-                  <th style={{padding:"6px 8px",textAlign:"right",borderBottom:"1px solid rgba(59,130,246,0.3)"}}>Batea Entrada (m)</th>
-                  <th style={{padding:"6px 8px",textAlign:"right",borderBottom:"1px solid rgba(59,130,246,0.3)"}}>Batea Salida (m)</th>
-                  <th style={{padding:"6px 8px",textAlign:"center",borderBottom:"1px solid rgba(59,130,246,0.3)"}}>Caída ΔH (m)</th>
-                  <th style={{padding:"6px 8px",textAlign:"center",borderBottom:"1px solid rgba(59,130,246,0.3)"}}>Estado RAS 2017</th>
-                </tr>
-              </thead>
-              <tbody>
-                {profileNodes.map(function(n, ni){
-                  var okDepth = n.prof >= profMinRAS && n.prof <= profMaxRAS;
-                  var dropCrit = n.drop > 0.75;
-                  return <tr key={"gt"+ni} style={{borderBottom:"1px solid rgba(255,255,255,0.05)",background:ni%2===0?"rgba(255,255,255,0.02)":"transparent"}}>
-                    <td style={{padding:"5px 8px",fontWeight:"bold",color:"#F8FAFC"}}>{n.name}</td>
-                    <td style={{padding:"5px 8px",textAlign:"right",color:"#94A3B8"}}>{n.x.toFixed(2)}</td>
-                    <td style={{padding:"5px 8px",textAlign:"right",color:"#86EFAC",fontWeight:600}}>{n.cr.toFixed(2)}</td>
-                    <td style={{padding:"5px 8px",textAlign:"right",color:"#38BDF8",fontWeight:600}}>{n.cf.toFixed(2)}</td>
-                    <td style={{padding:"5px 8px",textAlign:"right",color:okDepth?"#FDE047":"#EF4444",fontWeight:700}}>
-                      {n.prof.toFixed(2)}
-                    </td>
-                    <td style={{padding:"5px 8px",textAlign:"right",color:"#CBD5E1"}}>{n.cfA_in != null ? n.cfA_in.toFixed(2) : "-"}</td>
-                    <td style={{padding:"5px 8px",textAlign:"right",color:"#CBD5E1"}}>{n.cfDE_out != null ? n.cfDE_out.toFixed(2) : "-"}</td>
-                    <td style={{padding:"5px 8px",textAlign:"center"}}>
-                      {n.drop > 0.05 ? <span style={{color:dropCrit?"#EF4444":"#F59E0B",fontWeight:"bold"}}>{n.drop.toFixed(2)+" m"}</span> : <span style={{color:"#64748B"}}>0.00</span>}
-                    </td>
-                    <td style={{padding:"5px 8px",textAlign:"center"}}>
-                      {n.prof < profMinRAS ? <span style={{background:"rgba(239,68,68,0.2)",color:"#EF4444",padding:"2px 6px",borderRadius:4,fontSize:10}}>H &lt; {profMinRAS}m</span> :
-                       n.prof > profMaxRAS ? <span style={{background:"rgba(245,158,11,0.2)",color:"#F59E0B",padding:"2px 6px",borderRadius:4,fontSize:10}}>H &gt; {profMaxRAS}m</span> :
-                       dropCrit ? <span style={{background:"rgba(239,68,68,0.2)",color:"#EF4444",padding:"2px 6px",borderRadius:4,fontSize:10}}>Requiere Bajante RAS</span> :
-                       <span style={{background:"rgba(34,197,94,0.15)",color:"#22C55E",padding:"2px 6px",borderRadius:4,fontSize:10}}>CUMPLE RAS</span>}
-                    </td>
-                  </tr>;
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        {/* Renderizado: o tarjetas truncadas por cada perfil conectado (splitProfilesMode / exportación PDF) o vista actual con cortes */}
+        {(splitProfilesMode || (props.isExport && baseTruncatableProfiles.length > 1))
+          ? baseTruncatableProfiles.map(function(sp, spi){
+              return renderProfileBlock([sp], "✂️ " + sp.title + " (Perfil Independiente " + (spi + 1) + " de " + baseTruncatableProfiles.length + ")", "split_prof_" + spi);
+            })
+          : renderProfileBlock(
+              currentChoice.subProfiles,
+              currentChoice.subProfiles.length > 1
+                ? "📐 Vista Comparativa con Desnivel Lado a Lado (" + currentChoice.subProfiles.length + " tramos/colectores no unidos)"
+                : currentChoice.cab,
+              "single_prof_view"
+            )
+        }
 
         {/* AUDITORÍA POZO POR POZO (RAS 2017) */}
-        <div style={{marginTop:16,background:"rgba(15,23,42,0.75)",borderRadius:8,padding:12,border:"1px solid rgba(59,130,246,0.25)"}}>
+        <div style={{marginTop:8,background:"rgba(15,23,42,0.75)",borderRadius:8,padding:12,border:"1px solid rgba(59,130,246,0.25)"}}>
           <div style={{fontSize:13,fontWeight:700,color:"#22C55E",marginBottom:6,display:"flex",alignItems:"center",gap:8}}>
             <span>AUDITORÍA TÉCNICA Y ESTRUCTURAL POZO POR POZO (Norma RAS 2017)</span>
           </div>
           <div style={{display:"flex",gap:12,flexWrap:"wrap",marginBottom:10}}>
             <div style={{background:"rgba(30,41,59,0.6)",padding:"6px 12px",borderRadius:6,border:"1px solid rgba(255,255,255,0.06)"}}>
-              <span style={{color:"#94A3B8",fontSize:10}}>Pozos Auditados:</span> <strong style={{color:"#F8FAFC",fontSize:12}}>{profileNodes.length}</strong>
+              <span style={{color:"#94A3B8",fontSize:10}}>Perfiles Independientes:</span> <strong style={{color:"#38BDF8",fontSize:12}}>{baseTruncatableProfiles.length}</strong>
             </div>
             <div style={{background:"rgba(30,41,59,0.6)",padding:"6px 12px",borderRadius:6,border:"1px solid rgba(255,255,255,0.06)"}}>
-              <span style={{color:"#94A3B8",fontSize:10}}>Con Caída Interna (&gt;5cm):</span> <strong style={{color:"#F59E0B",fontSize:12}}>{profileNodes.filter(function(n){return n.drop>0.05;}).length}</strong>
+              <span style={{color:"#94A3B8",fontSize:10}}>Pozos Auditados:</span> <strong style={{color:"#F8FAFC",fontSize:12}}>{auditNodes.length}</strong>
             </div>
             <div style={{background:"rgba(30,41,59,0.6)",padding:"6px 12px",borderRadius:6,border:"1px solid rgba(255,255,255,0.06)"}}>
-              <span style={{color:"#94A3B8",fontSize:10}}>Caídas Críticas (&gt;75cm - Bajante):</span> <strong style={{color:"#EF4444",fontSize:12}}>{profileNodes.filter(function(n){return n.drop>0.75;}).length}</strong>
+              <span style={{color:"#94A3B8",fontSize:10}}>Con Caída Interna (&gt;5cm):</span> <strong style={{color:"#F59E0B",fontSize:12}}>{auditNodes.filter(function(n){return n.drop>0.05;}).length}</strong>
             </div>
             <div style={{background:"rgba(30,41,59,0.6)",padding:"6px 12px",borderRadius:6,border:"1px solid rgba(255,255,255,0.06)"}}>
-              <span style={{color:"#94A3B8",fontSize:10}}>Profundidades Críticas:</span> <strong style={{color:profileNodes.some(function(n){return n.prof<profMinRAS||n.prof>profMaxRAS;})?"#EF4444":"#22C55E",fontSize:12}}>{profileNodes.filter(function(n){return n.prof<profMinRAS||n.prof>profMaxRAS;}).length}</strong>
+              <span style={{color:"#94A3B8",fontSize:10}}>Caídas Críticas (&gt;75cm - Bajante):</span> <strong style={{color:"#EF4444",fontSize:12}}>{auditNodes.filter(function(n){return n.drop>0.75;}).length}</strong>
+            </div>
+            <div style={{background:"rgba(30,41,59,0.6)",padding:"6px 12px",borderRadius:6,border:"1px solid rgba(255,255,255,0.06)"}}>
+              <span style={{color:"#94A3B8",fontSize:10}}>Profundidades Críticas:</span> <strong style={{color:auditNodes.some(function(n){return n.prof<profMinRAS||n.prof>profMaxRAS;})?"#EF4444":"#22C55E",fontSize:12}}>{auditNodes.filter(function(n){return n.prof<profMinRAS||n.prof>profMaxRAS;}).length}</strong>
             </div>
           </div>
 
           <div style={{fontSize:11,color:"#94A3B8",lineHeight:1.5}}>
-            • <strong>Cota Rasante Terreno (CR):</strong> Corresponde a la cota rasante del pozo en la rasante vial o de terreno natural.<br/>
-            • <strong>Cota Fondo Pozo (CF):</strong> Nivel de solera / batea inferior garantizando la continuidad hidráulica.<br/>
-            • <strong>Profundidad Mínima y Máxima RAS 2017:</strong> En vías vehiculares se exige mínimo {profMinRAS} m a clave de tubería; pozos con profundidad &gt; {profMaxRAS} m requieren verificación de entibados y esfuerzos estructurales.<br/>
-            • <strong>Caídas Internas:</strong> Si la diferencia de cotas de llegada y salida supera 0.75 m, la norma RAS 2017 exige la instalación de tubería bajante o pozo de caída para evitar la erosión del fondo y turbulencias.
+            • <strong>Tramos No Conectados / Truncado de Perfiles:</strong> Cuando el proyecto contiene tramos sin unión física, el sistema conserva los pozos reales de cada tramo sin fusionarlos, evidenciando su desnivel real lado a lado o truncándolos en perfiles independientes.<br/>
+            • <strong>Cota Rasante Terreno (CR) y Cota Fondo (CF):</strong> Niveles reales s.n.m. en cada pozo de entrada y salida.<br/>
+            • <strong>Profundidad Mínima y Máxima RAS 2017:</strong> En vías vehiculares se exige mínimo {profMinRAS} m a clave de tubería; profundidades &gt; {profMaxRAS} m requieren verificación de entibados.<br/>
+            • <strong>Caídas Internas:</strong> Si la diferencia de cotas entre llegada y salida de un mismo pozo supera 0.75 m, la norma RAS 2017 exige cámara o tubería bajante.
           </div>
         </div>
       </div>;}():null}
