@@ -123,7 +123,13 @@ export default function ReposicionModule({ onBack, initialData }){
     if (Array.isArray(raw.pbItems)) {
       raw.pbItems = raw.pbItems.map(it => {
         if (!it || typeof it.d !== 'string') return it;
-        return { ...it, d: it.d.replace(/(?:Excavaciones\s+)+/gi, 'Excavaciones ') };
+        return {
+          ...it,
+          d: it.d
+            .replace(/(?:Excavaciones\s+)+/gi, 'Excavaciones ')
+            .replace(/especificación\s+EMPAS/gi, 'especificación técnica')
+            .replace(/\bEMPAS\b/gi, 'Entidad Prestadora')
+        };
       });
     }
     return raw;

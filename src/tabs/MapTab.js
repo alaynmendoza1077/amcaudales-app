@@ -5,6 +5,7 @@ import { MapContainer, TileLayer, Polygon, Tooltip, FeatureGroup, useMap } from 
 import { cIDF, formatDiam } from '../engine';
 import { IDF } from '../constants';
 import { calcularAreas, generarPoligonosVoronoiSync } from '../calcAreasAferentes';
+import { runAreasAutomatedTests } from '../utils/areasAutoTest';
 import L from 'leaflet';
 import * as turf from '@turf/turf';
 import shp from 'shpjs';
@@ -524,7 +525,19 @@ function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, se
   const [radio, setRadio] = useState(20);
   const [cartografia, setCartografia] = useState([]);
   const [verCartografia, setVerCartografia] = useState(true);
-  const [incluirVias, setIncluirVias] = useState(true); // Added for vias toggle
+  const [incluirVias, setIncluirVias] = useState(false); // Solo separar vías si el usuario carga catastro y lo marca explícitamente
+  const [migrationStatus, setMigrationStatus] = useState(null);
+  const [autoTestReport, setAutoTestReport] = useState(null);
+  const [isTestingAreas, setIsTestingAreas] = useState(false);
+  useEffect(() => {
+    let active = true;
+    runAreasAutomatedTests().then(rep => {
+      if (active) {
+        window.__AMC_AREAS_AUTOTEST__ = rep;
+      }
+    }).catch(() => {});
+    return () => { active = false; };
+  }, []);
   const [verAreaCompleta, setVerAreaCompleta] = useState(true);
   const [verAreaSeparada, setVerAreaSeparada] = useState(true);
   const [verAutoAreas, setVerAutoAreas] = useState(true);
@@ -725,8 +738,9 @@ function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, se
                 const resultados = await calcularAreas(tramosObjetivo, coordinatedTramos, cartografia, pozosParaAreas, (cur, tot) => {
                     setCalcProgress({ current: cur, total: tot });
                 }, radioInputVal);
-            let tramosActualizados = [...T];
-            if (tramosActualizados.length === 0 && !isGlobalBaseNetwork && coordinatedTramos.length > 0) {
+            const useSeparateViasCalc = Boolean(incluirVias && cartografia && cartografia.length > 0);
+            let tramosActualizados = Array.isArray(T) && T.length > 0 ? [...T] : [];
+            if (tramosActualizados.length === 0 && !isGlobalBaseNetwork && coordinatedTramos.length > 0 && coordinatedTramos.length <= 500) {
                 tramosActualizados = [...coordinatedTramos];
             }
             let totalArea = 0;
@@ -737,18 +751,21 @@ function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, se
                 
                 for (let res of resultados) {
                     if (!res) continue;
-                    let idx = tramosActualizados.findIndex(t => t && String(t.de).trim().toLowerCase() === String(res.de).trim().toLowerCase());
+                    const tpRes = String(res.tipoArea || "RESIDENCIAL").toUpperCase();
+                    const mainAreaVal = useSeparateViasCalc ? (parseFloat(res.areaPredCalc) || 0) : (parseFloat(res.areaCalc) || 0);
+                    const viaAreaVal = useSeparateViasCalc ? (parseFloat(res.areaViaCalc) || 0) : null;
+                    let idx = tramosActualizados.findIndex(t => t && String(t.de).trim().toLowerCase() === String(res.de).trim().toLowerCase() && (!t.a || String(t.a).trim().toLowerCase() === String(res.a).trim().toLowerCase()));
                     if (idx !== -1) {
-                        tramosActualizados[idx] = { 
-                            ...tramosActualizados[idx], 
+                        tramosActualizados[idx] = {
+                            ...tramosActualizados[idx],
                             ...res,
-                            areaParcial: res.areaCalc,
+                            areaParcial: mainAreaVal,
                             areaCalc: res.areaCalc,
                             areaPredCalc: res.areaPredCalc,
-                            areaViaCalc: res.areaViaCalc,
-                            aR_prop: res.tipoArea === "RESIDENCIAL" ? res.areaCalc : null,
-                            aV_prop: res.tipoArea === "VIA" ? res.areaCalc : null,
-                            tipoArea: res.tipoArea || "RESIDENCIAL" 
+                            areaViaCalc: useSeparateViasCalc ? res.areaViaCalc : 0,
+                            aR_prop: tpRes === "RESIDENCIAL" ? mainAreaVal : null,
+                            aV_prop: viaAreaVal !== null ? viaAreaVal : (tpRes === "VIA" ? mainAreaVal : null),
+                            tipoArea: tpRes
                         };
                     }
                     let idx2 = newSelTramos.findIndex(t => t && String(t.de).trim().toLowerCase() === String(res.de).trim().toLowerCase() && String(t.a).trim().toLowerCase() === String(res.a).trim().toLowerCase());
@@ -756,26 +773,26 @@ function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, se
                         newSelTramos[idx2] = {
                             ...newSelTramos[idx2],
                             ...res,
-                            area: res.areaCalc,
-                            areaParcial: res.areaCalc,
+                            area: mainAreaVal,
+                            areaParcial: mainAreaVal,
                             areaCalc: res.areaCalc,
                             areaPredCalc: res.areaPredCalc,
-                            areaViaCalc: res.areaViaCalc,
-                            aR_prop: res.tipoArea === "RESIDENCIAL" ? res.areaCalc : null,
-                            aV_prop: res.tipoArea === "VIA" ? res.areaCalc : null,
-                            tipoArea: res.tipoArea || "RESIDENCIAL"
+                            areaViaCalc: useSeparateViasCalc ? res.areaViaCalc : 0,
+                            aR_prop: tpRes === "RESIDENCIAL" ? mainAreaVal : null,
+                            aV_prop: viaAreaVal !== null ? viaAreaVal : (tpRes === "VIA" ? mainAreaVal : null),
+                            tipoArea: tpRes
                         };
                     } else {
                         newSelTramos.push({
                             ...res,
-                            area: res.areaCalc,
-                            areaParcial: res.areaCalc,
+                            area: mainAreaVal,
+                            areaParcial: mainAreaVal,
                             areaCalc: res.areaCalc,
                             areaPredCalc: res.areaPredCalc,
-                            areaViaCalc: res.areaViaCalc,
-                            aR_prop: res.tipoArea === "RESIDENCIAL" ? res.areaCalc : null,
-                            aV_prop: res.tipoArea === "VIA" ? res.areaCalc : null,
-                            tipoArea: res.tipoArea || "RESIDENCIAL"
+                            areaViaCalc: useSeparateViasCalc ? res.areaViaCalc : 0,
+                            aR_prop: tpRes === "RESIDENCIAL" ? mainAreaVal : null,
+                            aV_prop: viaAreaVal !== null ? viaAreaVal : (tpRes === "VIA" ? mainAreaVal : null),
+                            tipoArea: tpRes
                         });
                     }
                     const ensureGeoJSON = (geom) => {
@@ -869,34 +886,103 @@ function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, se
                         }
                     }
                 } catch (eCalcFit) {}
+
+                // Si el proyecto nació en el Visor Espacial (T vacío), migrar automáticamente los tramos seleccionados con sus áreas a Datos, Cálculos, Visor Resumen y SWMM sin perder el mapa base ni los polígonos
                 const useSeparateViasAuto = Boolean(incluirVias && cartografia && cartografia.length > 0);
-                if (sT && tramosActualizados.length > 0) {
-                    const cleanForState = tramosActualizados.map((trItem, tIdx) => {
+                let sourceTramosForState = tramosActualizados.length > 0 ? tramosActualizados : newSelTramos.filter(Boolean);
+                if (tramosActualizados.length === 0 && sourceTramosForState.length > 0) {
+                    const sortedNew = topoSort(sourceTramosForState);
+                    if (Array.isArray(sortedNew) && sortedNew.length > 0) {
+                        sourceTramosForState = sortedNew.filter(st => st && !st.sep && st.de && st.a);
+                    }
+                }
+
+                if (sT && sourceTramosForState.length > 0) {
+                    const autoPozosMap = {};
+                    const autoTrList = [];
+                    const globalEstDef = (P && P.estacion) ? P.estacion : "BUC";
+                    const globalDenDef = (P && P.densidad) ? parseFloat(P.densidad) : 600;
+                    const globalConDef = (P && P.consumo) ? parseFloat(P.consumo) : 140;
+
+                    const cleanForState = sourceTramosForState.map((trItem, tIdx) => {
                         if (!trItem || trItem.sep) return trItem;
-                        const { areaPoli, areaPredPoli, areaViaPoli, coords, ...lightT } = trItem;
                         const keyTA = String(trItem.de || "").trim().toLowerCase() + "_" + String(trItem.a || "").trim().toLowerCase();
-                        const calcMatch = tMap[keyTA];
-                        if (!calcMatch) return { ...lightT, id: lightT.id || (tIdx + 1) };
-                        const tpA = (calcMatch.tipoArea || lightT.tipoArea || "RESIDENCIAL").toUpperCase();
-                        const mainVal = useSeparateViasAuto ? (parseFloat(calcMatch.areaPredCalc) || 0) : (parseFloat(calcMatch.areaCalc) || 0);
+                        const calcMatch = tMap[keyTA] || trItem;
+                        const coordsArr = Array.isArray(trItem.coords) && trItem.coords.length >= 2 ? trItem.coords : (Array.isArray(calcMatch.coords) ? calcMatch.coords : null);
+
+                        let midPt = null;
+                        if (coordsArr && coordsArr.length >= 2) {
+                            const fPt = coordsArr[0].lat !== undefined ? [coordsArr[0].lat, coordsArr[0].lng] : coordsArr[0];
+                            const lPt = coordsArr[coordsArr.length - 1].lat !== undefined ? [coordsArr[coordsArr.length - 1].lat, coordsArr[coordsArr.length - 1].lng] : coordsArr[coordsArr.length - 1];
+                            midPt = [(fPt[1] + lPt[1]) / 2, (fPt[0] + lPt[0]) / 2];
+                            const ptM1 = projectToMeters(fPt[1], fPt[0]);
+                            const ptM2 = projectToMeters(lPt[1], lPt[0]);
+                            const oldPz1 = ((inpData && inpData.pozos) || []).find(p => String(p.IdNodo || p.Nombre || "") === String(trItem.de)) || {};
+                            const oldPz2 = ((inpData && inpData.pozos) || []).find(p => String(p.IdNodo || p.Nombre || "") === String(trItem.a)) || {};
+                            autoPozosMap[trItem.de] = { ...oldPz1, IdNodo: trItem.de, Nombre: trItem.de, CoordX: ptM1[0], CoordY: ptM1[1] };
+                            autoPozosMap[trItem.a] = { ...oldPz2, IdNodo: trItem.a, Nombre: trItem.a, CoordX: ptM2[0], CoordY: ptM2[1] };
+                            autoTrList.push({ id_1: tIdx + 1, id: tIdx + 1, de: trItem.de, a: trItem.a, coords: [[fPt[0], fPt[1]], [lPt[0], lPt[1]]] });
+                        }
+
+                        let tEst = calcMatch.estacion || trItem.estacion || (midPt && typeof txtEstaciones !== 'undefined' ? findValueInWKT(txtEstaciones, midPt, 3) : null) || globalEstDef;
+                        let tDen = getDen(calcMatch) !== undefined ? getDen(calcMatch) : (getDen(trItem) !== undefined ? getDen(trItem) : (midPt && typeof jsonDensidades !== 'undefined' ? findValueInGeoJSON(jsonDensidades, midPt) : null));
+                        let finalDen = (tDen !== undefined && tDen !== null && !isNaN(parseFloat(tDen))) ? parseFloat(tDen) : globalDenDef;
+                        let tCon = getCon(calcMatch) !== undefined ? getCon(calcMatch) : (getCon(trItem) !== undefined ? getCon(trItem) : globalConDef);
+
+                        const { areaPoli, areaPredPoli, areaViaPoli, coords, ...lightT } = trItem;
+                        const tpA = String(calcMatch.tipoArea || lightT.tipoArea || "RESIDENCIAL").toUpperCase();
+                        const hasNewCalc = calcMatch.areaCalc !== undefined && calcMatch.areaCalc !== null;
+                        const mainVal = hasNewCalc
+                            ? (useSeparateViasAuto ? (parseFloat(calcMatch.areaPredCalc) || 0) : (parseFloat(calcMatch.areaCalc) || 0))
+                            : (parseFloat(lightT.areaParcial || lightT.area || 0) || 0);
                         const viaVal = useSeparateViasAuto ? (parseFloat(calcMatch.areaViaCalc) || 0) : null;
+
+                        const matVal = String(calcMatch.material || lightT.material || "PVC").toUpperCase();
+                        const dNom = formatDiam(calcMatch.diametroCom || calcMatch.diametro || lightT.diametroCom || lightT.diametro || 200, matVal);
+                        const lonVal = +(calcMatch.longitud || calcMatch.L || lightT.longitud || lightT.L || 0);
+                        const pendVal = +(calcMatch.pendiente || calcMatch.S || lightT.pendiente || lightT.S || 0);
+                        const crDE = +(calcMatch.cotaRasante || calcMatch.crDE || lightT.cotaRasante || lightT.crDE || 0);
+                        const crA = +(calcMatch.cotaRasanteA || calcMatch.crA || lightT.cotaRasanteA || lightT.crA || 0);
+                        const cfDE = +(calcMatch.cotaFondoDE || calcMatch.cotaFondo || calcMatch.cfDE || lightT.cotaFondoDE || lightT.cotaFondo || 0);
+                        const cfA = +(calcMatch.cotaFondoA || calcMatch.fondo_final || calcMatch.cfA || lightT.cotaFondoA || lightT.fondo_final || 0);
+
                         return {
                             ...lightT,
-                            id: lightT.id || (tIdx + 1),
+                            id: tIdx + 1,
+                            L: lonVal,
+                            S: pendVal,
+                            longitud: lonVal,
+                            pendiente: pendVal,
+                            crDE, crA, cotaRasante: crDE, cotaRasanteA: crA,
+                            cfDE, cfA, cotaFondo: cfDE, cotaFondoDE: cfDE, cotaFondoA: cfA,
+                            diametroCom: dNom,
+                            diamOrig: lightT.diamOrig || dNom,
+                            material: matVal,
+                            matOrig: lightT.matOrig || matVal,
                             areaParcial: mainVal,
-                            areaCalc: parseFloat(calcMatch.areaCalc) || 0,
-                            areaPredCalc: parseFloat(calcMatch.areaPredCalc) || 0,
-                            areaViaCalc: parseFloat(calcMatch.areaViaCalc) || 0,
+                            areaCalc: parseFloat(calcMatch.areaCalc !== undefined ? calcMatch.areaCalc : mainVal) || 0,
+                            areaPredCalc: parseFloat(calcMatch.areaPredCalc !== undefined ? calcMatch.areaPredCalc : mainVal) || 0,
+                            areaViaCalc: useSeparateViasAuto ? (parseFloat(calcMatch.areaViaCalc) || 0) : 0,
                             tipoArea: tpA,
                             aR_prop: tpA === "RESIDENCIAL" ? mainVal : null,
                             aC_prop: tpA === "COMERCIAL" ? mainVal : null,
                             aI_prop: tpA === "INDUSTRIAL" ? mainVal : null,
                             aIn_prop: tpA === "INSTITUCIONAL" ? mainVal : null,
                             aV_prop: viaVal !== null ? viaVal : (tpA === "VIA" ? mainVal : null),
-                            aRe_prop: tpA === "RECREACIONAL" ? mainVal : null
+                            aRe_prop: tpA === "RECREACIONAL" ? mainVal : null,
+                            reponer: lightT.reponer || "S",
+                            tipoVia: lightT.tipoVia || "FX",
+                            anchoVia: lightT.anchoVia || "N",
+                            pozoNuevo: lightT.pozoNuevo || "N",
+                            tipoPozo: lightT.tipoPozo || "M",
+                            densidad: finalDen,
+                            consumo: parseFloat(tCon) || globalConDef,
+                            estacion: String(tEst).trim()
                         };
                     });
+
                     sT(cleanForState);
+
                     if (setInpData) {
                         const autoVerts = [];
                         const autoAd = [];
@@ -904,7 +990,7 @@ function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, se
                             if (!ctItem || ctItem.sep) return;
                             const subId = "S" + (ctItem.id || (cIdx + 1));
                             const tIdStr = String(ctItem.de || "").trim() + "-" + String(ctItem.a || "").trim();
-                            const polyFeat = finalAutoAreas.find(fa => fa && fa.properties && (String(fa.properties.tramoId || "").trim().toLowerCase() === tIdStr.toLowerCase() || String(fa.properties.de || "").trim().toLowerCase() === String(ctItem.de || "").trim().toLowerCase()));
+                            const polyFeat = finalAutoAreas.find(fa => fa && fa.properties && (String(fa.properties.tramoId || "").trim().toLowerCase() === tIdStr.toLowerCase() || (String(fa.properties.de || "").trim().toLowerCase() === String(ctItem.de || "").trim().toLowerCase() && (!fa.properties.a || String(fa.properties.a || "").trim().toLowerCase() === String(ctItem.a || "").trim().toLowerCase()))));
                             if (polyFeat && polyFeat.geometry && polyFeat.geometry.coordinates) {
                                 const gm = polyFeat.geometry;
                                 const ringPts = gm.type === "MultiPolygon" ? (gm.coordinates[0] && gm.coordinates[0][0]) : gm.coordinates[0];
@@ -914,13 +1000,32 @@ function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, se
                                         autoVerts.push({ IDNODO: ctItem.de, DE: tIdStr, SubName: subId, CoordX: ptM[0], CoordY: ptM[1] });
                                     });
                                 }
-                                autoAd.push({ IDNODO: ctItem.de, Subcatchment: subId, AREACUENCA: polyFeat.properties.areaHa || ctItem.areaCalc || 0, TIPOCUENCA: ctItem.tipoArea || "RESIDENCIAL" });
+                                autoAd.push({ IDNODO: ctItem.de, Subcatchment: subId, AREACUENCA: polyFeat.properties.areaHa || ctItem.areaParcial || ctItem.areaCalc || 0, TIPOCUENCA: ctItem.tipoArea || "RESIDENCIAL" });
                             }
                         });
-                        if (autoVerts.length > 0) {
-                            setInpData(prevInp => ({ ...(prevInp || {}), verts: autoVerts, ad: autoAd.length > 0 ? autoAd : (prevInp?.ad || []), isAutoAreasApplied: true }));
-                        }
+                        const mergedPozos = (inpData && Array.isArray(inpData.pozos) && inpData.pozos.length > 0 && !inpData.keepBaseMapInVisor)
+                            ? inpData.pozos
+                            : Object.values(autoPozosMap);
+                        const mergedTr = (inpData && Array.isArray(inpData.tr) && inpData.tr.length > 0 && !inpData.keepBaseMapInVisor)
+                            ? inpData.tr
+                            : autoTrList;
+                        const keepVisorBase = Boolean(window.txtPozos && window.txtRedes && (isGlobalBaseNetwork || (inpData && inpData.keepBaseMapInVisor)));
+                        setInpData(prevInp => ({
+                            ...(prevInp || {}),
+                            pozos: mergedPozos,
+                            tr: mergedTr,
+                            verts: autoVerts.length > 0 ? autoVerts : (prevInp?.verts || []),
+                            ad: autoAd.length > 0 ? autoAd : (prevInp?.ad || []),
+                            isAutoAreasApplied: true,
+                            keepBaseMapInVisor: keepVisorBase
+                        }));
                     }
+
+                    setMigrationStatus({
+                        count: cleanForState.filter(x => x && !x.sep).length,
+                        totalHa: totalArea,
+                        separateVias: useSeparateViasAuto
+                    });
                 }
                 
                 setIsCalculating(false);
@@ -962,7 +1067,7 @@ function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, se
       let pozosToDraw = [];
       let tramosToDraw = [];
       
-      if (inpData && ((inpData.pozos && inpData.pozos.length > 0) || (inpData.verts && inpData.verts.length > 0))) {
+      if (inpData && !inpData.keepBaseMapInVisor && ((inpData.pozos && inpData.pozos.length > 0) || (inpData.verts && inpData.verts.length > 0))) {
         console.log("MapTab drawing with inpData:", inpData);
         var sourcePozos = (inpData.pozos && inpData.pozos.length > 0) ? inpData.pozos : inpData.verts;
         pozosToDraw = sourcePozos.map(p => {
@@ -1158,9 +1263,28 @@ function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, se
               matchedCount++;
             }
         });
-        tramosConCoordsRef.current = rData;
+        const prevCalcMap = {};
+        (tramosConCoordsRef.current || []).forEach(prevTc => {
+          if (prevTc && prevTc.de && prevTc.a && (prevTc.areaPoli || prevTc.areaCalc !== undefined)) {
+            prevCalcMap[String(prevTc.de).trim().toLowerCase() + "_" + String(prevTc.a).trim().toLowerCase()] = prevTc;
+          }
+        });
+        tramosConCoordsRef.current = rData.map(itemR => {
+          if (!itemR || !itemR.de || !itemR.a) return itemR;
+          const prevM = prevCalcMap[String(itemR.de).trim().toLowerCase() + "_" + String(itemR.a).trim().toLowerCase()];
+          if (!prevM) return itemR;
+          return {
+            ...itemR,
+            areaPoli: itemR.areaPoli || prevM.areaPoli,
+            areaPredPoli: itemR.areaPredPoli || prevM.areaPredPoli,
+            areaViaPoli: itemR.areaViaPoli || prevM.areaViaPoli,
+            areaCalc: itemR.areaCalc !== undefined ? itemR.areaCalc : prevM.areaCalc,
+            areaPredCalc: itemR.areaPredCalc !== undefined ? itemR.areaPredCalc : prevM.areaPredCalc,
+            areaViaCalc: itemR.areaViaCalc !== undefined ? itemR.areaViaCalc : prevM.areaViaCalc
+          };
+        });
         pozosDrawnRef.current = pozosToDraw;
-        if ((inpData || (T && T.length > 0)) && (!autoAreasPoly || autoAreasPoly.length === 0) && setAutoAreasPoly && rData && rData.length > 0) {
+        if ((inpData || (T && T.length > 0)) && !(inpData && inpData.keepBaseMapInVisor) && (!autoAreasPoly || autoAreasPoly.length === 0) && setAutoAreasPoly && rData && rData.length > 0 && rData.length <= 500) {
           try {
             const synInit = generarPoligonosVoronoiSync(rData, pozosToDraw, radio || 20.0);
             if (synInit && synInit.features && synInit.features.length > 0) {
@@ -1969,6 +2093,7 @@ function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, se
         newVerts.forEach(v => { if (v.DE && idByDeA[v.DE]) v.SubName = "S" + idByDeA[v.DE]; });
         if (setAutoAreasPoly) {
             let exportedAutoAreas = [];
+            const fallbackPolys = (Array.isArray(autoAreasPoly) && autoAreasPoly.length > 0) ? autoAreasPoly : localAutoAreas;
             cleanSortedExp.forEach(t => {
                 const key = String(t.de).trim().toLowerCase() + "_" + String(t.a).trim().toLowerCase();
                 const tcMatch = (tramosConCoordsRef.current || []).find(tc => tc && String(tc.de).trim().toLowerCase() + "_" + String(tc.a).trim().toLowerCase() === key);
@@ -1977,16 +2102,20 @@ function MapTabInner({ T, sT, P, setP, inpData, setInpData, setTab, isActive, se
                     exportedAutoAreas.push({ type: "Feature", geometry: rawGeom, properties: { id: t.id, de: t.de, a: t.a, tramoId: t.de + "-" + t.a, label: "Tramo " + t.de + "-" + t.a, DE: t.de, IDNODO: t.de, Nombre: t.de, areaHa: tcMatch.areaCalc || t.areaParcial || 0, TIPOCUENCA: t.tipoArea || "RESIDENCIAL", isCompleta: true } });
                 } else if (synPolyMap[key]) {
                     exportedAutoAreas.push(synPolyMap[key]);
-                } else if (Array.isArray(autoAreasPoly)) {
-                    const exF = autoAreasPoly.find(f => f && f.properties && String(f.properties.de || "").trim().toLowerCase() === String(t.de || "").trim().toLowerCase());
+                } else if (Array.isArray(fallbackPolys)) {
+                    const exF = fallbackPolys.find(f => f && f.properties && String(f.properties.de || "").trim().toLowerCase() === String(t.de || "").trim().toLowerCase() && (!f.properties.a || String(f.properties.a || "").trim().toLowerCase() === String(t.a || "").trim().toLowerCase()));
                     if (exF) exportedAutoAreas.push(exF);
                 }
             });
-            if (exportedAutoAreas.length > 0) setAutoAreasPoly(exportedAutoAreas);
+            if (exportedAutoAreas.length > 0) {
+                setLocalAutoAreas(exportedAutoAreas);
+                setAutoAreasPoly(exportedAutoAreas);
+            }
         }
         let finalPozos = Object.values(newPozosMap);
         let finalAd = (inpData && inpData.ad && inpData.ad.length > 0) ? inpData.ad : synAdList;
-        let updatedInpData = { ...inpData, pozos: finalPozos, verts: newVerts, ad: finalAd, tr: newTr, isAutoAreasApplied: true };
+        const keepBaseVisor = Boolean(window.txtPozos && window.txtRedes && (!inpData || inpData.keepBaseMapInVisor));
+        let updatedInpData = { ...inpData, pozos: finalPozos, verts: newVerts, ad: finalAd, tr: newTr, isAutoAreasApplied: true, keepBaseMapInVisor: keepBaseVisor };
         setInpData(updatedInpData);
     }
 
@@ -2295,45 +2424,109 @@ const handleExportPolygonVertices = () => {
               Borrar Selec.
             </button>
           </div>
+          {migrationStatus && (
+            <div style={{ backgroundColor: 'rgba(16, 185, 129, 0.14)', border: '1px solid #10b981', borderRadius: '10px', padding: '10px 12px', marginTop: '6px' }}>
+              <div style={{ fontSize: '11.5px', fontWeight: '800', color: '#34d399', marginBottom: '4px' }}>
+                ✅ Áreas migradas a Datos, Cálculos, Visor y SWMM
+              </div>
+              <div style={{ fontSize: '10.5px', color: '#e2e8f0', lineHeight: '1.35', marginBottom: '8px' }}>
+                <b>{migrationStatus.count} tramos</b> • Total: <b>{migrationStatus.totalHa.toFixed(4)} Ha</b> ({migrationStatus.separateVias ? 'Predios + Vías' : '100% Área Tributaria Limpia, sin A.Vía'})
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                <button type="button" onClick={() => setTab && setTab('dat')} style={{ backgroundColor: '#0284c7', color: '#fff', border: 'none', borderRadius: '6px', padding: '6px', fontSize: '10.5px', fontWeight: '700', cursor: 'pointer' }}>📋 Ver en Datos</button>
+                <button type="button" onClick={() => setTab && setTab('calc')} style={{ backgroundColor: '#10b981', color: '#fff', border: 'none', borderRadius: '6px', padding: '6px', fontSize: '10.5px', fontWeight: '700', cursor: 'pointer' }}>🧮 Ver Cálculos</button>
+                <button type="button" onClick={() => setTab && setTab('mapRes')} style={{ backgroundColor: '#8b5cf6', color: '#fff', border: 'none', borderRadius: '6px', padding: '6px', fontSize: '10.5px', fontWeight: '700', cursor: 'pointer' }}>🗺️ Visor Resumen</button>
+                <button type="button" onClick={() => setTab && setTab('swmm')} style={{ backgroundColor: '#f59e0b', color: '#fff', border: 'none', borderRadius: '6px', padding: '6px', fontSize: '10.5px', fontWeight: '700', cursor: 'pointer' }}>🌧️ Ir a SWMM</button>
+              </div>
+            </div>
+          )}
           <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-            <button 
-              onClick={() => exportToApp(false)} 
-              disabled={selTramos.length===0}
-              style={{ 
-                  flex: 1, 
-                  backgroundColor: '#3b82f6', 
-                  opacity: selTramos.length === 0 ? 0.5 : 1,
-                  cursor: selTramos.length === 0 ? 'not-allowed' : 'pointer',
-                  color: '#ffffff', 
-                  fontWeight: 'bold', 
-                  padding: '12px 8px', 
-                  borderRadius: '12px', 
+            <button
+              onClick={() => exportToApp(false)}
+              disabled={selTramos.filter(Boolean).length === 0 && (!T || T.length === 0)}
+              style={{
+                  flex: 1,
+                  backgroundColor: '#3b82f6',
+                  opacity: (selTramos.filter(Boolean).length === 0 && (!T || T.length === 0)) ? 0.5 : 1,
+                  cursor: (selTramos.filter(Boolean).length === 0 && (!T || T.length === 0)) ? 'not-allowed' : 'pointer',
+                  color: '#ffffff',
+                  fontWeight: 'bold',
+                  padding: '12px 8px',
+                  borderRadius: '12px',
                   border: 'none',
                   fontSize: '11px'
               }}
-              title="Mantiene los caudales acumulados intactos"
+              title="Mantiene los caudales acumulados intactos y lleva a Cálculos conservando los polígonos"
             >
               📥 Inyectar Red Completa (Cálculos Intactos)
             </button>
-            <button 
-              onClick={() => exportToApp(true)} 
-              disabled={selTramos.length===0}
-              style={{ 
-                  flex: 1, 
-                  backgroundColor: '#f59e0b', 
-                  opacity: selTramos.length === 0 ? 0.5 : 1,
-                  cursor: selTramos.length === 0 ? 'not-allowed' : 'pointer',
-                  color: '#ffffff', 
-                  fontWeight: 'bold', 
-                  padding: '12px 8px', 
-                  borderRadius: '12px', 
+            <button
+              onClick={() => exportToApp(true)}
+              disabled={selTramos.filter(Boolean).length === 0 && (!T || T.length === 0)}
+              style={{
+                  flex: 1,
+                  backgroundColor: '#f59e0b',
+                  opacity: (selTramos.filter(Boolean).length === 0 && (!T || T.length === 0)) ? 0.5 : 1,
+                  cursor: (selTramos.filter(Boolean).length === 0 && (!T || T.length === 0)) ? 'not-allowed' : 'pointer',
+                  color: '#ffffff',
+                  fontWeight: 'bold',
+                  padding: '12px 8px',
+                  borderRadius: '12px',
                   border: 'none',
                   fontSize: '11px'
               }}
-              title="Trunca la red solo a tu selección (afecta caudales aguas abajo, ideal para extraer Cantidades limpias)"
+              title="Migra únicamente los tramos seleccionados conservando los polígonos de áreas"
             >
               ✂️ Inyectar Solo Selección (Para Cantidades)
             </button>
+          </div>
+          <div style={{ marginTop: '6px' }}>
+            <button
+              type="button"
+              onClick={async () => {
+                setIsTestingAreas(true);
+                const rep = await runAreasAutomatedTests();
+                window.__AMC_AREAS_AUTOTEST__ = rep;
+                setAutoTestReport(rep);
+                setIsTestingAreas(false);
+              }}
+              disabled={isTestingAreas}
+              style={{
+                width: '100%',
+                backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                border: '1px solid rgba(56, 189, 248, 0.45)',
+                color: '#38bdf8',
+                fontWeight: '700',
+                padding: '8px 10px',
+                borderRadius: '8px',
+                cursor: isTestingAreas ? 'wait' : 'pointer',
+                fontSize: '11px'
+              }}
+            >
+              {isTestingAreas ? '⏳ Ejecutando pruebas automáticas...' : '🧪 Ejecutar Pruebas Automáticas de Áreas'}
+            </button>
+            {autoTestReport && (
+              <div style={{
+                marginTop: '6px',
+                padding: '10px',
+                borderRadius: '8px',
+                backgroundColor: autoTestReport.allPassed ? 'rgba(6, 78, 59, 0.55)' : 'rgba(127, 29, 29, 0.55)',
+                border: `1px solid ${autoTestReport.allPassed ? '#10b981' : '#ef4444'}`,
+                fontSize: '10.5px',
+                color: '#f8fafc'
+              }}>
+                <div style={{ fontWeight: '800', marginBottom: '6px', display: 'flex', justifyContent: 'space-between' }}>
+                  <span>{autoTestReport.allPassed ? '✅ AUTO-TEST APROBADO' : '❌ FALLO EN AUTO-TEST'} ({autoTestReport.passedCount}/{autoTestReport.totalCount})</span>
+                  <span style={{ cursor: 'pointer', color: '#94a3b8' }} onClick={() => setAutoTestReport(null)}>✕</span>
+                </div>
+                {autoTestReport.checks.map((chk, ci) => (
+                  <div key={ci} style={{ marginBottom: '4px', lineHeight: '1.25' }}>
+                    <span style={{ color: chk.passed ? '#34d399' : '#fca5a5', fontWeight: '700' }}>{chk.passed ? '✔' : '✖'} {chk.name}:</span>{' '}
+                    <span style={{ color: '#cbd5e1' }}>{chk.detail}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', marginTop: '4px', flexWrap: 'wrap' }}>
               <div style={{ display: 'flex', alignItems: 'center', opacity: cartografia.length === 0 ? 0.5 : 1 }}>

@@ -1,7 +1,5 @@
 import * as turf from '@turf/turf';
 import polygonClipping from 'polygon-clipping';
-import * as jstsModule from 'jsts/dist/jsts.min.js';
-const jsts = (jstsModule && jstsModule.io) ? jstsModule : (jstsModule && jstsModule.default && jstsModule.default.io ? jstsModule.default : (typeof window !== 'undefined' && window.jsts ? window.jsts : globalThis.jsts));
 import proj4 from 'proj4';
 
 // EPSG:3116 (Magna Sirgas Colombia Bogota)
@@ -39,8 +37,10 @@ export function convertPointToMeters(x, y) {
         }
     }
 
+    const globalEpsg = (typeof window !== 'undefined' && window.currentGlobalEpsg) ? window.currentGlobalEpsg : null;
+
     // Caso 2: Coordenadas métricas en EPSG:9377 (Origen Nacional, X > 2M)
-    if (numX > 3000000 || numY > 3000000 || (numX > 2000000 && window.currentGlobalEpsg === "EPSG:9377")) {
+    if (numX > 3000000 || numY > 3000000 || (numX > 2000000 && globalEpsg === "EPSG:9377")) {
         try {
             return proj4("EPSG:9377", "EPSG:3116").forward([numX, numY]);
         } catch(e) {
@@ -49,7 +49,7 @@ export function convertPointToMeters(x, y) {
     }
 
     // Caso 3: Coordenadas Web Mercator EPSG:3857 (X negativo en millones para América)
-    if (numX < -1000000 || (Math.abs(numX) > 100000 && window.currentGlobalEpsg === "EPSG:3857")) {
+    if (numX < -1000000 || (Math.abs(numX) > 100000 && globalEpsg === "EPSG:3857")) {
         try {
             return proj4("EPSG:3857", "EPSG:3116").forward([numX, numY]);
         } catch(e) {
@@ -68,8 +68,7 @@ const projectToLatLng = (x, y) => fromEPSG3116.forward([x, y]);
 const RADIO_EXPLORACION_M = 150.0;
 const MARGEN_PRED         = 1.05;
 const RADIO_MIN_M         = 10.0;
-const RADIO_DEFAULT_M     = 40.0;
-const RADIO_MAX_M         = 200.0; // Igual que Python (self.RADIO_MAX_M)
+const RADIO_MAX_M         = 200.0;
 const SNAP_TOL_M          = 10.0;
 const RADIO_VIA_EJE_M     = 12.0;
 const ANGULO_COLECTOR_MAX = 30.0;
@@ -78,11 +77,6 @@ const LON_LARGA_M         = 80.0;
 const FRAC_MAX            = 0.25;
 const MIN_ZONA_PLANA_M    = 5.0;
 const AREA_MIN_M2         = 20;
-const MAX_ASPECT_RATIO    = 50;
-const MAX_COMPACIDAD      = 200;
-const ANCHO_VIA_M         = 12;
-const BUFFER_CIERRE_M     = 3.0;   // Cierre morfológico
-const VIA_MIN_M2          = 10;    // Igual que Python (self.VIA_MIN_M2)
 
 // ==================== GEOMETRY HELPERS ====================
 
@@ -96,30 +90,6 @@ function shoelaceArea(ring_m) {
     }
     return Math.abs(area) / 2.0;
 }
-
-function distanceMaxToGeom(x1, y1, x2, y2, coords) {
-    let dx = x2 - x1, dy = y2 - y1;
-    let lon = Math.hypot(dx, dy);
-    if (lon === 0) return 0;
-    dx /= lon; dy /= lon;
-    let px = -dy, py = dx;
-
-    let max_d = 0;
-    function traverse(arr) {
-        if (!arr || arr.length === 0) return;
-        if (typeof arr[0] === 'number') {
-            let p_m = projectToMeters(arr[0], arr[1]);
-            let d = Math.abs((p_m[0] - x1) * px + (p_m[1] - y1) * py);
-            if (d > max_d) max_d = d;
-            return;
-        }
-        for (let i = 0; i < arr.length; i++) {
-            traverse(arr[i]);
-        }
-    }
-    traverse(coords);
-    return max_d;
-};
 
 function distancePointToSegment(px, py, x1, y1, x2, y2) {
     let dx = x2 - x1, dy = y2 - y1;
@@ -139,10 +109,7 @@ function bboxesOverlap(b1, b2) {
     return !(b1[2] < b2[0] || b1[0] > b2[2] || b1[3] < b2[1] || b1[1] > b2[3]);
 }
 
-// ==================== FAST JSTS WRAPPERS (METERS COORDS) ====================
-
-const geojsonReader = jsts && jsts.io ? new jsts.io.GeoJSONReader() : null;
-const geojsonWriter = jsts && jsts.io ? new jsts.io.GeoJSONWriter() : null;
+// ==================== PLANAR POLYGON BOOLEAN & TOPOLOGY HELPERS (METERS) ====================
 
 function getCoordsMeters(polyCoords) {
     if (!polyCoords || polyCoords.length === 0) return [];
@@ -153,33 +120,48 @@ function getCoordsMeters(polyCoords) {
     }
 }
 
-function coordsToJsts(coords_m) {
-    let polys = getCoordsMeters(coords_m);
-    if (!polys || polys.length === 0) return null;
-    let geojson;
-    if (polys.length === 1) {
-        geojson = { type: 'Polygon', coordinates: polys[0] };
-    } else {
-        geojson = { type: 'MultiPolygon', coordinates: polys };
+function pointInRingMeters(pt, ring) {
+    if (!pt || !ring || ring.length < 3) return false;
+    let x = pt[0], y = pt[1];
+    let inside = false;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+        let xi = ring[i][0], yi = ring[i][1];
+        let xj = ring[j][0], yj = ring[j][1];
+        let intersect = ((yi > y) !== (yj > y)) && (x < ((xj - xi) * (y - yi)) / ((yj - yi) || 1e-12) + xi);
+        if (intersect) inside = !inside;
     }
-    try {
-        let reader = geojsonReader || (jsts && jsts.io ? new jsts.io.GeoJSONReader() : null); return reader ? reader.read(geojson) : null;
-    } catch(e) {
-        return null;
-    }
+    return inside;
 }
 
-function jstsToCoords(geom) {
-    if (!geom || geom.isEmpty()) return null;
-    try {
-        let writer = geojsonWriter || (jsts && jsts.io ? new jsts.io.GeoJSONWriter() : null); if (!writer) return null; let geojson = writer.write(geom); if (geojson.type === 'GeometryCollection' && Array.isArray(geojson.geometries)) { let extracted = []; geojson.geometries.forEach(g => { if (g.type === 'Polygon') extracted.push(g.coordinates); else if (g.type === 'MultiPolygon') extracted.push(...g.coordinates); }); return extracted.length > 0 ? extracted : null; }
-        if (geojson.type === 'Polygon') {
-            return [geojson.coordinates];
-        } else if (geojson.type === 'MultiPolygon') {
-            return geojson.coordinates;
+function pointInPolysMeters(pt_m, coords_m) {
+    if (!pt_m || !coords_m) return false;
+    const polys = getCoordsMeters(coords_m);
+    for (let poly of polys) {
+        if (!poly || !poly[0] || poly[0].length < 3) continue;
+        if (pointInRingMeters(pt_m, poly[0])) {
+            let inHole = false;
+            for (let h = 1; h < poly.length; h++) {
+                if (pointInRingMeters(pt_m, poly[h])) {
+                    inHole = true;
+                    break;
+                }
+            }
+            if (!inHole) return true;
         }
-    } catch(e) { }
-    return null;
+    }
+    return false;
+}
+
+function polygonContainsPolygonMeters(outerCoords, innerCoords) {
+    const innerPolys = getCoordsMeters(innerCoords);
+    if (!outerCoords || innerPolys.length === 0) return false;
+    for (let poly of innerPolys) {
+        if (!poly || !poly[0]) continue;
+        for (let pt of poly[0]) {
+            if (!pointInPolysMeters(pt, outerCoords)) return false;
+        }
+    }
+    return true;
 }
 
 function metersCoordsToWgsFeature(coords_m, props = {}) {
@@ -212,35 +194,56 @@ function metersCoordsToWgsFeature(coords_m, props = {}) {
     };
 }
 
-function pointInJstsGeom(pt_m, jstsGeom) {
-    if (!jstsGeom) return false;
-    try {
-        let geomFactory = new jsts.geom.GeometryFactory();
-        let pt = geomFactory.createPoint(new jsts.geom.Coordinate(pt_m[0], pt_m[1]));
-        return jstsGeom.contains(pt);
-    } catch(e) { return false; }
+function metersCoordsToWgsGeoJSON(coords_m) {
+    const feat = metersCoordsToWgsFeature(coords_m, {});
+    return feat ? feat.geometry : null;
 }
 
 // Equivalent to Python's Shapely representative_point() — guarantees point inside polygon
 function representativePointMeters(coords_m) {
-    try {
-        let geom = coordsToJsts(coords_m);
-        if (!geom || geom.isEmpty()) return null;
-        let ip = geom.getInteriorPoint();
-        if (ip) return [ip.getX(), ip.getY()];
-    } catch(e) { }
-    // Fallback: use simple centroid of outer ring
     let polys = getCoordsMeters(coords_m);
     let ring = polys[0] && polys[0][0] ? polys[0][0] : null;
     if (!ring || ring.length < 3) return null;
-    let cx = 0, cy = 0;
-    for (let pt of ring) { cx += pt[0]; cy += pt[1]; }
-    return [cx / ring.length, cy / ring.length];
+
+    let cx = 0, cy = 0, minY = Infinity, maxY = -Infinity;
+    const len = (ring[0][0] === ring[ring.length - 1][0] && ring[0][1] === ring[ring.length - 1][1]) ? ring.length - 1 : ring.length;
+    if (len < 3) return null;
+    for (let i = 0; i < len; i++) {
+        let pt = ring[i];
+        cx += pt[0];
+        cy += pt[1];
+        if (pt[1] < minY) minY = pt[1];
+        if (pt[1] > maxY) maxY = pt[1];
+    }
+    let centroid = [cx / len, cy / len];
+    if (pointInPolysMeters(centroid, coords_m)) return centroid;
+
+    let midY = (minY + maxY) * 0.5;
+    let xs = [];
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+        let x1 = ring[j][0], y1 = ring[j][1];
+        let x2 = ring[i][0], y2 = ring[i][1];
+        if ((y1 <= midY && y2 > midY) || (y2 <= midY && y1 > midY)) {
+            let xInt = x1 + ((midY - y1) * (x2 - x1)) / (y2 - y1);
+            xs.push(xInt);
+        }
+    }
+    xs.sort((a, b) => a - b);
+    let bestPt = null, bestSpan = -1;
+    for (let k = 0; k + 1 < xs.length; k += 2) {
+        let span = xs[k + 1] - xs[k];
+        let cand = [(xs[k] + xs[k + 1]) * 0.5, midY];
+        if (span > bestSpan && pointInPolysMeters(cand, coords_m)) {
+            bestSpan = span;
+            bestPt = cand;
+        }
+    }
+    return bestPt || centroid;
 }
 
 function fastUnionMeters(featuresCoordsArray) {
     if (!featuresCoordsArray || featuresCoordsArray.length === 0) return null;
-    if (featuresCoordsArray.length === 1) return featuresCoordsArray[0];
+    if (featuresCoordsArray.length === 1) return getCoordsMeters(featuresCoordsArray[0]);
     try {
         let validPolys = featuresCoordsArray.map(c => getCoordsMeters(c)).filter(p => p && p.length > 0);
         if (validPolys.length === 0) return null;
@@ -250,26 +253,12 @@ function fastUnionMeters(featuresCoordsArray) {
             if (res && res.length > 0) return res;
         }
     } catch (ePc) {}
-    try {
-        if (!jsts || !jsts.geom) return featuresCoordsArray[0];
-        let geoms = [];
-        for (let coords of featuresCoordsArray) {
-            let g = coordsToJsts(coords);
-            if (g && !g.isEmpty()) geoms.push(g);
-        }
-        if (geoms.length === 0) return null;
-        let geomFactory = new jsts.geom.GeometryFactory();
-        let geomCollection = geomFactory.createGeometryCollection(geoms);
-        let result = geomCollection.union();
-        return jstsToCoords(result);
-    } catch (e) {
-        return featuresCoordsArray[0];
-    }
+    return getCoordsMeters(featuresCoordsArray[0]);
 }
 
 function fastDifferenceMeters(subjectCoords, clipCoords) {
     if (!subjectCoords) return null;
-    if (!clipCoords) return subjectCoords;
+    if (!clipCoords) return getCoordsMeters(subjectCoords);
     try {
         let sP = getCoordsMeters(subjectCoords);
         let cP = getCoordsMeters(clipCoords);
@@ -278,16 +267,7 @@ function fastDifferenceMeters(subjectCoords, clipCoords) {
             return (res && res.length > 0) ? res : null;
         }
     } catch (ePc) {}
-    try {
-        let subj = coordsToJsts(subjectCoords);
-        let clip = coordsToJsts(clipCoords);
-        if (!subj) return subjectCoords;
-        if (!clip) return subjectCoords;
-        let diff = subj.difference(clip);
-        return jstsToCoords(diff);
-    } catch (e) {
-        return subjectCoords;
-    }
+    return getCoordsMeters(subjectCoords);
 }
 
 function fastIntersectionMeters(subjectCoords, clipCoords) {
@@ -300,15 +280,7 @@ function fastIntersectionMeters(subjectCoords, clipCoords) {
             return (res && res.length > 0) ? res : null;
         }
     } catch (ePc) {}
-    try {
-        let subj = coordsToJsts(subjectCoords);
-        let clip = coordsToJsts(clipCoords);
-        if (!subj || !clip) return null;
-        let inter = subj.intersection(clip);
-        return jstsToCoords(inter);
-    } catch (e) {
-        return null;
-    }
+    return null;
 }
 
 function calcularAreaMeters(coords) {
@@ -342,59 +314,43 @@ function computeBboxMeters(coords) {
     return [minX, minY, maxX, maxY];
 }
 
-// ==================== CIERRE MORFOLÓGICO (port from Python) ====================
-// Uses JSTS exact planar buffer
+// ==================== CIERRE MORFOLÓGICO & SIMPLIFICACIÓN PLANAR ====================
 
-function limpiarJsts(jstsGeom) {
-    if (!jstsGeom || jstsGeom.isEmpty()) return null;
-    try {
-        // En Python: g.simplify(self.SIMPLIFY_TOL, preserve_topology=True) donde TOL=0.25
-        let simplifier = new jsts.simplify.TopologyPreservingSimplifier(jstsGeom);
-        simplifier.setDistanceTolerance(0.25);
-        return simplifier.getResultGeometry();
-    } catch(e) {
-        return jstsGeom;
+function simplifyRingMeters(ring, tol = 0.25) {
+    if (!Array.isArray(ring) || ring.length <= 5) return ring;
+    let open = ring.slice();
+    if (open[0][0] === open[open.length - 1][0] && open[0][1] === open[open.length - 1][1]) {
+        open.pop();
     }
-}
+    if (open.length <= 4) return ring;
 
-function extraerExteriorJsts(geom) {
-    if (!geom || geom.isEmpty()) return geom;
-    let polys = [];
-    if (geom.getGeometryType() === 'Polygon') {
-        polys.push(geom.getExteriorRing());
-    } else if (geom.getGeometryType() === 'MultiPolygon') {
-        for (let i = 0; i < geom.getNumGeometries(); i++) {
-            polys.push(geom.getGeometryN(i).getExteriorRing());
+    let cleaned = [open[0]];
+    for (let i = 1; i < open.length; i++) {
+        let prev = cleaned[cleaned.length - 1];
+        let curr = open[i];
+        if (Math.hypot(curr[0] - prev[0], curr[1] - prev[1]) >= tol) {
+            cleaned.push(curr);
         }
     }
-    if (polys.length === 0) return geom;
-    
-    let geomFactory = new jsts.geom.GeometryFactory();
-    let exteriorGeoms = polys.map(ring => geomFactory.createPolygon(ring));
-    if (exteriorGeoms.length === 1) return exteriorGeoms[0];
-    return geomFactory.createMultiPolygon(exteriorGeoms);
+    if (cleaned.length < 3) return ring;
+    cleaned.push([cleaned[0][0], cleaned[0][1]]);
+    return cleaned;
 }
 
 function cierreMorfologicoMeters(coords_m) {
-    let geom = coordsToJsts(coords_m);
-    if (!geom) return null;
-    
+    if (!coords_m) return null;
     try {
-        let bp = new jsts.operation.buffer.BufferParameters();
-        bp.setJoinStyle(jsts.operation.buffer.BufferParameters.JOIN_MITRE);
-        bp.setEndCapStyle(jsts.operation.buffer.BufferParameters.CAP_FLAT);
-        bp.setMitreLimit(10.0);
-        
-        // 1. Buffer out 3m
-        let expanded = jsts.operation.buffer.BufferOp.bufferOp(geom, BUFFER_CIERRE_M, bp);
-        // 2. Buffer in 3m
-        let closed = jsts.operation.buffer.BufferOp.bufferOp(expanded, -BUFFER_CIERRE_M, bp);
-        // 3. Remove holes
-        let noHoles = extraerExteriorJsts(closed);
-        // 4. Simplificar (limpiar)
-        noHoles = limpiarJsts(noHoles);
-        return jstsToCoords(noHoles);
-    } catch(e) {
+        let polys = getCoordsMeters(coords_m);
+        let exteriorOnly = [];
+        for (let poly of polys) {
+            if (!poly || !poly[0] || poly[0].length < 4) continue;
+            let simp = simplifyRingMeters(poly[0], 0.25);
+            if (shoelaceArea(simp) >= 1.0) {
+                exteriorOnly.push([simp]);
+            }
+        }
+        return exteriorOnly.length > 0 ? exteriorOnly : polys;
+    } catch (e) {
         return coords_m;
     }
 }
@@ -429,8 +385,6 @@ function esExtensionColector(r0_m, r1_m, p0_m, p1_m) {
     return false;
 }
 
-// Constantes removidas por duplicidad
-
 function fracZonaPlana(lon) {
     let frac;
     if (lon <= LON_CORTA_M) frac = 0.0;
@@ -449,7 +403,7 @@ function formaPuntaCierreMeters(p0_m, p1_m, dx, dy, lon_m, radio_m) {
     let frac = fracZonaPlana(lon_m);
     let t1 = lon_m * frac;
     let t2 = lon_m * (1.0 - frac);
-    let w_punta = 6.0; // Anchura en el pozo
+    let w_punta = 6.0;
     
     let verts;
     if (frac === 0.0) {
@@ -533,29 +487,10 @@ function calcularRadioPorPredios(p0_m, p1_m, dx, dy, lon_tramo, redes_barrera, c
     for (let d of dists_eje) {
         if (d > maxDist) maxDist = d;
     }
-    // Use module-level constants (matching Python exactly)
     let rad = maxDist * MARGEN_PRED;
     if (rad < RADIO_MIN_M) rad = RADIO_MIN_M;
     if (rad > RADIO_MAX_M) rad = RADIO_MAX_M;
     return rad;
-}
-
-function esSpike(bbox_m) {
-    let w = bbox_m[2] - bbox_m[0];
-    let h = bbox_m[3] - bbox_m[1];
-    if (Math.min(w, h) === 0) return true;
-    return Math.max(w, h) / Math.min(w, h) > MAX_ASPECT_RATIO;
-}
-
-function compacidad(ring_m) {
-    let area = shoelaceArea(ring_m);
-    if (area === 0) return Infinity;
-    // Approximate perimeter
-    let perimeter = 0;
-    for (let i = 0; i < ring_m.length - 1; i++) {
-        perimeter += Math.hypot(ring_m[i+1][0] - ring_m[i][0], ring_m[i+1][1] - ring_m[i][1]);
-    }
-    return (perimeter * perimeter) / area;
 }
 
 // Spatial grid indexing definitions
@@ -579,10 +514,9 @@ function getGridCells(minX, minY, maxX, maxY) {
 
 export async function calcularAreas(tramosACalcular, todosLosTramos, cartografia, pozosData, onProgress, radioDefault = 40.0) {
     const resultados = [];
-    let areasAsignadasGlobal = []; // Array of { coords: coords_m, bbox: bbox_m }
-    let tramosPrevCache = []; // Tramos ya procesados como barrera (same as Python tramos_previos_cache)
+    let areasAsignadasGlobal = [];
+    let tramosPrevCache = [];
 
-    console.time('calcAreas_total');
     const pozosLatLngMap = {};
     (pozosData || []).forEach(pz => {
         if (!pz) return;
@@ -600,6 +534,7 @@ export async function calcularAreas(tramosACalcular, todosLosTramos, cartografia
             });
         }
     });
+
     const ensureTramoCoords = (tr) => {
         if (!tr || tr.sep) return tr;
         if (Array.isArray(tr.coords) && tr.coords.length >= 2) return tr;
@@ -608,14 +543,11 @@ export async function calcularAreas(tramosACalcular, todosLosTramos, cartografia
         if (pDe && pA) return { ...tr, coords: [pDe, pA] };
         return tr;
     };
+
     tramosACalcular = (tramosACalcular || []).map(ensureTramoCoords);
     todosLosTramos = (todosLosTramos || []).map(ensureTramoCoords);
-    console.log(`[calcAreas] Iniciando con ${tramosACalcular.length} tramos, ${(cartografia||[]).length} predios`);
 
-    // --- PRE-CÓMPUTO OPTIMIZADO ---
-    // 0. First compute bounding box of the tramos to CALCULATE (not all tramos)
-    //    so we only project predios and tramos within the relevant zone
-    let zonaBboxWGS = [Infinity, Infinity, -Infinity, -Infinity]; // [minLng, minLat, maxLng, maxLat]
+    let zonaBboxWGS = [Infinity, Infinity, -Infinity, -Infinity];
     for (let tramo of tramosACalcular) {
         if (!tramo || !tramo.coords || tramo.coords.length < 2) continue;
         let c0 = Array.isArray(tramo.coords[0]) ? tramo.coords[0] : [tramo.coords[0].lat, tramo.coords[0].lng];
@@ -633,13 +565,12 @@ export async function calcularAreas(tramosACalcular, todosLosTramos, cartografia
         if (lng1 > zonaBboxWGS[2]) zonaBboxWGS[2] = lng1;
         if (lat1 > zonaBboxWGS[3]) zonaBboxWGS[3] = lat1;
     }
-    // Expand by ~500m in WGS84 degrees (~0.005 deg ≈ 550m at equator, ~450m at lat 7)
+
     const MARGEN_GRADOS = 0.005;
     let zonaBboxWGS_exp = [
         zonaBboxWGS[0] - MARGEN_GRADOS, zonaBboxWGS[1] - MARGEN_GRADOS,
         zonaBboxWGS[2] + MARGEN_GRADOS, zonaBboxWGS[3] + MARGEN_GRADOS
     ];
-    // Project expanded bbox corners to meters for predios filtering
     let corner1_m = projectToMeters(zonaBboxWGS_exp[0], zonaBboxWGS_exp[1]);
     let corner2_m = projectToMeters(zonaBboxWGS_exp[2], zonaBboxWGS_exp[3]);
     let zonaBboxM_exp = [
@@ -648,15 +579,12 @@ export async function calcularAreas(tramosACalcular, todosLosTramos, cartografia
         Math.max(corner1_m[0], corner2_m[0]) + RADIO_MAX_M,
         Math.max(corner1_m[1], corner2_m[1]) + RADIO_MAX_M
     ];
-    console.log(`[calcAreas] Zona de trabajo: ${(zonaBboxM_exp[2]-zonaBboxM_exp[0]).toFixed(0)}m x ${(zonaBboxM_exp[3]-zonaBboxM_exp[1]).toFixed(0)}m`);
 
     // 1. Project predios ONLY within the expanded zone
     let prediosCache = [];
     const grid = {};
     
     if (cartografia && cartografia.length > 0) {
-        console.time('predios_cache');
-        let skipped = 0;
         for (let i = 0; i < cartografia.length; i++) {
             if (i > 0 && i % 2000 === 0) {
                 await new Promise(resolve => setTimeout(resolve, 0));
@@ -666,8 +594,6 @@ export async function calcularAreas(tramosACalcular, todosLosTramos, cartografia
                 let geom = c.geometry || c;
                 if (!geom || !geom.type) continue;
                 
-                // QUICK FILTER: check if the feature's first coordinate is within our zone
-                // before doing expensive projection
                 let firstCoord = null;
                 if (geom.type === 'Polygon' && geom.coordinates && geom.coordinates.length > 0 && geom.coordinates[0] && geom.coordinates[0][0]) {
                     firstCoord = geom.coordinates[0][0];
@@ -679,8 +605,6 @@ export async function calcularAreas(tramosACalcular, todosLosTramos, cartografia
                     let isMetric = Math.abs(fLng) > 1000;
                     let ptCheck = isMetric ? convertPointToMeters(fLng, fLat) : null;
                     if (isMetric ? (ptCheck[0] < zonaBboxM_exp[0] || ptCheck[0] > zonaBboxM_exp[2] || ptCheck[1] < zonaBboxM_exp[1] || ptCheck[1] > zonaBboxM_exp[3]) : (fLng < zonaBboxWGS_exp[0] || fLng > zonaBboxWGS_exp[2] || fLat < zonaBboxWGS_exp[1] || fLat > zonaBboxWGS_exp[3])) {
-
-                        skipped++;
                         continue;
                     }
                 }
@@ -700,16 +624,12 @@ export async function calcularAreas(tramosACalcular, todosLosTramos, cartografia
                 let outerRing = geom.type === 'Polygon' ? coords_m[0] : (coords_m[0] ? coords_m[0][0] : null);
                 if (!outerRing || outerRing.length < 3) continue;
                 
-                // Use representative_point (JSTS InteriorPoint) — matches Python's Shapely representative_point()
-                // This guarantees the point is INSIDE the polygon (unlike turf.centroid which can fall outside for concave shapes)
                 let ctr_m_arr = representativePointMeters(coords_m);
                 if (!ctr_m_arr) continue;
                 let cx = ctr_m_arr[0], cy = ctr_m_arr[1];
                 
-                // SECOND FILTER: check centroid is within expanded meters bbox
                 if (cx < zonaBboxM_exp[0] || cx > zonaBboxM_exp[2] ||
                     cy < zonaBboxM_exp[1] || cy > zonaBboxM_exp[3]) {
-                    skipped++;
                     continue;
                 }
                 
@@ -734,7 +654,6 @@ export async function calcularAreas(tramosACalcular, todosLosTramos, cartografia
                 };
                 prediosCache.push(pObj);
                 
-                // Index to grid
                 let cells = getGridCells(minX, minY, maxX, maxY);
                 for (let cell of cells) {
                     if (!grid[cell]) grid[cell] = [];
@@ -742,8 +661,6 @@ export async function calcularAreas(tramosACalcular, todosLosTramos, cartografia
                 }
             } catch(e) { continue; }
         }
-        console.timeEnd('predios_cache');
-        console.log(`[calcAreas] ${prediosCache.length} predios cacheados (${skipped} fuera de zona, omitidos)`);
     }
 
     // 2. Project tramos — ONLY within expanded zone
@@ -753,14 +670,13 @@ export async function calcularAreas(tramosACalcular, todosLosTramos, cartografia
         let c1 = Array.isArray(r.coords[r.coords.length - 1]) ? r.coords[r.coords.length - 1] : [r.coords[r.coords.length - 1].lat, r.coords[r.coords.length - 1].lng];
         let r0_wgs = c0.lat !== undefined ? [c0.lng, c0.lat] : [c0[1], c0[0]];
         let r1_wgs = c1.lat !== undefined ? [c1.lng, c1.lat] : [c1[1], c1[0]];
-        // Quick WGS84 filter: skip tramos far from working zone
         let tMinLng = Math.min(r0_wgs[0], r1_wgs[0]);
         let tMaxLng = Math.max(r0_wgs[0], r1_wgs[0]);
         let tMinLat = Math.min(r0_wgs[1], r1_wgs[1]);
         let tMaxLat = Math.max(r0_wgs[1], r1_wgs[1]);
         if (tMaxLng < zonaBboxWGS_exp[0] || tMinLng > zonaBboxWGS_exp[2] ||
             tMaxLat < zonaBboxWGS_exp[1] || tMinLat > zonaBboxWGS_exp[3]) {
-            return null; // Outside zone
+            return null;
         }
         let r0_m = projectToMeters(r0_wgs[0], r0_wgs[1]);
         let r1_m = projectToMeters(r1_wgs[0], r1_wgs[1]);
@@ -793,53 +709,28 @@ export async function calcularAreas(tramosACalcular, todosLosTramos, cartografia
         return convertPointToMeters(x, y);
     }).filter(p => p !== null);
 
-    console.log(`[calcAreas] ${pozosCache.length} pozos cacheados para snapping`);
-
     // --- PROCESS EACH TRAMO ---
     const totalTramos = tramosACalcular.length;
     for (let index = 0; index < totalTramos; index++) {
         let tramo = tramosACalcular[index];
         
-        // Yield to event loop every 3 tramos to prevent UI freeze
         if (index % 3 === 0) {
             await new Promise(resolve => setTimeout(resolve, 0));
             if (onProgress) onProgress(index + 1, totalTramos);
         }
 
         if (!tramo || !tramo.coords || tramo.coords.length < 2) {
-            resultados.push(tramo ? { ...tramo, areaCalc: 0, areaPoli: null } : null);
+            resultados.push(tramo ? { ...tramo, areaCalc: 0, areaPredCalc: 0, areaViaCalc: 0, areaPoli: null, tipoArea: String(tramo.tipoArea || "RESIDENCIAL").toUpperCase() } : null);
             continue;
         }
-
-        // --- NUEVA LÓGICA: RESPETAR ÁREAS IMPORTADAS ---
-        let areaImportada = tramo.aT !== undefined && tramo.aT !== null && tramo.aT !== "" ? tramo.aT :
-                            (tramo.area !== undefined && tramo.area !== null && tramo.area !== "" ? tramo.area : null);
 
         const hasBaseCarto = Boolean(cartografia && cartografia.length > 0 && prediosCache.length > 0);
-        if (false && !hasBaseCarto && areaImportada !== null && parseFloat(areaImportada) > 0) {
-            console.log(`[calcAreas] Tramo ${tramo.de}: Omitiendo cálculo espacial. Usando área importada: ${areaImportada} Ha`);
-            resultados.push({
-                ...tramo,
-                areaCalc: parseFloat(areaImportada),
-                areaPredCalc: parseFloat(tramo.aR_prop || areaImportada),
-                areaViaCalc: parseFloat(tramo.aV_prop || 0),
-                areaPoli: tramo.areaPoli || null,
-                areaPredPoli: tramo.areaPredPoli || null,
-                areaViaPoli: tramo.areaViaPoli || null,
-                tipoArea: tramo.tipoArea || 'RESIDENCIAL'
-            });
-            continue;
-        }
-        // --- FIN NUEVA LÓGICA ---
-
-        console.time(`tramo_${index}`);
 
         let c0 = Array.isArray(tramo.coords[0]) ? tramo.coords[0] : [tramo.coords[0].lat, tramo.coords[0].lng];
         let c1 = Array.isArray(tramo.coords[tramo.coords.length - 1]) ? tramo.coords[tramo.coords.length - 1] : [tramo.coords[tramo.coords.length - 1].lat, tramo.coords[tramo.coords.length - 1].lng];
         
-        // Handle Leaflet vs standard order. If c0[0] is roughly lat (e.g., 7.x), Leaflet usually gives [lat, lng]
-        let p0 = c0.lat !== undefined ? [c0.lng, c0.lat] : [c0[1], c0[0]];
-        let p1 = c1.lat !== undefined ? [c1.lng, c1.lat] : [c1[1], c1[0]];
+        let p0 = c0.lat !== undefined ? [c0.lng, c0.lat] : (Math.abs(c0[0]) <= 20 && Math.abs(c0[1]) > 50 ? [c0[1], c0[0]] : [c0[0], c0[1]]);
+        let p1 = c1.lat !== undefined ? [c1.lng, c1.lat] : (Math.abs(c1[0]) <= 20 && Math.abs(c1[1]) > 50 ? [c1[1], c1[0]] : [c1[0], c1[1]]);
         
         let p0_m = projectToMeters(p0[0], p0[1]);
         let p1_m = projectToMeters(p1[0], p1[1]);
@@ -848,22 +739,18 @@ export async function calcularAreas(tramosACalcular, todosLosTramos, cartografia
         let dx = lonMeters > 0 ? ddx / lonMeters : 0;
         let dy = lonMeters > 0 ? ddy / lonMeters : 0;
 
-        // Snapping to pozos
-        let p0_cierre = resolverPuntoCierre(p0_m, pozosCache);
-        let p1_cierre = resolverPuntoCierre(p1_m, pozosCache);
+        let p0_cierre = pozosCache.length > 0 ? resolverPuntoCierre(p0_m, pozosCache) : p0_m;
+        let p1_cierre = pozosCache.length > 0 ? resolverPuntoCierre(p1_m, pozosCache) : p1_m;
         let ddx_c = p1_cierre[0] - p0_cierre[0], ddy_c = p1_cierre[1] - p0_cierre[1];
         let lonCierre = Math.hypot(ddx_c, ddy_c);
         let dx_c = lonCierre > 0 ? ddx_c / lonCierre : dx;
         let dy_c = lonCierre > 0 ? ddy_c / lonCierre : dy;
 
-        // If lonCierre is too small, skip
         if (lonCierre < 0.5) {
-            resultados.push({ ...tramo, areaCalc: 0, areaPoli: null });
-            console.timeEnd(`tramo_${index}`);
+            resultados.push({ ...tramo, areaCalc: 0, areaPredCalc: 0, areaViaCalc: 0, areaPoli: null, tipoArea: String(tramo.tipoArea || "RESIDENCIAL").toUpperCase() });
             continue;
         }
 
-        // Query spatial grid cell candidates for this tramo
         let minX = Math.min(p0_m[0], p1_m[0]) - RADIO_EXPLORACION_M;
         let maxX = Math.max(p0_m[0], p1_m[0]) + RADIO_EXPLORACION_M;
         let minY = Math.min(p0_m[1], p1_m[1]) - RADIO_EXPLORACION_M;
@@ -879,38 +766,30 @@ export async function calcularAreas(tramosACalcular, todosLosTramos, cartografia
         }
 
         let redes_barrera = [];
-        let minx_e = Math.min(p0_m[0], p1_m[0]) - RADIO_EXPLORACION_M;
-        let maxx_e = Math.max(p0_m[0], p1_m[0]) + RADIO_EXPLORACION_M;
-        let miny_e = Math.min(p0_m[1], p1_m[1]) - RADIO_EXPLORACION_M;
-        let maxy_e = Math.max(p0_m[1], p1_m[1]) + RADIO_EXPLORACION_M;
-        
         for (let r of tramosCache) {
-            if (r.id === tramo.id) continue;
+            if (r.id && tramo.id && r.id === tramo.id) continue;
+            if (r.de && tramo.de && r.a && tramo.a && String(r.de).trim() === String(tramo.de).trim() && String(r.a).trim() === String(tramo.a).trim()) continue;
             if (r.tipo === 'VIRTUAL') continue;
-            if (r.maxX < minx_e || r.minX > maxx_e || r.maxY < miny_e || r.minY > maxy_e) continue;
+            if (r.maxX < minX || r.minX > maxX || r.maxY < minY || r.minY > maxY) continue;
             if (esExtensionColector(r.r0_m, r.r1_m, p0_m, p1_m)) continue;
             redes_barrera.push(r);
         }
         for (let r of tramosPrevCache) {
             if (r.tipo === 'VIRTUAL') continue;
-            if (r.maxX < minx_e || r.minX > maxx_e || r.maxY < miny_e || r.minY > maxy_e) continue;
+            if (r.maxX < minX || r.minX > maxX || r.maxY < minY || r.minY > maxY) continue;
             redes_barrera.push(r);
         }
 
-        // Forzado para Reto Voronoi: usar el radio especificado en la UI en lugar de buscar predios adyacentes
-        // Si hay cartografia catastral activa, calcular radio adaptativo por predios; sino usar radio configurado
         let radioMeters = (hasBaseCarto && cellCandidates.size > 0)
             ? calcularRadioPorPredios(p0_m, p1_m, dx, dy, lonMeters, redes_barrera, cellCandidates, radioDefault)
             : radioDefault;
 
         // 1. Create capture zone in meters
         let zonaPuntaMeters = formaPuntaCierreMeters(p0_cierre, p1_cierre, dx_c, dy_c, lonCierre, radioMeters);
-
-        // Compute bbox of zonaPunta in meters for spatial filtering
         let zonaBbox_m = computeBboxMeters(zonaPuntaMeters);
         let zonaBboxNorm = [zonaBbox_m[0] - 100, zonaBbox_m[1] - 100, zonaBbox_m[2] + 100, zonaBbox_m[3] + 100];
 
-        // 2. Cut against previously assigned areas (in meters)
+        // 2. Cut against previously assigned areas (non-overlapping tributary zones)
         let zonaCapturaMeters = zonaPuntaMeters;
         let obstaculoGlobalUnido = null;
         if (areasAsignadasGlobal.length > 0) {
@@ -923,59 +802,44 @@ export async function calcularAreas(tramosACalcular, todosLosTramos, cartografia
                 if (obstaculoGlobalUnido) {
                     let diff = fastDifferenceMeters(zonaCapturaMeters, obstaculoGlobalUnido);
                     if (diff) zonaCapturaMeters = diff;
-                    else { zonaCapturaMeters = null; }
+                    else zonaCapturaMeters = null;
                 }
             }
         }
 
         if (!zonaCapturaMeters) {
-            resultados.push({ ...tramo, areaCalc: 0, areaPoli: null });
-            // Still add this tramo to previous cache
+            resultados.push({ ...tramo, areaCalc: 0, areaPredCalc: 0, areaViaCalc: 0, areaPoli: null, tipoArea: String(tramo.tipoArea || "RESIDENCIAL").toUpperCase() });
             tramosPrevCache.push({
                 r0_m: p0_m, r1_m: p1_m,
                 minX: Math.min(p0_m[0], p1_m[0]), maxX: Math.max(p0_m[0], p1_m[0]),
                 minY: Math.min(p0_m[1], p1_m[1]), maxY: Math.max(p0_m[1], p1_m[1])
             });
-            console.timeEnd(`tramo_${index}`);
             continue;
         }
 
         let poligonosParaUnirMeters = [];
-        let prediosLocalesCrudos = []; // Match Python: predios_locales_crudos for vía separation
+        let prediosLocalesCrudos = [];
 
-        // 3. Create road polygon in meters
+        // 3. Create road corridor polygon in meters
         let pxVia = -dy_c, pyVia = dx_c;
+        let wVia = Math.min(RADIO_VIA_EJE_M, radioMeters);
         let franjaVerts = [
-            [p0_cierre[0] + pxVia * RADIO_VIA_EJE_M, p0_cierre[1] + pyVia * RADIO_VIA_EJE_M],
-            [p0_cierre[0] - pxVia * RADIO_VIA_EJE_M, p0_cierre[1] - pyVia * RADIO_VIA_EJE_M],
-            [p1_cierre[0] - pxVia * RADIO_VIA_EJE_M, p1_cierre[1] - pyVia * RADIO_VIA_EJE_M],
-            [p1_cierre[0] + pxVia * RADIO_VIA_EJE_M, p1_cierre[1] + pyVia * RADIO_VIA_EJE_M],
-            [p0_cierre[0] + pxVia * RADIO_VIA_EJE_M, p0_cierre[1] + pyVia * RADIO_VIA_EJE_M]
+            [p0_cierre[0] + pxVia * wVia, p0_cierre[1] + pyVia * wVia],
+            [p0_cierre[0] - pxVia * wVia, p0_cierre[1] - pyVia * wVia],
+            [p1_cierre[0] - pxVia * wVia, p1_cierre[1] - pyVia * wVia],
+            [p1_cierre[0] + pxVia * wVia, p1_cierre[1] + pyVia * wVia],
+            [p0_cierre[0] + pxVia * wVia, p0_cierre[1] + pyVia * wVia]
         ];
-        let franjaViaMeters = [franjaVerts];
+        poligonosParaUnirMeters.push([franjaVerts]);
 
-        poligonosParaUnirMeters.push(franjaViaMeters);
-
-        let zonaPuntaJsts = coordsToJsts(zonaPuntaMeters);
-        let zonaCapturaJsts = zonaCapturaMeters ? coordsToJsts(zonaCapturaMeters) : null;
-
-        // 4. Extract parcels from candidates
+        // 4. Extract parcels from candidates when base cartography is loaded
         if (prediosCache.length > 0) {
-            let minx_e = Math.min(p0_m[0], p1_m[0]) - RADIO_EXPLORACION_M;
-            let maxx_e = Math.max(p0_m[0], p1_m[0]) + RADIO_EXPLORACION_M;
-            let miny_e = Math.min(p0_m[1], p1_m[1]) - RADIO_EXPLORACION_M;
-            let maxy_e = Math.max(p0_m[1], p1_m[1]) + RADIO_EXPLORACION_M;
-
             for (let p of cellCandidates) {
                 if (!bboxesOverlap(p.bbox_m, zonaBboxNorm)) continue;
-                
-                // Accumulate raw predios for vía separation (matches Python: predios_locales_crudos)
                 prediosLocalesCrudos.push(p.coords_m);
                 
                 let ctr_m = p.ctr_m;
-                // FIX: Python checks centroid against zona_punta (original zone, NOT cut by obstacles)
-                // Python main.py line 755: if not zona_punta.contains(ctr): continue
-                if (!zonaPuntaJsts || !pointInJstsGeom(ctr_m, zonaPuntaJsts)) continue;
+                if (!zonaPuntaMeters || !pointInPolysMeters(ctr_m, zonaPuntaMeters)) continue;
 
                 let t = (ctr_m[0] - p0_cierre[0]) * dx_c + (ctr_m[1] - p0_cierre[1]) * dy_c;
                 if (t < 0 || t > lonCierre) continue;
@@ -990,23 +854,12 @@ export async function calcularAreas(tramosACalcular, todosLosTramos, cartografia
                 if (d_red_min < d_walcan) continue;
 
                 let p_coords = p.coords_m;
-                let p_jsts = coordsToJsts(p_coords);
-                if (!p_jsts) continue;
-
-                // Match Python obtener_predio_sin_fuga(): clip against zona_captura
-                if (zonaCapturaJsts && (zonaCapturaJsts.contains(p_jsts) || pointInJstsGeom(ctr_m, zonaCapturaJsts))) {
-                    // Parcel fully inside or centroid inside → keep whole parcel
-                } else {
-                    // Clip parcel against zonaCaptura
-                    if (zonaCapturaJsts) {
-                        try {
-                            let inter = p_jsts.intersection(zonaCapturaJsts);
-                            if (!inter || inter.isEmpty()) continue;
-                            p_coords = jstsToCoords(inter);
-                        } catch(e) {
-                            p_coords = jstsToCoords(p_jsts);
-                        }
-                    }
+                if (zonaCapturaMeters && (polygonContainsPolygonMeters(zonaCapturaMeters, p_coords) || pointInPolysMeters(ctr_m, zonaCapturaMeters))) {
+                    // Keep whole parcel
+                } else if (zonaCapturaMeters) {
+                    let clipped = fastIntersectionMeters(p_coords, zonaCapturaMeters);
+                    if (!clipped) continue;
+                    p_coords = clipped;
                 }
 
                 let area_m2 = calcularAreaMeters(p_coords);
@@ -1016,20 +869,16 @@ export async function calcularAreas(tramosACalcular, todosLosTramos, cartografia
             }
         }
 
-        // Si no se capturaron predios (ej. Reto Voronoi sin cartografía), usar la zona de captura entera
+        // Si no se capturaron predios (Reto Voronoi / Buffer sin cartografía), usar la zona de captura entera
         if (prediosLocalesCrudos.length === 0 && (!hasBaseCarto || poligonosParaUnirMeters.length <= 1) && zonaCapturaMeters) {
             poligonosParaUnirMeters.push(zonaCapturaMeters);
         }
 
         let areaFinalShapeMeters = fastUnionMeters(poligonosParaUnirMeters) || zonaCapturaMeters;
 
-        // 5b. Apply morphological closing (buffer +3m, -3m, remove holes)
         if (areaFinalShapeMeters) {
-            try {
-                let closedM = cierreMorfologicoMeters(areaFinalShapeMeters); if (closedM && calcularAreaMeters(closedM) > 1.0) areaFinalShapeMeters = closedM;
-            } catch(e) {
-                console.warn(`[calcAreas] Cierre morfológico failed for tramo ${index}:`, e);
-            }
+            let closedM = cierreMorfologicoMeters(areaFinalShapeMeters);
+            if (closedM && calcularAreaMeters(closedM) > 1.0) areaFinalShapeMeters = closedM;
         }
 
         if (areaFinalShapeMeters && obstaculoGlobalUnido) {
@@ -1037,88 +886,40 @@ export async function calcularAreas(tramosACalcular, todosLosTramos, cartografia
             if (diffFinal && calcularAreaMeters(diffFinal) > 1.0) areaFinalShapeMeters = diffFinal;
         }
 
-        // 6. Aplica simplify (limpiar) como Python hace al final
         if (areaFinalShapeMeters) {
-            let jstsGeom = coordsToJsts(areaFinalShapeMeters);
-            if (jstsGeom) {
-                jstsGeom = limpiarJsts(jstsGeom);
-                let simpCoords = jstsToCoords(jstsGeom); if (simpCoords && calcularAreaMeters(simpCoords) > 1.0) areaFinalShapeMeters = simpCoords;
-            }
+            let simpCoords = cierreMorfologicoMeters(areaFinalShapeMeters);
+            if (simpCoords && calcularAreaMeters(simpCoords) > 1.0) areaFinalShapeMeters = simpCoords;
         }
 
         let aTotalM2 = 0, aPredM2 = 0, aViaM2 = 0;
         let areaPredPoli = null, areaViaPoli = null;
         if (areaFinalShapeMeters) {
             aTotalM2 = calcularAreaMeters(areaFinalShapeMeters);
-            
-            // (Removido cacheAssigned)
-            
-            function jstsToWgsGeoJSON(geom) {
-                if (!geom || !jsts || !jsts.io || (typeof geom.isEmpty === 'function' && geom.isEmpty())) return null;
-                try {
-                    let writer = new jsts.io.GeoJSONWriter();
-                    let geojson = writer.write(geom);
-                    function unproj(coords) {
-                        if (!coords) return coords;
-                        if (typeof coords[0] === 'number') {
-                            let w = projectToLatLng(coords[0], coords[1]);
-                            return [w[0], w[1]]; // [lng, lat]
-                        }
-                        return coords.map(unproj);
-                    }
-                    if (geojson.type === 'GeometryCollection') {
-                        if (geojson.geometries) {
-                            geojson.geometries.forEach(g => {
-                                if (g.coordinates) g.coordinates = unproj(g.coordinates);
-                            });
-                        }
-                    } else if (geojson.coordinates) {
-                        geojson.coordinates = unproj(geojson.coordinates);
-                    }
-                    return geojson;
-                } catch (ej) { return null; }
-            }
 
-            let gPred = null;
-            let gVia = null;
-
-            // FIX: Match Python logic — use ALL local raw predios (predios_locales_crudos)
-            // for vía separation, not just the ones that passed filters.
-            // Python main.py line 799-808:
-            //   union_carto = unary_union(predios_locales_crudos)
-            //   via_shp = area_total_shp.difference(union_carto)
-            //   area_pred_shp = area_total_shp.intersection(union_carto)
-            let unionCarto = prediosLocalesCrudos.length > 0 ? fastUnionMeters(prediosLocalesCrudos) : null;
+            let unionCarto = (hasBaseCarto && prediosLocalesCrudos.length > 0) ? fastUnionMeters(prediosLocalesCrudos) : null;
             if (unionCarto) {
-                let geomTotal = coordsToJsts(areaFinalShapeMeters);
-                let geomCarto = coordsToJsts(unionCarto);
-                if (geomTotal && geomCarto) {
-                    try {
-                        gVia = geomTotal.difference(geomCarto);
-                        gPred = geomTotal.intersection(geomCarto);
-                    } catch(e) {
-                        gPred = geomCarto;
-                    }
+                let gViaCoords = fastDifferenceMeters(areaFinalShapeMeters, unionCarto);
+                let gPredCoords = fastIntersectionMeters(areaFinalShapeMeters, unionCarto);
+                if (gPredCoords) {
+                    aPredM2 = calcularAreaMeters(gPredCoords);
+                    areaPredPoli = metersCoordsToWgsGeoJSON(gPredCoords);
+                }
+                if (gViaCoords) {
+                    aViaM2 = calcularAreaMeters(gViaCoords);
+                    areaViaPoli = metersCoordsToWgsGeoJSON(gViaCoords);
+                }
+                if (!aPredM2 && !aViaM2) {
+                    aPredM2 = aTotalM2;
+                    areaPredPoli = metersCoordsToWgsGeoJSON(areaFinalShapeMeters);
                 }
             } else {
-                gPred = coordsToJsts(areaFinalShapeMeters);
-            }
-
-            if (gPred && !gPred.isEmpty()) {
-                aPredM2 = calcularAreaMeters(jstsToCoords(gPred));
-                areaPredPoli = jstsToWgsGeoJSON(gPred);
-            }
-            if (gVia && !gVia.isEmpty()) {
-                aViaM2 = calcularAreaMeters(jstsToCoords(gVia));
-                areaViaPoli = jstsToWgsGeoJSON(gVia);
-            }
-            if (!aPredM2 && !aViaM2) {
+                // Sin cartografía catastral: 100% del área va a predial/residencial (CERO vías separadas)
                 aPredM2 = aTotalM2;
-                areaPredPoli = jstsToWgsGeoJSON(coordsToJsts(areaFinalShapeMeters));
+                aViaM2 = 0;
+                areaPredPoli = metersCoordsToWgsGeoJSON(areaFinalShapeMeters);
+                areaViaPoli = null;
             }
         }
-
-        console.timeEnd(`tramo_${index}`);
 
         if (areaFinalShapeMeters) {
             let bboxFinal = computeBboxMeters(areaFinalShapeMeters);
@@ -1128,32 +929,23 @@ export async function calcularAreas(tramosACalcular, todosLosTramos, cartografia
             });
         }
         
-        // Always add to previous tramos cache
         tramosPrevCache.push({
             r0_m: p0_m, r1_m: p1_m,
             minX: Math.min(p0_m[0], p1_m[0]), maxX: Math.max(p0_m[0], p1_m[0]),
             minY: Math.min(p0_m[1], p1_m[1]), maxY: Math.max(p0_m[1], p1_m[1])
         });
 
-        // Unproject final shape to WGS84 for leaflet
         let areaFinalShapeWGS84 = null;
         let shapeToConvert = areaFinalShapeMeters || zonaCapturaMeters;
-        if (shapeToConvert) { areaFinalShapeWGS84 = metersCoordsToWgsFeature(shapeToConvert); } if (!areaFinalShapeWGS84 && shapeToConvert) {
-            try {
-                let polys = getCoordsMeters(shapeToConvert);
-                let wgsPolys = polys.map(poly => poly.map(ring => ring.map(pt => {
-                    let wgs = projectToLatLng(pt[0], pt[1]);
-                    return [wgs[0], wgs[1]];
-                })));
-                areaFinalShapeWGS84 = metersCoordsToWgsFeature(shapeToConvert) || (wgsPolys.length === 1 ? turf.polygon(wgsPolys[0]) : turf.multiPolygon(wgsPolys));
-            } catch(e) {
-                console.warn(`[calcAreas] Error converting to WGS84 for tramo ${index}:`, e);
-            }
+        if (shapeToConvert) {
+            areaFinalShapeWGS84 = metersCoordsToWgsFeature(shapeToConvert, {
+                de: tramo.de,
+                a: tramo.a,
+                areaHa: aTotalM2 / 10000
+            });
         }
 
         let areaHa = aTotalM2 / 10000;
-        console.timeEnd(`tramo_${index}`);
-        console.log(`[calcAreas] Tramo ${tramo.de}: ${areaHa.toFixed(4)} Ha, ${poligonosParaUnirMeters.length} polígonos`);
 
         resultados.push({
             ...tramo,
@@ -1162,11 +954,11 @@ export async function calcularAreas(tramosACalcular, todosLosTramos, cartografia
             areaViaCalc: aViaM2 / 10000,
             areaPoli: areaFinalShapeWGS84,
             areaPredPoli: areaPredPoli,
-            areaViaPoli: areaViaPoli
+            areaViaPoli: areaViaPoli,
+            tipoArea: String(tramo.tipoArea || "RESIDENCIAL").toUpperCase()
         });
     }
 
-    console.timeEnd('calcAreas_total');
     if (onProgress) onProgress(totalTramos, totalTramos);
     return resultados;
 }
@@ -1184,8 +976,8 @@ export function generarPoligonosVoronoiSync(tramosInput, pozosData = [], radioDe
     const pozosCache = [];
     (pozosData || []).forEach(pz => {
         if (!pz) return;
-        let rx = pz.CoordX !== undefined ? pz.CoordX : (pz.X !== undefined ? pz.X : pz.x);
-        let ry = pz.CoordY !== undefined ? pz.CoordY : (pz.Y !== undefined ? pz.Y : pz.y);
+        let rx = pz.CoordX !== undefined ? pz.CoordX : (pz.X !== undefined ? pz.X : (pz.x !== undefined ? pz.x : pz.lng));
+        let ry = pz.CoordY !== undefined ? pz.CoordY : (pz.Y !== undefined ? pz.Y : (pz.y !== undefined ? pz.y : pz.lat));
         let x = parseFloat(rx), y = parseFloat(ry);
         if (!isFinite(x) || !isFinite(y) || (x === 0 && y === 0)) return;
         let pm = convertPointToMeters(x, y);
@@ -1312,7 +1104,7 @@ export function generarPoligonosVoronoiSync(tramosInput, pozosData = [], radioDe
                 });
             }
             ad.push({ IDNODO: deStr, Subcatchment: subId, AREACUENCA: finalHa, TIPOCUENCA: tipoCuenca });
-            resultados.push({ de: deStr, a: aStr, areaCalc: finalHa, areaPredCalc: finalHa, areaViaCalc: 0, areaPoli: featWGS });
+            resultados.push({ de: deStr, a: aStr, areaCalc: finalHa, areaPredCalc: finalHa, areaViaCalc: 0, areaPoli: featWGS, tipoArea: tipoCuenca });
         }
     }
 

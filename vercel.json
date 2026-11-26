@@ -1,6 +1,7 @@
 {
   "version": 2,
-  "buildCommand": "npm run build",
+  "installCommand": "rm -f package-lock.json && npm install --no-package-lock --legacy-peer-deps",
+  "buildCommand": "CI=false GENERATE_SOURCEMAP=false DISABLE_ESLINT_PLUGIN=true NODE_OPTIONS=--max-old-space-size=4096 npx react-scripts build",
   "outputDirectory": "build",
   "rewrites": [
     {

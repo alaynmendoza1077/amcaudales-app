@@ -23,6 +23,7 @@ yarn-error.log*
 
 # Large GIS map data (exceeds 100MB GitHub limit)
 public/cartografia.geojson
+package-lock.json
 
 # Cache
 .cache/

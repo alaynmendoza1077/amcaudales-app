@@ -32,6 +32,26 @@ function DatTab(props){
     });
   };
   var upd=function(i,k,v){sT(function(oldT){var n=oldT.slice();n[i]=Object.assign({},n[i]);n[i][k]=v;return n;});};
+  var updAreaTipo=function(i,newAreaVal,newTipoVal){
+    sT(function(oldT){
+      var n=oldT.slice();
+      var t=Object.assign({},n[i]);
+      if(newAreaVal!==undefined) t.areaParcial=newAreaVal;
+      if(newTipoVal!==undefined) t.tipoArea=newTipoVal;
+      var numA=parseFloat(String(t.areaParcial||0).replace(",","."));
+      if(isNaN(numA)) numA=0;
+      var tp=String(t.tipoArea||"RESIDENCIAL").toUpperCase();
+      t.aR_prop = tp==="RESIDENCIAL" ? numA : null;
+      t.aC_prop = tp==="COMERCIAL" ? numA : null;
+      t.aI_prop = tp==="INDUSTRIAL" ? numA : null;
+      t.aIn_prop = tp==="INSTITUCIONAL" ? numA : null;
+      if(tp==="VIA") t.aV_prop = numA;
+      else if(newTipoVal!==undefined && t.tipoArea!=="VIA") t.aV_prop = t.aV_prop && t.aV_prop !== numA ? t.aV_prop : null;
+      t.aRe_prop = tp==="RECREACIONAL" ? numA : null;
+      n[i]=t;
+      return n;
+    });
+  };
   var updSmart=function(i,k,vStr){
     sT(function(oldT){
       var n=oldT.slice();var t=Object.assign({},n[i]);
@@ -295,11 +315,11 @@ function DatTab(props){
       <td><input className={"ec" + (isMissing(t.cotaRasanteA) ? " input-missing-alert" : "")} type="text" value={t.cotaRasanteA||""} onChange={function(e){upd(i,"cotaRasanteA",e.target.value.replace(",","."));}} style={{width:55,fontSize:11,padding:2}} title={isMissing(t.cotaRasanteA)?"Dato faltante: Cota rasante A":""}/></td>
       <td><input className={"ec" + (isMissing(cfDEVal) ? " input-missing-alert" : "")} type="text" value={cfDEVal||""} onChange={function(e){updSmart(i,"cotaFondoDE",e.target.value.replace(",","."));}} style={{width:55,fontSize:11,padding:2}} title={isMissing(cfDEVal)?"Dato faltante: Cota fondo DE":""}/></td>
       <td><input className={"ec" + (isMissing(cfAVal) ? " input-missing-alert" : "")} type="text" value={cfAVal||""} onChange={function(e){updSmart(i,"cotaFondoA",e.target.value.replace(",","."));}} style={{width:55,fontSize:11,padding:2}} title={isMissing(cfAVal)?"Dato faltante: Cota fondo A":""}/></td>
-      <td><input className="ec" type="text" value={t.areaParcial||""} onChange={function(e){upd(i,"areaParcial",e.target.value.replace(",","."));}} style={{width:45,fontSize:11,padding:2}}/></td>
-      <td><input className="ec" type="text" value={t.aV_prop||""} onChange={function(e){upd(i,"aV_prop",e.target.value.replace(",","."));}} style={{width:45,fontSize:11,padding:2, background:"#f1f5f9"}}/></td>
+      <td><input className="ec" type="text" value={t.areaParcial||""} onChange={function(e){updAreaTipo(i,e.target.value.replace(",","."),undefined);}} style={{width:52,fontSize:11,padding:2}}/></td>
+      <td><input className="ec" type="text" value={t.aV_prop||""} onChange={function(e){var vStr=e.target.value.replace(",",".");upd(i,"aV_prop",vStr===""?null:vStr);}} style={{width:48,fontSize:11,padding:2}} placeholder="0"/></td>
       <td><input className="ec" type="text" value={t.densidad||""} onChange={function(e){upd(i,"densidad",e.target.value.replace(",","."));}} style={{width:45,fontSize:11,padding:2}}/></td>
       <td><input className="ec" type="text" value={t.consumo||""} onChange={function(e){upd(i,"consumo",e.target.value.replace(",","."));}} style={{width:45,fontSize:11,padding:2}}/></td>
-      <td><select className="es" value={t.tipoArea||"RESIDENCIAL"} onChange={function(e){upd(i,"tipoArea",e.target.value);}} style={{width:90}}><option>RESIDENCIAL</option><option>COMERCIAL</option><option>INDUSTRIAL</option><option>INSTITUCIONAL</option><option>VIA</option><option>RECREACIONAL</option></select></td>
+      <td><select className="es" value={t.tipoArea||"RESIDENCIAL"} onChange={function(e){updAreaTipo(i,undefined,e.target.value);}} style={{width:90}}><option>RESIDENCIAL</option><option>COMERCIAL</option><option>INDUSTRIAL</option><option>INSTITUCIONAL</option><option>VIA</option><option>RECREACIONAL</option></select></td>
       <td><select className="es" value={t.esInicial||"N"} onChange={function(e){upd(i,"esInicial",e.target.value);}}><option>I</option><option>N</option></select></td>
       <td><input className="ec" type="text" value={t.diamOrig||t.diametroCom||"200 mm"} onChange={function(e){
           var v = e.target.value;
